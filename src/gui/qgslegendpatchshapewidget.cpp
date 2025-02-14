@@ -15,7 +15,10 @@
  ***************************************************************************/
 
 #include "qgslegendpatchshapewidget.h"
+#include "moc_qgslegendpatchshapewidget.cpp"
 #include "qgsstylesavedialog.h"
+#include "qgsproject.h"
+#include "qgsprojectstylesettings.h"
 #include <QDialogButtonBox>
 #include <QMessageBox>
 
@@ -34,7 +37,7 @@ QgsLegendPatchShapeWidget::QgsLegendPatchShapeWidget( QWidget *parent, const Qgs
   connect( mPreserveRatioCheckBox, &QCheckBox::toggled, this, &QgsLegendPatchShapeWidget::changed );
   connect( mShapeEdit, &QPlainTextEdit::textChanged, this, &QgsLegendPatchShapeWidget::changed );
 
-  connect( mStyleItemsListWidget, &QgsStyleItemsListWidget::selectionChanged, this, &QgsLegendPatchShapeWidget::setShapeFromStyle );
+  connect( mStyleItemsListWidget, &QgsStyleItemsListWidget::selectionChangedWithStylePath, this, &QgsLegendPatchShapeWidget::setShapeFromStyle );
   connect( mStyleItemsListWidget, &QgsStyleItemsListWidget::saveEntity, this, &QgsLegendPatchShapeWidget::saveShape );
 }
 
@@ -55,21 +58,25 @@ void QgsLegendPatchShapeWidget::setShape( const QgsLegendPatchShape &shape )
   emit changed();
 }
 
-void QgsLegendPatchShapeWidget::setShapeFromStyle( const QString &name, QgsStyle::StyleEntity )
+void QgsLegendPatchShapeWidget::setShapeFromStyle( const QString &name, QgsStyle::StyleEntity, const QString &stylePath )
 {
-  if ( !QgsStyle::defaultStyle()->legendPatchShapeNames().contains( name ) )
+  if ( name.isEmpty() )
     return;
 
-  const QgsLegendPatchShape newShape = QgsStyle::defaultStyle()->legendPatchShape( name );
+  QgsStyle *style = QgsProject::instance()->styleSettings()->styleAtPath( stylePath );
+
+  if ( !style )
+    style = QgsStyle::defaultStyle();
+
+  if ( !style->legendPatchShapeNames().contains( name ) )
+    return;
+
+  const QgsLegendPatchShape newShape = style->legendPatchShape( name );
   setShape( newShape );
 }
 
 void QgsLegendPatchShapeWidget::saveShape()
 {
-  QgsStyle *style = QgsStyle::defaultStyle();
-  if ( !style )
-    return;
-
   QgsStyleSaveDialog saveDlg( this, QgsStyle::LegendPatchShapeEntity );
   saveDlg.setDefaultTags( mStyleItemsListWidget->currentTagFilter() );
   if ( !saveDlg.exec() )
@@ -78,13 +85,14 @@ void QgsLegendPatchShapeWidget::saveShape()
   if ( saveDlg.name().isEmpty() )
     return;
 
+  QgsStyle *style = saveDlg.destinationStyle();
+  if ( !style )
+    return;
+
   // check if there is no shape with same name
   if ( style->legendPatchShapeNames().contains( saveDlg.name() ) )
   {
-    const int res = QMessageBox::warning( this, tr( "Save Legend Patch Shape" ),
-                                          tr( "A legend patch shape with the name '%1' already exists. Overwrite?" )
-                                          .arg( saveDlg.name() ),
-                                          QMessageBox::Yes | QMessageBox::No );
+    const int res = QMessageBox::warning( this, tr( "Save Legend Patch Shape" ), tr( "A legend patch shape with the name '%1' already exists. Overwrite?" ).arg( saveDlg.name() ), QMessageBox::Yes | QMessageBox::No );
     if ( res != QMessageBox::Yes )
     {
       return;

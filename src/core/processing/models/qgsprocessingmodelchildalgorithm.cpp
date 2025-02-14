@@ -67,17 +67,22 @@ void QgsProcessingModelChildAlgorithm::copyNonDefinitionPropertiesFromModel( Qgs
   int i = 0;
   for ( auto it = mModelOutputs.begin(); it != mModelOutputs.end(); ++it )
   {
-    if ( !existingChild.modelOutputs().value( it.key() ).position().isNull() )
+    const QMap<QString, QgsProcessingModelOutput> existingChildModelOutputs = existingChild.modelOutputs();
+    auto existingOutputIt = existingChildModelOutputs.find( it.key() );
+    if ( existingOutputIt == existingChildModelOutputs.end() )
+      continue;
+
+    if ( !existingOutputIt->position().isNull() )
     {
-      it.value().setPosition( existingChild.modelOutputs().value( it.key() ).position() );
-      it.value().setSize( existingChild.modelOutputs().value( it.key() ).size() );
+      it.value().setPosition( existingOutputIt->position() );
+      it.value().setSize( existingOutputIt->size() );
     }
     else
       it.value().setPosition( position() + QPointF( size().width(), ( i + 1.5 ) * size().height() ) );
 
     if ( QgsProcessingModelComment *comment = it.value().comment() )
     {
-      if ( const QgsProcessingModelComment *existingComment = existingChild.modelOutputs().value( it.key() ).comment() )
+      if ( const QgsProcessingModelComment *existingComment = existingOutputIt->comment() )
       {
         comment->setDescription( existingComment->description() );
         comment->setSize( existingComment->size() );
@@ -170,9 +175,10 @@ bool QgsProcessingModelChildAlgorithm::loadVariant( const QVariant &child )
   mActive = map.value( QStringLiteral( "active" ) ).toBool();
 
   mDependencies.clear();
-  if ( map.value( QStringLiteral( "dependencies" ) ).type() == QVariant::StringList )
+  if ( map.value( QStringLiteral( "dependencies" ) ).userType() == QMetaType::Type::QStringList )
   {
     const QStringList dependencies = map.value( QStringLiteral( "dependencies" ) ).toStringList();
+    mDependencies.reserve( dependencies.size() );
     for ( const QString &dependency : dependencies )
     {
       QgsProcessingModelChildDependency dep;
@@ -183,6 +189,7 @@ bool QgsProcessingModelChildAlgorithm::loadVariant( const QVariant &child )
   else
   {
     const QVariantList dependencies = map.value( QStringLiteral( "dependencies" ) ).toList();
+    mDependencies.reserve( dependencies.size() );
     for ( const QVariant &dependency : dependencies )
     {
       QgsProcessingModelChildDependency dep;
@@ -200,6 +207,7 @@ bool QgsProcessingModelChildAlgorithm::loadVariant( const QVariant &child )
   {
     QgsProcessingModelChildParameterSources sources;
     const auto constToList = paramIt->toList();
+    sources.reserve( constToList.size() );
     for ( const QVariant &sourceVar : constToList )
     {
       QgsProcessingModelChildParameterSource param;
@@ -238,7 +246,13 @@ QStringList QgsProcessingModelChildAlgorithm::asPythonCode( const QgsProcessing:
   if ( !description().isEmpty() )
     lines << baseIndent + QStringLiteral( "# %1" ).arg( description() );
   if ( !mComment.description().isEmpty() )
-    lines << baseIndent + QStringLiteral( "# %1" ).arg( mComment.description() );
+  {
+    const QStringList parts = mComment.description().split( QStringLiteral( "\n" ) );
+    for ( const QString &part : parts )
+    {
+      lines << baseIndent + QStringLiteral( "# %1" ).arg( part );
+    }
+  }
 
   QStringList paramParts;
   QStringList paramComments;

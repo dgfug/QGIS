@@ -19,6 +19,7 @@
 
 #include <QPainter>
 
+const QString QgsPieDiagram::DIAGRAM_NAME_PIE = QStringLiteral( "Pie" );
 
 QgsPieDiagram::QgsPieDiagram()
 {
@@ -69,7 +70,7 @@ double QgsPieDiagram::legendSize( double value, const QgsDiagramSettings &s, con
 
 QString QgsPieDiagram::diagramName() const
 {
-  return DIAGRAM_NAME_PIE;
+  return QgsPieDiagram::DIAGRAM_NAME_PIE;
 }
 
 QSizeF QgsPieDiagram::diagramSize( const QgsAttributes &attributes, const QgsRenderContext &c, const QgsDiagramSettings &s )
@@ -134,7 +135,9 @@ void QgsPieDiagram::renderDiagram( const QgsFeature &feature, QgsRenderContext &
       if ( *valIt )
       {
         currentAngle = ( *valIt / valSum * 360 * 16 ) * ( s.direction() == QgsDiagramSettings::Clockwise ? -1 : 1 );
-        mCategoryBrush.setColor( *colIt );
+        QColor brushColor( *colIt );
+        brushColor.setAlphaF( brushColor.alphaF() * s.opacity );
+        mCategoryBrush.setColor( brushColor );
         p->setBrush( mCategoryBrush );
         // if only 1 value is > 0, draw a circle
         if ( valCount == 1 )

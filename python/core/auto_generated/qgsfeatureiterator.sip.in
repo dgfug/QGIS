@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgsfeatureiterator.h                                        *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -35,24 +35,23 @@ base class constructor - stores the iteration parameters
 
     virtual bool nextFeature( QgsFeature &f );
 %Docstring
-fetch next feature, return ``True`` on success
+Fetch next feature and stores in ``f``, returns ``True`` on success.
 %End
 
     virtual bool rewind() = 0;
 %Docstring
-reset the iterator to the starting position
+Resets the iterator to the starting position.
 %End
+
     virtual bool close() = 0;
 %Docstring
-end of iterating: free the resources / lock
+Call to end the iteration. This frees any resources used by the iterator.
 %End
 
 
     CompileStatus compileStatus() const;
 %Docstring
 Returns the status of expression compilation for filter expression requests.
-
-.. versionadded:: 2.16
 %End
 
     virtual bool isValid() const;
@@ -63,8 +62,6 @@ If an iterator is invalid, either give up or try to send the request again (pref
 after a timeout to give the system some time to stay responsive).
 
 If you want to check if the iterator successfully completed, better use :py:func:`QgsFeatureIterator.isClosed()`.
-
-.. versionadded:: 3.0
 %End
 
     bool compileFailed() const;
@@ -74,6 +71,12 @@ This indicates that there is something wrong with the expression compiler.
 
 .. versionadded:: 3.2
 %End
+
+    enum class RequestToSourceCrsResult
+    {
+      Success,
+      DistanceWithinMustBeCheckedManually,
+    };
 
   protected:
 
@@ -121,8 +124,6 @@ If ``feature`` has no geometry or ``transform`` is invalid then calling this met
 has no effect and will be shortcut.
 Iterators should call this method before returning features to ensure that any
 :py:func:`QgsFeatureRequest.destinationCrs()` set on the request is respected.
-
-.. versionadded:: 3.0
 %End
 
 
@@ -134,8 +135,20 @@ the requested :py:func:`~QgsAbstractFeatureIterator.filterRect` transformed to t
 Iterators should call this method and use the returned rectangle for filtering
 features to ensure that any :py:func:`QgsFeatureRequest.destinationCrs()` set on the request is respected.
 Will throw a :py:class:`QgsCsException` if the rect cannot be transformed from the destination CRS.
+%End
 
-.. versionadded:: 3.0
+    RequestToSourceCrsResult updateRequestToSourceCrs( QgsFeatureRequest &request, const QgsCoordinateTransform &transform ) const throw( QgsCsException );
+%Docstring
+Update a :py:class:`QgsFeatureRequest` so that spatial filters are
+transformed to the source's coordinate reference system.
+Iterators should call this method against the request used for filtering
+features to ensure that any :py:func:`QgsFeatureRequest.destinationCrs()` set on the request is respected.
+
+:return: result of operation. See QgsAbstractFeatureIterator.RequestToSourceCrsResult for interpretation.
+
+:raises QgsCsException: if the rect cannot be transformed from the destination CRS.
+
+.. versionadded:: 3.22
 %End
 
 
@@ -209,7 +222,7 @@ Wrapper for iterator of features from vector data provider or vector layer
 
     SIP_PYOBJECT __next__() /TypeHint="QgsFeature"/;
 %MethodCode
-    std::unique_ptr< QgsFeature > f = std::make_unique< QgsFeature >();
+    auto f = std::make_unique< QgsFeature >();
     bool result = false;
     Py_BEGIN_ALLOW_THREADS
     result = ( sipCpp->nextFeature( *f ) );
@@ -238,8 +251,19 @@ Copy constructor copies the iterator, increases ref.count
 
 
     bool nextFeature( QgsFeature &f );
+%Docstring
+Fetch next feature and stores in ``f``, returns ``True`` on success.
+%End
+
     bool rewind();
+%Docstring
+Resets the iterator to the starting position.
+%End
+
     bool close();
+%Docstring
+Call to end the iteration. This frees any resources used by the iterator.
+%End
 
     bool isValid() const;
 %Docstring
@@ -247,9 +271,7 @@ Will return if this iterator is valid.
 An invalid iterator was probably introduced by a failed attempt to acquire a connection
 or is a default constructed iterator.
 
-.. seealso:: :py:func:`isClosed`
-
-.. versionadded:: 3.0
+.. seealso:: :py:func:`isClosed` to check if the iterator successfully completed and returned all the features.
 %End
 
     bool isClosed() const;
@@ -261,8 +283,6 @@ find out whether the iterator is still valid or closed already
     QgsAbstractFeatureIterator::CompileStatus compileStatus() const;
 %Docstring
 Returns the status of expression compilation for filter expression requests.
-
-.. versionadded:: 2.16
 %End
 
     bool compileFailed() const;
@@ -285,5 +305,5 @@ This indicates that there is something wrong with the expression compiler.
  *                                                                      *
  * src/core/qgsfeatureiterator.h                                        *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

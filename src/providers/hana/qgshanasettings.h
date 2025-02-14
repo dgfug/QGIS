@@ -22,14 +22,20 @@
 
 struct QgsHanaIdentifierType
 {
-  enum Value
-  {
-    INSTANCE_NUMBER = 0,
-    PORT_NUMBER = 1
-  };
+    enum Value
+    {
+      InstanceNumber = 0,
+      PortNumber = 1
+    };
 
-  static bool isValid( uint ) noexcept;
-  static Value fromInt( uint );
+    static bool isValid( uint ) noexcept;
+    static Value fromInt( uint );
+};
+
+enum class QgsHanaConnectionType : uint
+{
+  HostPort = 0,
+  Dsn = 1
 };
 
 class QgsHanaSettings
@@ -41,6 +47,18 @@ class QgsHanaSettings
      * The connection name.
      */
     const QString &name() const { return mName; }
+
+    /**
+     * The connection type of the driver.
+     */
+    QgsHanaConnectionType connectionType() const { return mConnectionType; }
+    void setConnectionType( QgsHanaConnectionType connType ) { mConnectionType = connType; }
+
+    /**
+     * The Data Source Name.
+     */
+    const QString &dsn() const { return mDsn; }
+    void setDsn( const QString &dsn ) { mDsn = dsn; }
 
     /**
      * The name/path of/to the driver. For example,
@@ -58,7 +76,7 @@ class QgsHanaSettings
     /**
      * The identifier type that specifies whether the port number depends
      * on the instance number of a database or not. Possible values are
-     * 0 - INSTANCE_NUMBER, 1 - PORT_NUMBER.
+     * 0 - InstanceNumber, 1 - PortNumber.
      */
     uint identifierType() const { return mIdentifierType; }
     void setIdentifierType( uint identifierType ) { mIdentifierType = identifierType; }
@@ -134,6 +152,15 @@ class QgsHanaSettings
     }
 
     /**
+     * Specifies whether estimated metadata from e.g. an index can be used or not.
+     */
+    bool useEstimatedMetadata() const { return mUseEstimatedMetadata; }
+    void setUseEstimatedMetadata( bool useEstimatedMetadata )
+    {
+      mUseEstimatedMetadata = useEstimatedMetadata;
+    }
+
+    /**
      * Enables or disables TLS 1.1 – TLS1.2 encryption.
      */
     bool enableSsl() const { return mSslEnabled; }
@@ -178,6 +205,66 @@ class QgsHanaSettings
     }
 
     /**
+     * Enables proxy.
+     */
+    bool enableProxy() const { return mProxyEnabled; }
+    void setEnableProxy( bool value ) { mProxyEnabled = value; }
+
+    /**
+     * Enables HTTP proxy authentication.
+     */
+    bool enableProxyHttp() const { return mProxyHttp; }
+    void setEnableProxyHttp( bool value ) { mProxyHttp = value; }
+
+    /**
+     * Specifies the host name of the proxy server.
+     */
+    const QString &proxyHost() const
+    {
+      return mProxyHost;
+    }
+    void setProxyHost( const QString &value )
+    {
+      mProxyHost = value;
+    }
+
+    /**
+     * Specifies the port of the proxy server.
+     */
+    uint proxyPort() const
+    {
+      return mProxyPort;
+    }
+    void setProxyPort( uint value )
+    {
+      mProxyPort = value;
+    }
+
+    /**
+     * Specifies the user name for Basic HTTP Authentication or METHOD 02 SOCKS authentication.
+     */
+    const QString &proxyUsername() const
+    {
+      return mProxyUsername;
+    }
+    void setProxyUsername( const QString &value )
+    {
+      mProxyUsername = value;
+    }
+
+    /**
+     * Specifies the password for Basic HTTP Authentication or METHOD 02 SOCKS authentication.
+     */
+    const QString &proxyPassword() const
+    {
+      return mProxyPassword;
+    }
+    void setProxyPassword( const QString &value )
+    {
+      mProxyPassword = value;
+    }
+
+    /**
      * Gets the server port.
      */
     QString port() const;
@@ -200,7 +287,7 @@ class QgsHanaSettings
     /**
      * Constructs an instance of QgsDataSourceUri with values of the current object.
      */
-    QgsDataSourceUri toDataSourceUri() const ;
+    QgsDataSourceUri toDataSourceUri() const;
 
     /**
      * Loads HANA connection settings from /HANA/connections/{connection_name}.
@@ -211,6 +298,12 @@ class QgsHanaSettings
      * Saves HANA connection settings to /HANA/connections/{connection_name}.
      */
     void save();
+
+    /**
+     * Duplicates \a src connection settings to a new \a dst connection.
+     * \since QGIS 3.40
+     */
+    static void duplicateConnection( const QString &src, const QString &dst );
 
     static QStringList getConnectionNames();
     static QString getSelectedConnection();
@@ -223,6 +316,8 @@ class QgsHanaSettings
 
   private:
     QString mName;
+    QgsHanaConnectionType mConnectionType = QgsHanaConnectionType::HostPort;
+    QString mDsn;
     QString mDriver;
     QString mHost;
     uint mIdentifierType;
@@ -237,14 +332,22 @@ class QgsHanaSettings
     bool mSavePassword = false;
     bool mUserTablesOnly = true;
     bool mAllowGeometrylessTables = false;
-    // Ssl parameters
+    bool mUseEstimatedMetadata = false;
+    QMap<QString, QMap<QString, QStringList>> mKeyColumns;
+    // SSL parameters
     bool mSslEnabled = false;
     QString mSslCryptoProvider;
     QString mSslKeyStore;
     QString mSslTrustStore;
     bool mSslValidateCertificate = false;
     QString mSslHostNameInCertificate;
-    QMap<QString, QMap<QString, QStringList>> mKeyColumns;
+    // Proxy parameters
+    bool mProxyEnabled = false;
+    bool mProxyHttp = false;
+    QString mProxyHost;
+    uint mProxyPort = 1080;
+    QString mProxyUsername;
+    QString mProxyPassword;
 };
 
 #endif // QGSHANAPSETTINGS_H

@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/raster/qgsrasterdataprovider.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -18,8 +18,6 @@ class QgsImageFetcher : QObject
 {
 %Docstring(signature="appended")
 Handles asynchronous download of images
-
-.. versionadded:: 2.8
 %End
 
 %TypeHeaderCode
@@ -70,25 +68,11 @@ Base class for raster data providers.
 %End
   public:
 
-    enum ProviderCapability
-    {
-      NoProviderCapabilities,
-      ReadLayerMetadata,
-      WriteLayerMetadata,
-      ProviderHintBenefitsFromResampling,
-      ProviderHintCanPerformProviderResampling,
-      ReloadData,
-      DpiDependentData,
-    };
-
-    typedef QFlags<QgsRasterDataProvider::ProviderCapability> ProviderCapabilities;
-
-
     QgsRasterDataProvider();
 
     QgsRasterDataProvider( const QString &uri,
                            const QgsDataProvider::ProviderOptions &providerOptions = QgsDataProvider::ProviderOptions(),
-                           QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() );
+                           Qgis::DataProviderReadFlags flags = Qgis::DataProviderReadFlags() );
 %Docstring
 Constructor for QgsRasterDataProvider.
 
@@ -101,17 +85,12 @@ The ``options`` argument specifies generic provider options and since QGIS 3.16 
     virtual QgsRasterDataProvider *clone() const = 0;
 
 
-    virtual QgsRasterDataProvider::ProviderCapabilities providerCapabilities() const;
+    virtual Qgis::RasterProviderCapabilities providerCapabilities() const;
 %Docstring
 Returns flags containing the supported capabilities of the data provider.
-
-.. versionadded:: 3.0
 %End
 
     virtual bool setInput( QgsRasterInterface *input );
-%Docstring
-It makes no sense to set input on provider */
-%End
 
     virtual QgsRectangle extent() const = 0;
 
@@ -136,12 +115,17 @@ Returns source data type for the band specified by number,
 source data type may be shorter than dataType
 %End
 
-    virtual int colorInterpretation( int bandNo ) const;
+    virtual Qgis::RasterColorInterpretation colorInterpretation( int bandNo ) const;
 %Docstring
 Returns data type for the band specified by number
 %End
 
-    QString colorName( int colorInterpretation ) const;
+    QString colorName( Qgis::RasterColorInterpretation colorInterpretation ) const;
+%Docstring
+Returns a string color name representation of a color interpretation.
+It is translated since QGIS 3.40
+%End
+
     virtual bool reload();
 %Docstring
 Reload data (data could change)
@@ -153,15 +137,21 @@ Reload data (data could change)
     virtual double bandScale( int bandNo ) const;
 %Docstring
 Read band scale for raster value
-
-.. versionadded:: 2.3
 %End
 
     virtual double bandOffset( int bandNo ) const;
 %Docstring
 Read band offset for raster value
+%End
 
-.. versionadded:: 2.3
+    virtual QSize maximumTileSize() const;
+%Docstring
+Returns the maximum tile size in pixels for the data provider.
+By default, the maximum tile size is set to :py:class:`QgsRasterIterator`.DEFAULT_MAXIMUM_TILE_WIDTH x
+:py:class:`QgsRasterIterator`.DEFAULT_MAXIMUM_TILE_HEIGHT but can be overridden in subclasses (e.g. WMS
+can retrieve that information from the GetCapabilities document).
+
+.. versionadded:: 3.40
 %End
 
 
@@ -208,6 +198,8 @@ their own layers, such as WMS
 
     virtual QgsRasterDataProviderTemporalCapabilities *temporalCapabilities();
 
+    virtual QgsRasterDataProviderElevationProperties *elevationProperties();
+
 
     virtual bool supportsLegendGraphic() const;
 %Docstring
@@ -225,15 +217,11 @@ Returns a new image downloader for the raster legend.
 :return: a download handler or ``None`` if the provider does not support
          legend at all. Ownership of the returned object is transferred
          to caller.
-
-
-
-.. versionadded:: 2.8
 %End
 
     virtual QString buildPyramids( const QList<QgsRasterPyramid> &pyramidList,
                                    const QString &resamplingMethod = "NEAREST",
-                                   QgsRaster::RasterPyramidsFormat format = QgsRaster::PyramidsGTiff,
+                                   Qgis::RasterPyramidFormat format = Qgis::RasterPyramidFormat::GeoTiff,
                                    const QStringList &configOptions = QStringList(),
                                    QgsRasterBlockFeedback *feedback = 0 );
 %Docstring
@@ -288,13 +276,7 @@ pyramid layers.
 .. seealso:: :py:func:`buildPyramids`
 %End
 
-    virtual QString htmlMetadata() = 0;
-%Docstring
-Returns metadata in a format suitable for feeding directly
-into a subset of the GUI raster properties "Metadata" tab.
-%End
-
-    virtual QgsRasterIdentifyResult identify( const QgsPointXY &point, QgsRaster::IdentifyFormat format, const QgsRectangle &boundingBox = QgsRectangle(), int width = 0, int height = 0, int dpi = 96 );
+    virtual QgsRasterIdentifyResult identify( const QgsPointXY &point, Qgis::RasterIdentifyFormat format, const QgsRectangle &boundingBox = QgsRectangle(), int width = 0, int height = 0, int dpi = 96 );
 %Docstring
 Identify raster value(s) found on the point position. The context
 parameters extent, width and height are important to identify
@@ -322,7 +304,7 @@ if point is outside data source extent.
    The arbitraryness of the returned document is enforced by WMS standards
    up to at least v1.3.0
 
-.. seealso:: :py:func:`sample`
+.. seealso:: :py:func:`sample` which is much more efficient for simple "value at point" queries.
 %End
 
     virtual double sample( const QgsPointXY &point, int band,
@@ -339,7 +321,7 @@ If ``ok`` is specified and the point is outside data source extent, or an invali
 band number was specified, then ``ok`` will be set to ``False``. In this case the function will return
 a NaN value.
 
-.. seealso:: :py:func:`identify`
+.. seealso:: :py:func:`identify` which is much more flexible but considerably less efficient.
 
 .. versionadded:: 3.4
 %End
@@ -396,7 +378,7 @@ By default providers are not editable. Use :py:func:`~QgsRasterDataProvider.setE
 
 .. seealso:: :py:func:`setEditable`
 
-.. versionadded:: 3.0
+.. seealso:: :py:func:`writeBlock`
 %End
 
     virtual bool setEditable( bool enabled );
@@ -414,11 +396,11 @@ to overwrite data of the provider using :py:func:`~QgsRasterDataProvider.writeBl
 
 .. seealso:: :py:func:`isEditable`
 
-.. versionadded:: 3.0
+.. seealso:: :py:func:`writeBlock`
 %End
 
 
-    virtual bool write( void *data, int band, int width, int height, int xOffset, int yOffset );
+    virtual bool write( const void *data, int band, int width, int height, int xOffset, int yOffset );
 %Docstring
 Writes into the provider datasource
 %End
@@ -439,9 +421,9 @@ in order to allow write operations.
 
 .. seealso:: :py:func:`isEditable`
 
-:return: ``True`` on success
+.. seealso:: :py:func:`setEditable`
 
-.. versionadded:: 3.0
+:return: ``True`` on success
 %End
 
     static QgsRasterDataProvider *create( const QString &providerKey,
@@ -531,7 +513,7 @@ Validates creation options for a specific dataset and destination format.
    see also :py:func:`~QgsRasterDataProvider.validateCreationOptionsFormat` in gdal provider for validating options based on format only
 %End
 
-    virtual QString validatePyramidsConfigOptions( QgsRaster::RasterPyramidsFormat pyramidsFormat,
+    virtual QString validatePyramidsConfigOptions( Qgis::RasterPyramidFormat pyramidsFormat,
         const QStringList &configOptions, const QString &fileFormat );
 %Docstring
 Validates pyramid creation options for a specific dataset and destination format
@@ -541,18 +523,35 @@ Validates pyramid creation options for a specific dataset and destination format
    used by GDAL provider only
 %End
 
-    static QString identifyFormatName( QgsRaster::IdentifyFormat format );
-    static QgsRaster::IdentifyFormat identifyFormatFromName( const QString &formatName );
-    static QString identifyFormatLabel( QgsRaster::IdentifyFormat format );
-    static Capability identifyFormatToCapability( QgsRaster::IdentifyFormat format );
+    static QString identifyFormatName( Qgis::RasterIdentifyFormat format );
+%Docstring
+Converts a raster identify ``format`` to a string name.
+
+.. seealso:: :py:func:`identifyFormatFromName`
+%End
+
+    static Qgis::RasterIdentifyFormat identifyFormatFromName( const QString &formatName );
+%Docstring
+Converts a string ``formatName`` to a raster identify format.
+
+.. seealso:: :py:func:`identifyFormatName`
+%End
+
+    static QString identifyFormatLabel( Qgis::RasterIdentifyFormat format );
+%Docstring
+Converts a raster identify ``format`` to a translated string label.
+%End
+
+    static Qgis::RasterInterfaceCapability identifyFormatToCapability( Qgis::RasterIdentifyFormat format );
+%Docstring
+Converts a raster identify ``format`` to a capability.
+%End
 
     virtual int stepWidth() const;
 %Docstring
 Step width for raster iterations.
 
 .. seealso:: :py:func:`stepHeight`
-
-.. versionadded:: 3.0
 %End
 
     virtual int stepHeight() const;
@@ -560,8 +559,6 @@ Step width for raster iterations.
 Step height for raster iterations.
 
 .. seealso:: :py:func:`stepWidth`
-
-.. versionadded:: 3.0
 %End
 
     virtual QList< double > nativeResolutions() const;
@@ -627,23 +624,10 @@ Returns whether provider-level resampling is enabled.
 
 .. seealso:: :py:func:`maxOversampling`
 
-
 .. versionadded:: 3.16
 %End
 
-    enum class ResamplingMethod
-    {
-      Nearest,
-      Bilinear,
-      Cubic,
-      CubicSpline,
-      Lanczos,
-      Average,
-      Mode,
-      Gauss
-    };
-
-    virtual bool setZoomedInResamplingMethod( ResamplingMethod method );
+    virtual bool setZoomedInResamplingMethod( Qgis::RasterResamplingMethod method );
 %Docstring
 Set resampling method to apply for zoomed-in operations.
 
@@ -652,14 +636,14 @@ Set resampling method to apply for zoomed-in operations.
 .. versionadded:: 3.16
 %End
 
-    ResamplingMethod zoomedInResamplingMethod() const;
+    Qgis::RasterResamplingMethod zoomedInResamplingMethod() const;
 %Docstring
 Returns resampling method for zoomed-in operations.
 
 .. versionadded:: 3.16
 %End
 
-    virtual bool setZoomedOutResamplingMethod( ResamplingMethod method );
+    virtual bool setZoomedOutResamplingMethod( Qgis::RasterResamplingMethod  method );
 %Docstring
 Set resampling method to apply for zoomed-out operations.
 
@@ -668,7 +652,7 @@ Set resampling method to apply for zoomed-out operations.
 .. versionadded:: 3.16
 %End
 
-    ResamplingMethod zoomedOutResamplingMethod() const;
+    Qgis::RasterResamplingMethod  zoomedOutResamplingMethod() const;
 %Docstring
 Returns resampling method for zoomed-out operations.
 
@@ -697,14 +681,79 @@ Returns maximum oversampling factor for zoomed-out operations.
     virtual void writeXml( QDomDocument &doc, QDomElement &parentElem ) const;
 
 
+    QgsRasterAttributeTable *attributeTable( int bandNumber ) const;
+%Docstring
+Returns the (possibly ``None``) attribute table for the specified ``bandNumber``.
+
+.. versionadded:: 3.30
+%End
+
+    void setAttributeTable( int bandNumber, QgsRasterAttributeTable *attributeTable /Transfer/ );
+%Docstring
+Set the attribute table to ``attributeTable`` for the specified ``bandNumber``,
+if the ``attributeTable`` is ``None`` any existing attribute table for the specified
+band will be removed.
+
+.. note::
+
+   Ownership of the attribute table is transferred to the provider.
+
+.. versionadded:: 3.30
+%End
+
+    void removeAttributeTable( int bandNumber );
+%Docstring
+Remove the attribute table for the specified ``bandNumber``.
+If the attribute table does not exist this method does nothing.
+
+.. versionadded:: 3.30
+%End
+
+    bool writeFileBasedAttributeTable( int bandNumber, const QString &path, QString *errorMessage /Out/ = 0 ) const;
+%Docstring
+Writes the filesystem-based attribute table for the specified ``bandNumber`` to ``path``, optionally reporting any error in ``errorMessage``, returns ``True`` on success.
+
+:return: ``True`` on success
+
+.. note::
+
+   No checks for Raster Attribute Table validity are performed when saving, it is client code responsibility to handle validation.
+
+.. versionadded:: 3.30
+%End
+
+    bool readFileBasedAttributeTable( int bandNumber, const QString &path, QString *errorMessage /Out/ = 0 );
+%Docstring
+Loads the filesystem-based attribute table for the specified ``bandNumber`` from ``path``, optionally reporting any error in ``errorMessage``, returns ``True`` on success.
+
+:return: ``True`` on success
+
+.. versionadded:: 3.30
+%End
+
+    virtual bool writeNativeAttributeTable( QString *errorMessage /Out/ = 0 );  //#spellok
+
+    virtual bool readNativeAttributeTable( QString *errorMessage /Out/  = 0 );
+%Docstring
+Reads the native attribute table, optionally reporting any error in ``errorMessage``, returns ``True`` on success.
+The default implementation does nothing and returns ``False``.
+Data providers that have NativeRasterAttributeTable provider capability will try to read the native attribute table.
+
+:return: ``True`` on success
+
+.. versionadded:: 3.30
+%End
+
+    virtual QString bandDescription( int bandNumber );
+
+
   signals:
 
     void statusChanged( const QString & ) const;
 %Docstring
 Emit a message to be displayed on status bar, usually used by network providers (WMS,WCS)
-
-.. versionadded:: 2.14
 %End
+
 
   protected:
 
@@ -733,14 +782,11 @@ Copy member variables from other raster data provider. Useful for implementation
 
 };
 
-QFlags<QgsRasterDataProvider::ProviderCapability> operator|(QgsRasterDataProvider::ProviderCapability f1, QFlags<QgsRasterDataProvider::ProviderCapability> f2);
-
-
 
 /************************************************************************
  * This file has been generated automatically from                      *
  *                                                                      *
  * src/core/raster/qgsrasterdataprovider.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

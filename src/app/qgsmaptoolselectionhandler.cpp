@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsmaptoolselectionhandler.h"
+#include "moc_qgsmaptoolselectionhandler.cpp"
 
 #include <QBoxLayout>
 #include <QKeyEvent>
@@ -56,7 +57,7 @@ QgsDistanceWidget::QgsDistanceWidget( const QString &label, QWidget *parent )
 
   // connect signals
   mDistanceSpinBox->installEventFilter( this );
-  connect( mDistanceSpinBox, static_cast < void ( QgsDoubleSpinBox::* )( double ) > ( &QgsDoubleSpinBox::valueChanged ), this, &QgsDistanceWidget::distanceChanged );
+  connect( mDistanceSpinBox, static_cast<void ( QgsDoubleSpinBox::* )( double )>( &QgsDoubleSpinBox::valueChanged ), this, &QgsDistanceWidget::distanceChanged );
 
   // config focus
   setFocusProxy( mDistanceSpinBox );
@@ -96,11 +97,10 @@ bool QgsDistanceWidget::eventFilter( QObject *obj, QEvent *ev )
 /// @endcond
 
 
-
 QgsMapToolSelectionHandler::QgsMapToolSelectionHandler( QgsMapCanvas *canvas, QgsMapToolSelectionHandler::SelectionMode selectionMode )
   : mCanvas( canvas )
   , mSelectionMode( selectionMode )
-  , mSnapIndicator( std::make_unique< QgsSnapIndicator >( canvas ) )
+  , mSnapIndicator( std::make_unique<QgsSnapIndicator>( canvas ) )
   , mIdentifyMenu( new QgsIdentifyMenu( mCanvas ) )
 {
   mIdentifyMenu->setAllowMultipleReturn( false );
@@ -117,6 +117,7 @@ void QgsMapToolSelectionHandler::canvasReleaseEvent( QgsMapMouseEvent *e )
   switch ( mSelectionMode )
   {
     case QgsMapToolSelectionHandler::SelectSimple:
+    case QgsMapToolSelectionHandler::SelectOnMouseOver:
       selectFeaturesReleaseEvent( e );
       break;
     case QgsMapToolSelectionHandler::SelectPolygon:
@@ -135,6 +136,7 @@ void QgsMapToolSelectionHandler::canvasMoveEvent( QgsMapMouseEvent *e )
 {
   switch ( mSelectionMode )
   {
+    case QgsMapToolSelectionHandler::SelectOnMouseOver:
     case QgsMapToolSelectionHandler::SelectSimple:
       selectFeaturesMoveEvent( e );
       break;
@@ -154,6 +156,7 @@ void QgsMapToolSelectionHandler::canvasPressEvent( QgsMapMouseEvent *e )
 {
   switch ( mSelectionMode )
   {
+    case QgsMapToolSelectionHandler::SelectOnMouseOver:
     case QgsMapToolSelectionHandler::SelectSimple:
       selectFeaturesPressEvent( e );
       break;
@@ -192,6 +195,30 @@ void QgsMapToolSelectionHandler::selectFeaturesPressEvent( QgsMapMouseEvent *e )
 
 void QgsMapToolSelectionHandler::selectFeaturesMoveEvent( QgsMapMouseEvent *e )
 {
+  if ( mSelectionMode == QgsMapToolSelectionHandler::SelectOnMouseOver && mCanvas->underMouse() )
+  {
+    mMoveLastCursorPos = e->pos();
+    // This is a (well known, according to google) false positive,
+    // I tried all possible NOLINT placements without success, this
+    // ugly ifdef seems to do the trick with silencing the warning.
+#ifndef __clang_analyzer__
+    if ( !mOnMouseMoveDelayTimer || !mOnMouseMoveDelayTimer->isActive() )
+    {
+      setSelectedGeometry( QgsGeometry::fromPointXY( toMapCoordinates( e->pos() ) ), e->modifiers() );
+      mOnMouseMoveDelayTimer = std::make_unique<QTimer>();
+      mOnMouseMoveDelayTimer->setSingleShot( true );
+      connect( mOnMouseMoveDelayTimer.get(), &QTimer::timeout, this, [=] {
+        if ( !mMoveLastCursorPos.isNull() )
+        {
+          setSelectedGeometry( QgsGeometry::fromPointXY( toMapCoordinates( mMoveLastCursorPos ) ), e->modifiers() );
+        }
+      } );
+      mOnMouseMoveDelayTimer->start( 300 );
+    }
+#endif
+    return;
+  }
+
   if ( e->buttons() != Qt::LeftButton )
     return;
 
@@ -248,38 +275,25 @@ void QgsMapToolSelectionHandler::selectPolygonPressEvent( QgsMapMouseEvent *e )
   // Handle immediate right-click on feature to show context menu
   if ( !mSelectionRubberBand && ( e->button() == Qt::RightButton ) )
   {
-    QList<QgsMapToolIdentify::IdentifyResult> results;
-    const QMap< QString, QString > derivedAttributes;
-
-    const QgsPointXY mapPoint = toMapCoordinates( e->pos() );
-    double x = mapPoint.x(), y = mapPoint.y();
-    const double sr = QgsMapTool::searchRadiusMU( mCanvas );
-
-    const QList<QgsMapLayer *> layers = mCanvas->layers();
-    for ( auto layer : layers )
-    {
-      if ( layer->type() == QgsMapLayerType::VectorLayer )
-      {
-        auto vectorLayer = static_cast<QgsVectorLayer *>( layer );
-        if ( vectorLayer->geometryType() == QgsWkbTypes::PolygonGeometry )
-        {
-          QgsFeatureIterator fit = vectorLayer->getFeatures( QgsFeatureRequest()
-                                   .setDestinationCrs( mCanvas->mapSettings().destinationCrs(), mCanvas->mapSettings().transformContext() )
-                                   .setFilterRect( QgsRectangle( x - sr, y - sr, x + sr, y + sr ) )
-                                   .setFlags( QgsFeatureRequest::ExactIntersect ) );
-          QgsFeature f;
-          while ( fit.nextFeature( f ) )
-          {
-            results << QgsMapToolIdentify::IdentifyResult( vectorLayer, f, derivedAttributes );
-          }
-        }
-      }
-    }
+    const QList<QgsMapToolIdentify::IdentifyResult> results = QgsIdentifyMenu::findFeaturesOnCanvas( e, mCanvas, { Qgis::GeometryType::Polygon } );
 
     const QPoint globalPos = mCanvas->mapToGlobal( QPoint( e->pos().x() + 5, e->pos().y() + 5 ) );
     const QList<QgsMapToolIdentify::IdentifyResult> selectedFeatures = mIdentifyMenu->exec( results, globalPos );
     if ( !selectedFeatures.empty() && selectedFeatures[0].mFeature.hasGeometry() )
-      setSelectedGeometry( selectedFeatures[0].mFeature.geometry(), e->modifiers() );
+    {
+      QgsCoordinateTransform transform = mCanvas->mapSettings().layerTransform( selectedFeatures.at( 0 ).mLayer );
+      QgsGeometry geom = selectedFeatures[0].mFeature.geometry();
+      try
+      {
+        geom.transform( transform );
+      }
+      catch ( QgsCsException & )
+      {
+        QgsDebugError( QStringLiteral( "Could not transform geometry to map CRS" ) );
+      }
+
+      setSelectedGeometry( geom, e->modifiers() );
+    }
 
     return;
   }
@@ -389,7 +403,7 @@ void QgsMapToolSelectionHandler::selectRadiusReleaseEvent( QgsMapMouseEvent *e )
 
 void QgsMapToolSelectionHandler::initRubberBand()
 {
-  mSelectionRubberBand = std::make_unique<QgsRubberBand>( mCanvas, QgsWkbTypes::PolygonGeometry );
+  mSelectionRubberBand = std::make_unique<QgsRubberBand>( mCanvas, Qgis::GeometryType::Polygon );
   mSelectionRubberBand->setFillColor( mFillColor );
   mSelectionRubberBand->setStrokeColor( mStrokeColor );
 }
@@ -447,12 +461,11 @@ void QgsMapToolSelectionHandler::updateRadiusRubberband( double radius )
 
   const int RADIUS_SEGMENTS = 80;
 
-  mSelectionRubberBand->reset( QgsWkbTypes::PolygonGeometry );
+  mSelectionRubberBand->reset( Qgis::GeometryType::Polygon );
   for ( int i = 0; i <= RADIUS_SEGMENTS; ++i )
   {
     const double theta = i * ( 2.0 * M_PI / RADIUS_SEGMENTS );
-    const QgsPointXY radiusPoint( mRadiusCenter.x() + radius * std::cos( theta ),
-                                  mRadiusCenter.y() + radius * std::sin( theta ) );
+    const QgsPointXY radiusPoint( mRadiusCenter.x() + radius * std::cos( theta ), mRadiusCenter.y() + radius * std::sin( theta ) );
     mSelectionRubberBand->addPoint( radiusPoint, false );
   }
   mSelectionRubberBand->closePoints( true );
@@ -480,6 +493,7 @@ QgsGeometry QgsMapToolSelectionHandler::selectedGeometry() const
 void QgsMapToolSelectionHandler::setSelectedGeometry( const QgsGeometry &geometry, Qt::KeyboardModifiers modifiers )
 {
   mSelectionGeometry = geometry;
+  mMoveLastCursorPos = QPoint();
   emit geometryChanged( modifiers );
 }
 

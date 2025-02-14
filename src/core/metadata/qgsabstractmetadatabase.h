@@ -20,6 +20,7 @@
 
 #include "qgis_sip.h"
 #include "qgis_core.h"
+#include "qgis.h"
 #include <QMap>
 #include <QString>
 #include <QMetaType>
@@ -503,9 +504,25 @@ class CORE_EXPORT QgsAbstractMetadataBase
     void addLink( const QgsAbstractMetadataBase::Link &link );
 
     /**
+     * Returns the date for the specified date \a type.
+     *
+     * \see setDateTime()
+     * \since QGIS 3.30
+     */
+    QDateTime dateTime( Qgis::MetadataDateType type ) const;
+
+    /**
+     * Sets a date value for the specified date \a type.
+     *
+     * \see dateTime()
+     * \since QGIS 3.30
+     */
+    void setDateTime( Qgis::MetadataDateType type, QDateTime date );
+
+    /**
      * Sets state from DOM document.
      *
-     * \param metadataElement The DOM element corresponding to ``resourceMetadata'' tag
+     * \param metadataElement The DOM element corresponding to ``resourceMetadata`` tag
      *
      * \returns TRUE if successful
      *
@@ -517,7 +534,7 @@ class CORE_EXPORT QgsAbstractMetadataBase
     /**
      * Stores state in a DOM node.
      *
-     * \param metadataElement is a DOM element corresponding to ``resourceMetadata'' tag
+     * \param metadataElement is a DOM element corresponding to ``resourceMetadata`` tag
      * \param document is a the DOM document being written
      *
      * \returns TRUE if successful
@@ -571,6 +588,9 @@ class CORE_EXPORT QgsAbstractMetadataBase
     QgsAbstractMetadataBase::ContactList mContacts;
 
     QgsAbstractMetadataBase::LinkList mLinks;
+
+    //! Metadata dates
+    QMap< Qgis::MetadataDateType, QDateTime > mDates;
 
     /*
      * IMPORTANT!!!!!!

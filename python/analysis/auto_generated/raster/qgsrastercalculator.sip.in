@@ -3,7 +3,7 @@
  *                                                                      *
  * src/analysis/raster/qgsrastercalculator.h                            *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -14,15 +14,12 @@ class QgsRasterCalculatorEntry
 {
 %Docstring(signature="appended")
 Represents an individual raster layer/band number entry within a raster calculation.
-
-.. versionadded:: 2.18
 %End
 
 %TypeHeaderCode
 #include "qgsrastercalculator.h"
 %End
   public:
-
     static QVector<QgsRasterCalculatorEntry> rasterEntries();
 %Docstring
 Creates a list of raster entries from the current project.
@@ -53,7 +50,6 @@ Performs raster layer calculations.
 #include "qgsrastercalculator.h"
 %End
   public:
-
     enum Result
     {
       Success,
@@ -67,30 +63,7 @@ Performs raster layer calculations.
     };
 
 
-    QgsRasterCalculator( const QString &formulaString, const QString &outputFile, const QString &outputFormat,
-                         const QgsRectangle &outputExtent, int nOutputColumns, int nOutputRows,
-                         const QVector<QgsRasterCalculatorEntry> &rasterEntries,
-                         const QgsCoordinateTransformContext &transformContext );
-%Docstring
-QgsRasterCalculator constructor.
-
-:param formulaString: formula for raster calculation
-:param outputFile: output file path
-:param outputFormat: output file format
-:param outputExtent: output extent. CRS for output is taken from first entry in rasterEntries.
-:param nOutputColumns: number of columns in output raster
-:param nOutputRows: number of rows in output raster
-:param rasterEntries: list of referenced raster layers
-:param transformContext: coordinate transformation context
-
-.. versionadded:: 3.8
-%End
-
-    QgsRasterCalculator( const QString &formulaString, const QString &outputFile, const QString &outputFormat,
-                         const QgsRectangle &outputExtent, const QgsCoordinateReferenceSystem &outputCrs,
-                         int nOutputColumns, int nOutputRows,
-                         const QVector<QgsRasterCalculatorEntry> &rasterEntries,
-                         const QgsCoordinateTransformContext &transformContext );
+    QgsRasterCalculator( const QString &formulaString, const QString &outputFile, const QString &outputFormat, const QgsRectangle &outputExtent, const QgsCoordinateReferenceSystem &outputCrs, int nOutputColumns, int nOutputRows, const QVector<QgsRasterCalculatorEntry> &rasterEntries, const QgsCoordinateTransformContext &transformContext );
 %Docstring
 QgsRasterCalculator constructor.
 
@@ -107,9 +80,7 @@ QgsRasterCalculator constructor.
 .. versionadded:: 3.8
 %End
 
-
- QgsRasterCalculator( const QString &formulaString, const QString &outputFile, const QString &outputFormat,
-                                           const QgsRectangle &outputExtent, int nOutputColumns, int nOutputRows, const QVector<QgsRasterCalculatorEntry> &rasterEntries ) /Deprecated/;
+    QgsRasterCalculator( const QString &formulaString, const QString &outputFile, const QString &outputFormat, const QgsRectangle &outputExtent, int nOutputColumns, int nOutputRows, const QVector<QgsRasterCalculatorEntry> &rasterEntries, const QgsCoordinateTransformContext &transformContext );
 %Docstring
 QgsRasterCalculator constructor.
 
@@ -120,13 +91,12 @@ QgsRasterCalculator constructor.
 :param nOutputColumns: number of columns in output raster
 :param nOutputRows: number of rows in output raster
 :param rasterEntries: list of referenced raster layers
+:param transformContext: coordinate transformation context
 
-.. deprecated:: QGIS 3.8
-  use the version with transformContext instead
+.. versionadded:: 3.8
 %End
 
- QgsRasterCalculator( const QString &formulaString, const QString &outputFile, const QString &outputFormat,
-                                           const QgsRectangle &outputExtent, const QgsCoordinateReferenceSystem &outputCrs, int nOutputColumns, int nOutputRows, const QVector<QgsRasterCalculatorEntry> &rasterEntries ) /Deprecated/;
+ QgsRasterCalculator( const QString &formulaString, const QString &outputFile, const QString &outputFormat, const QgsRectangle &outputExtent, const QgsCoordinateReferenceSystem &outputCrs, int nOutputColumns, int nOutputRows, const QVector<QgsRasterCalculatorEntry> &rasterEntries ) /Deprecated="Since 3.8. Use the version with transformContext instead."/;
 %Docstring
 QgsRasterCalculator constructor.
 
@@ -139,10 +109,26 @@ QgsRasterCalculator constructor.
 :param nOutputRows: number of rows in output raster
 :param rasterEntries: list of referenced raster layers
 
-.. deprecated:: QGIS 3.8
-  use the version with transformContext instead
+.. deprecated:: 3.8
 
-.. versionadded:: 2.10
+   Use the version with transformContext instead.
+%End
+
+ QgsRasterCalculator( const QString &formulaString, const QString &outputFile, const QString &outputFormat, const QgsRectangle &outputExtent, int nOutputColumns, int nOutputRows, const QVector<QgsRasterCalculatorEntry> &rasterEntries ) /Deprecated="Since 3.8. Use the version with transformContext instead."/;
+%Docstring
+QgsRasterCalculator constructor.
+
+:param formulaString: formula for raster calculation
+:param outputFile: output file path
+:param outputFormat: output file format
+:param outputExtent: output extent. CRS for output is taken from first entry in rasterEntries.
+:param nOutputColumns: number of columns in output raster
+:param nOutputRows: number of rows in output raster
+:param rasterEntries: list of referenced raster layers
+
+.. deprecated:: 3.8
+
+   Use the version with transformContext instead.
 %End
 
     Result processCalculation( QgsFeedback *feedback = 0 );
@@ -169,5 +155,5 @@ Returns a description of the last error encountered.
  *                                                                      *
  * src/analysis/raster/qgsrastercalculator.h                            *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

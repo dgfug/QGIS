@@ -48,8 +48,7 @@ class GUI_EXPORT QgsRuleBasedLabelingModel : public QAbstractItemModel
 
     Qt::ItemFlags flags( const QModelIndex &index ) const override;
     QVariant data( const QModelIndex &index, int role = Qt::DisplayRole ) const override;
-    QVariant headerData( int section, Qt::Orientation orientation,
-                         int role = Qt::DisplayRole ) const override;
+    QVariant headerData( int section, Qt::Orientation orientation, int role = Qt::DisplayRole ) const override;
     int rowCount( const QModelIndex &parent = QModelIndex() ) const override;
     int columnCount( const QModelIndex & = QModelIndex() ) const override;
     //! provide model index for parent's child item
@@ -148,7 +147,11 @@ class GUI_EXPORT QgsRuleBasedLabelingWidget : public QgsPanelWidget, private Ui:
 
 class QgsLabelingGui;
 
+#include <QDialog>
+#include <QDialogButtonBox>
+
 #include "ui_qgslabelingrulepropswidget.h"
+#include "qgsgui.h"
 
 /**
  * \ingroup gui
@@ -163,24 +166,35 @@ class GUI_EXPORT QgsLabelingRulePropsWidget : public QgsPanelWidget, private Ui:
 
   public:
     //! constructor
-    QgsLabelingRulePropsWidget( QgsRuleBasedLabeling::Rule *rule, QgsVectorLayer *layer,
-                                QWidget *parent = nullptr, QgsMapCanvas *mapCanvas = nullptr );
+    QgsLabelingRulePropsWidget( QgsRuleBasedLabeling::Rule *rule, QgsVectorLayer *layer, QWidget *parent = nullptr, QgsMapCanvas *mapCanvas = nullptr );
     ~QgsLabelingRulePropsWidget() override;
 
     //! Returns the rule being edited
     QgsRuleBasedLabeling::Rule *rule() { return mRule; }
 
+    /**
+     * Set the widget in dock mode.
+     * \param dockMode TRUE for dock mode.
+     */
     void setDockMode( bool dockMode ) override;
 
   public slots:
     //! Apply any changes from the widget to the set rule.
     void apply();
 
-  private slots:
+    /**
+     * Test the filter that is set in the widget
+     */
     void testFilter();
+
+    /**
+     * Open the expression builder widget
+     */
     void buildExpression();
 
   private:
+    static QgsExpressionContext createExpressionContext( QgsMapCanvas *mapCanvas, const QgsMapLayer *layer );
+
     QgsRuleBasedLabeling::Rule *mRule; // borrowed
     QgsVectorLayer *mLayer = nullptr;
 
@@ -190,5 +204,57 @@ class GUI_EXPORT QgsLabelingRulePropsWidget : public QgsPanelWidget, private Ui:
     QgsMapCanvas *mMapCanvas = nullptr;
 };
 
+/**
+ * \ingroup gui
+ * \class QgsLabelingRulePropsDialog
+ * \brief Dialog for editing labeling rule
+ *
+ * \note This class is not a part of public API
+ * \since QGIS 3.24
+ */
+class GUI_EXPORT QgsLabelingRulePropsDialog : public QDialog
+{
+    Q_OBJECT
+
+  public:
+    /**
+     * Constructor for QgsLabelingRulePropsDialog
+     * \param rule associated rule based labeling rule
+     * \param layer source vector layer
+     * \param parent parent widget
+     * \param mapCanvas map canvas
+     */
+    QgsLabelingRulePropsDialog( QgsRuleBasedLabeling::Rule *rule, QgsVectorLayer *layer, QWidget *parent = nullptr, QgsMapCanvas *mapCanvas = nullptr );
+
+    /**
+     * Returns the current set rule.
+     * \returns The current rule.
+     */
+    QgsRuleBasedLabeling::Rule *rule() { return mPropsWidget->rule(); }
+
+  public slots:
+
+    /**
+     * Test the filter that is set in the widget
+     */
+    void testFilter();
+
+    /**
+     * Open the expression builder widget
+     */
+    void buildExpression();
+
+    /**
+     * Apply any changes from the widget to the set rule.
+     */
+    void accept() override;
+
+  private slots:
+    void showHelp();
+
+  private:
+    QgsLabelingRulePropsWidget *mPropsWidget = nullptr;
+    QDialogButtonBox *buttonBox = nullptr;
+};
 
 #endif // QGSRULEBASEDLABELINGWIDGET_H

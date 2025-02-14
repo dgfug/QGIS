@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/vector/qgsvectordataprovider.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -27,44 +27,11 @@ of feature and attribute information from a spatial datasource.
 %End
   public:
 
-
-    enum Capability
-    {
-      NoCapabilities,
-      AddFeatures,
-      DeleteFeatures,
-      ChangeAttributeValues,
-      AddAttributes,
-      DeleteAttributes,
-      CreateSpatialIndex,
-      SelectAtId,
-      ChangeGeometries,
-      SelectEncoding,
-      CreateAttributeIndex,
-      SimplifyGeometries,
-      SimplifyGeometriesWithTopologicalValidation,
-      TransactionSupport,
-      CircularGeometries,
-      ChangeFeatures,
-      RenameAttributes,
-      FastTruncate,
-      ReadLayerMetadata,
-      WriteLayerMetadata,
-      CancelSupport,
-      CreateRenderer,
-      CreateLabeling,
-      ReloadData,
-      FeatureSymbology,
-    };
-
-    typedef QFlags<QgsVectorDataProvider::Capability> Capabilities;
-
-
     static const int EditingCapabilities;
 
     QgsVectorDataProvider( const QString &uri = QString(),
                            const QgsDataProvider::ProviderOptions &providerOptions = QgsDataProvider::ProviderOptions(),
-                           QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() );
+                           Qgis::DataProviderReadFlags flags = Qgis::DataProviderReadFlags() );
 %Docstring
 Constructor for a vector data provider.
 
@@ -88,8 +55,6 @@ if it is possible that both feature source and provider may need reading/writing
 same time, some synchronization mechanisms must be used (e.g. mutexes) to prevent data corruption.
 
 :return: new instance of :py:class:`QgsAbstractFeatureSource` (caller is responsible for deleting it)
-
-.. versionadded:: 2.4
 %End
 
     virtual QString storageType() const;
@@ -107,7 +72,7 @@ Query the provider for features specified in request.
 :return: iterator for matching features from provider
 %End
 
-    virtual QgsWkbTypes::Type wkbType() const = 0;
+    virtual Qgis::WkbType wkbType() const = 0;
 
 %Docstring
 Returns the geometry type which is returned by this layer
@@ -151,7 +116,7 @@ Returns the vector layer type flags.
 .. versionadded:: 3.24
 %End
 
-    virtual QgsFeatureSource::FeatureAvailability hasFeatures() const;
+    virtual Qgis::FeatureAvailability hasFeatures() const;
 
 %Docstring
 Will always return FeatureAvailability.FeaturesAvailable or
@@ -174,6 +139,8 @@ Returns the fields associated with this data provider.
     virtual QgsCoordinateReferenceSystem sourceCrs() const;
 
     virtual QgsRectangle sourceExtent() const;
+
+    virtual QgsBox3D sourceExtent3D() const;
 
     virtual QString sourceName() const;
 
@@ -221,7 +188,7 @@ matching is done in a case-insensitive manner.
 :return: list of unique strings containing substring
 %End
 
-    virtual QVariant aggregate( QgsAggregateCalculator::Aggregate aggregate,
+    virtual QVariant aggregate( Qgis::Aggregate aggregate,
                                 int index,
                                 const QgsAggregateCalculator::AggregateParameters &parameters,
                                 QgsExpressionContext *context,
@@ -239,8 +206,6 @@ but subclasses can override this method to handoff calculation of aggregates to 
 :param fids: list of fids to filter, otherwise will use all fids
 
 :return: calculated aggregate value
-
-.. versionadded:: 2.16
 %End
 
     virtual void enumValues( int index, QStringList &enumList /Out/ ) const;
@@ -249,6 +214,8 @@ Returns the possible enum values of an attribute. Returns an empty stringlist if
 or if the given attribute is not an enum type.
 
 :param index: the index of the attribute
+
+:return: reference to the list to fill
 %End
 
     virtual bool addFeatures( QgsFeatureList &flist /In,Out/, QgsFeatureSink::Flags flags = QgsFeatureSink::Flags() );
@@ -275,8 +242,6 @@ Providers with the FastTruncate capability will use an optimised method to trunc
 :return: ``True`` in case of success and ``False`` in case of failure.
 
 .. seealso:: :py:func:`deleteFeatures`
-
-.. versionadded:: 3.0
 %End
 
     virtual bool cancelReload();
@@ -317,8 +282,6 @@ manually to ensure that the layer's field are correctly reported.
 :param renamedAttributes: map of attribute index to new attribute name
 
 :return: ``True`` in case of success and ``False`` in case of failure
-
-.. versionadded:: 2.16
 %End
 
     virtual bool changeAttributeValues( const QgsChangedAttributesMap &attr_map );
@@ -370,8 +333,6 @@ field index. These clauses are usually SQL fragments which must be evaluated by 
 provider, e.g., sequence values.
 
 .. seealso:: :py:func:`defaultValue`
-
-.. versionadded:: 3.0
 %End
 
     QgsFieldConstraints::Constraints fieldConstraints( int fieldIndex ) const;
@@ -380,8 +341,6 @@ Returns any constraints which are present at the provider for a specified
 field index.
 
 .. seealso:: :py:func:`skipConstraintCheck`
-
-.. versionadded:: 3.0
 %End
 
     virtual bool skipConstraintCheck( int fieldIndex, QgsFieldConstraints::Constraint constraint, const QVariant &value = QVariant() ) const;
@@ -391,8 +350,6 @@ the value returned by :py:func:`~QgsVectorDataProvider.defaultValue` is trusted 
 passed which can help refine the skip constraint check.
 
 .. seealso:: :py:func:`fieldConstraints`
-
-.. versionadded:: 3.0
 %End
 
     virtual bool changeGeometryValues( const QgsGeometryMap &geometry_map );
@@ -418,17 +375,28 @@ Creates a spatial index on the datasource (if supported by the provider type).
 Create an attribute index on the datasource
 %End
 
-    virtual QgsVectorDataProvider::Capabilities capabilities() const;
+    virtual Qgis::VectorProviderCapabilities capabilities() const;
 %Docstring
 Returns flags containing the supported capabilities
 \note, some capabilities may change depending on whether
 a spatial filter is active on this provider, so it may
 be prudent to check this value per intended operation.
+
+.. seealso:: :py:func:`attributeEditCapabilities`
 %End
 
     QString capabilitiesString() const;
 %Docstring
 Returns the above in friendly format.
+%End
+
+    virtual Qgis::VectorDataProviderAttributeEditCapabilities attributeEditCapabilities() const;
+%Docstring
+Returns the provider's supported attribute editing capabilities.
+
+.. seealso:: :py:func:`capabilities`
+
+.. versionadded:: 3.32
 %End
 
     virtual void setEncoding( const QString &e );
@@ -474,9 +442,20 @@ Returns list of indexes to fetch all attributes in :py:func:`~QgsVectorDataProvi
 Returns list of indexes of fields that make up the primary key
 %End
 
-    virtual QgsAttrPalIndexNameHash palAttributeIndexNames() const;
+    virtual QString geometryColumnName() const;
+%Docstring
+Returns the name of the column storing geometry, if applicable.
+
+.. versionadded:: 3.42
+%End
+
+ QgsAttrPalIndexNameHash palAttributeIndexNames() const /Deprecated="Since 3.32. This method is unused and will always return an empty hash."/;
 %Docstring
 Returns list of indexes to names for :py:class:`QgsPalLabeling` fix
+
+.. deprecated:: 3.32
+
+   This method is unused and will always return an empty hash.
 %End
 
     bool supportedType( const QgsField &field ) const;
@@ -486,16 +465,19 @@ check if provider supports type of field
 
     struct NativeType
     {
-      NativeType( const QString &typeDesc, const QString &typeName, QVariant::Type type, int minLen = 0, int maxLen = 0, int minPrec = 0, int maxPrec = 0, QVariant::Type subType = QVariant::Invalid );
+      NativeType( const QString &typeDesc, const QString &typeName, QMetaType::Type type, int minLen = 0, int maxLen = 0, int minPrec = 0, int maxPrec = 0, QMetaType::Type subType = QMetaType::Type::UnknownType );
 
-      QString mTypeDesc;
+ NativeType( const QString &typeDesc, const QString &typeName, QVariant::Type type, int minLen = 0, int maxLen = 0, int minPrec = 0, int maxPrec = 0, QVariant::Type subType = QVariant::Type::Invalid );
+
+
+          QString mTypeDesc;
       QString mTypeName;
-      QVariant::Type mType;
+      QMetaType::Type mType;
       int mMinLen;
       int mMaxLen;
       int mMinPrec;
       int mMaxPrec;
-      QVariant::Type mSubType;
+      QMetaType::Type mSubType;
     };
 
     QList< QgsVectorDataProvider::NativeType > nativeTypes() const;
@@ -527,18 +509,6 @@ Clear recorded errors
     QStringList errors() const;
 %Docstring
 Gets recorded errors
-%End
-
-    virtual bool isSaveAndLoadStyleToDatabaseSupported() const;
-%Docstring
-It returns ``False`` by default.
-Must be implemented by providers that support saving and loading styles to db returning ``True``
-%End
-
-    virtual bool isDeleteStyleFromDatabaseSupported() const;
-%Docstring
-It returns ``False`` by default.
-Must be implemented by providers that support delete styles from db returning ``True``
 %End
 
     virtual QgsFeatureRenderer *createRenderer( const QVariantMap &configuration = QVariantMap() ) const /Factory/;
@@ -575,18 +545,31 @@ providers will return ``None``.
 .. versionadded:: 3.6
 %End
 
-    static QVariant convertValue( QVariant::Type type, const QString &value );
+    static QVariant convertValue( QMetaType::Type type, const QString &value );
+%Docstring
+Convert ``value`` to ``type``
+%End
+
+ static QVariant convertValue( QVariant::Type type, const QString &value ) /Deprecated="Since 3.38. Use the method with a QMetaType.Type argument instead."/;
+%Docstring
+Convert ``value`` to ``type``
+
+.. deprecated:: 3.38
+
+   Use the method with a QMetaType.Type argument instead.
+%End
 
     virtual QgsTransaction *transaction() const;
 %Docstring
 Returns the transaction this data provider is included in, if any.
 %End
 
- virtual void forceReload() /Deprecated/;
+ virtual void forceReload() /Deprecated="Since 3.12. Will be removed in QGIS 4.0 - use reloadData() instead."/;
 %Docstring
 
-.. deprecated::
-   QGIS 3.12 - will be removed in QGIS 4.0 - use reloadData instead
+.. deprecated:: 3.12
+
+   Will be removed in QGIS 4.0 - use :py:func:`~QgsVectorDataProvider.reloadData` instead.
 %End
 
     virtual QSet<QgsMapLayerDependency> dependencies() const;
@@ -594,16 +577,14 @@ Returns the transaction this data provider is included in, if any.
 Gets the list of layer ids on which this layer depends. This in particular determines the order of layer loading.
 %End
 
-    virtual QList<QgsRelation> discoverRelations( const QgsVectorLayer *self, const QList<QgsVectorLayer *> &layers ) const;
+    virtual QList<QgsRelation> discoverRelations( const QgsVectorLayer *target, const QList<QgsVectorLayer *> &layers ) const;
 %Docstring
 Discover the available relations with the given layers.
 
-:param self: the layer using this data provider.
+:param target: the layer using this data provider.
 :param layers: the other layers.
 
 :return: the list of N-1 relations from this provider.
-
-.. versionadded:: 3.0
 %End
 
     virtual QVariantMap metadata() const;
@@ -637,8 +618,6 @@ Gets the translated metadata value.
 Returns ``True`` if the data source has metadata, ``False`` otherwise.
 
 :return: ``True`` if data source has metadata, ``False`` otherwise.
-
-.. versionadded:: 3.0
 %End
 
     virtual void handlePostCloneOperations( QgsVectorDataProvider *source );
@@ -652,13 +631,14 @@ from the ``source`` provider.
     virtual QgsVectorDataProviderTemporalCapabilities *temporalCapabilities();
 
 
+    virtual QgsDataProviderElevationProperties *elevationProperties();
+
+
   signals:
 
     void raiseError( const QString &msg ) const;
 %Docstring
 Signals an error in this provider
-
-.. versionadded:: 3.0
 %End
 
   protected:
@@ -681,8 +661,6 @@ Errors should be translated strings that require the users immediate
 attention.
 
 For general debug information use :py:func:`QgsMessageLog.logMessage()` instead.
-
-.. versionadded:: 3.0
 %End
 
     QgsGeometry convertToProviderType( const QgsGeometry &geom ) const;
@@ -690,32 +668,40 @@ For general debug information use :py:func:`QgsMessageLog.logMessage()` instead.
 Converts the geometry to the provider type if possible / necessary
 
 :return: the converted geometry or ``None`` if no conversion was necessary or possible
+
+.. note::
+
+   The default implementation simply calls the static version of this function.
 %End
 
     void setNativeTypes( const QList<QgsVectorDataProvider::NativeType> &nativeTypes );
 %Docstring
 Set the list of native types supported by this provider.
 Usually done in the constructor.
-
-.. versionadded:: 3.0
 %End
+
 
     QTextCodec *textEncoding() const;
 %Docstring
 Gets this providers encoding
-
-.. versionadded:: 3.0
 %End
 
+    static QgsGeometry convertToProviderType( const QgsGeometry &geometry,  Qgis::WkbType providerGeometryType );
+%Docstring
+Converts the ``geometry`` to the provider geometry type ``providerGeometryType`` if possible / necessary
+
+:return: the converted geometry or ``None`` if no conversion was necessary or possible
+
+.. versionadded:: 3.34
+%End
+
+
 };
-
-QFlags<QgsVectorDataProvider::Capability> operator|(QgsVectorDataProvider::Capability f1, QFlags<QgsVectorDataProvider::Capability> f2);
-
 
 /************************************************************************
  * This file has been generated automatically from                      *
  *                                                                      *
  * src/core/vector/qgsvectordataprovider.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -36,8 +36,8 @@
 #include "qgis_core.h"
 #include "qgsgeometry.h"
 #include "qgsgeos.h"
-#include "qgspallabeling.h"
-#include "qgslabelingenginesettings.h"
+#include "qgssettingstree.h"
+
 #include <QList>
 #include <iostream>
 #include <ctime>
@@ -45,15 +45,18 @@
 #include <QStringList>
 #include <unordered_map>
 
+class QgsSettingsEntryInteger;
+
 // TODO ${MAJOR} ${MINOR} etc instead of 0.2
 
 class QgsAbstractLabelProvider;
+class QgsRenderContext;
+class QgsAbstractLabelingEngineRule;
 
 namespace pal
 {
   class Layer;
   class LabelPosition;
-  class PalStat;
   class Problem;
   class PointSet;
 
@@ -83,17 +86,16 @@ namespace pal
       friend class Layer;
 
     public:
+      static inline QgsSettingsTreeNode *sTreePal = QgsSettingsTree::sTreeRendering->createChildNode( QStringLiteral( "pal" ) );
 
-      /**
-       * \brief Create an new pal instance
-       */
+      static const QgsSettingsEntryInteger *settingsRenderingLabelCandidatesLimitPoints;
+      static const QgsSettingsEntryInteger *settingsRenderingLabelCandidatesLimitLines;
+      static const QgsSettingsEntryInteger *settingsRenderingLabelCandidatesLimitPolygons;
+
       Pal();
-
       ~Pal();
 
-      //! Pal cannot be copied.
       Pal( const Pal &other ) = delete;
-      //! Pal cannot be copied.
       Pal &operator=( const Pal &other ) = delete;
 
       /**
@@ -102,14 +104,13 @@ namespace pal
        * \param provider Provider associated with the layer
        * \param layerName layer's name
        * \param arrangement Howto place candidates
-       * \param defaultPriority layer's prioriry (0 is the best, 1 the worst)
+       * \param defaultPriority layer's priority (0 is the best, 1 the worst)
        * \param active is the layer is active (currently displayed)
        * \param toLabel the layer will be labeled only if toLablel is TRUE
-       * \param displayAll if TRUE, all features will be labelled even though overlaps occur
        *
        * \throws PalException::LayerExists
        */
-      Layer *addLayer( QgsAbstractLabelProvider *provider, const QString &layerName, QgsPalLayerSettings::Placement arrangement, double defaultPriority, bool active, bool toLabel, bool displayAll = false );
+      Layer *addLayer( QgsAbstractLabelProvider *provider, const QString &layerName, Qgis::LabelPlacement arrangement, double defaultPriority, bool active, bool toLabel );
 
       /**
        * \brief remove a layer
@@ -132,8 +133,19 @@ namespace pal
        * boundary, which will be used to detect whether a label is visible (or partially visible) in
        * the rendered map. This may differ from \a extent in the case of rotated or non-rectangular
        * maps.
+       *
+       * This method:
+       *
+       * - preprocesses features, eg merging connected lines, chopping features at repeat distances
+       * - creates label candidates for every feature
+       * - purges candidates outside the map extent (respecting whether partial labels should be shown at the map boundary)
+       * - creates default fallback candidates for features with no valid candidates
+       * - collects obstacles
+       * - calculates candidate costs
+       * - calculates overlaps/conflicts
+       * - eliminates hard conflicts (forbidden placement)
        */
-      std::unique_ptr< Problem > extractProblem( const QgsRectangle &extent, const QgsGeometry &mapBoundary );
+      std::unique_ptr< Problem > extractProblem( const QgsRectangle &extent, const QgsGeometry &mapBoundary, QgsRenderContext &context );
 
       /**
        * Solves the labeling problem, selecting the best candidate locations for all labels and returns a list of these
@@ -147,7 +159,7 @@ namespace pal
        *
        * Ownership of the returned labels is not transferred - it resides with the pal object.
        */
-      QList<LabelPosition *> solveProblem( Problem *prob, bool displayAll, QList<pal::LabelPosition *> *unlabeled = nullptr );
+      QList<LabelPosition *> solveProblem( Problem *prob, QgsRenderContext &context, bool displayAll, QList<pal::LabelPosition *> *unlabeled = nullptr );
 
       /**
        * Sets whether partial labels show be allowed.
@@ -196,14 +208,14 @@ namespace pal
        *
        * \see setPlacementVersion()
        */
-      QgsLabelingEngineSettings::PlacementEngineVersion placementVersion() const;
+      Qgis::LabelPlacementEngineVersion placementVersion() const;
 
       /**
        * Sets the placement engine \a version, which dictates how the label placement problem is solved.
        *
        * \see placementVersion()
        */
-      void setPlacementVersion( QgsLabelingEngineSettings::PlacementEngineVersion placementVersion );
+      void setPlacementVersion( Qgis::LabelPlacementEngineVersion placementVersion );
 
       /**
        * Returns the global candidates limit for point features, or 0 if no global limit is in effect.
@@ -246,9 +258,30 @@ namespace pal
        */
       bool candidatesAreConflicting( const LabelPosition *lp1, const LabelPosition *lp2 ) const;
 
+      /**
+       * Sets rules which the labeling solution must satisfy.
+       *
+       * Ownership of the rules are not transferred to the engine, and it is the caller's responsibility
+       * to ensure that the lifetime of the rules exceeds that of the pal job.
+       *
+       * \see rules()
+       * \since QGIS 3.40
+       */
+      void setRules( const QList< QgsAbstractLabelingEngineRule * > &rules );
+
+      /**
+       * Returns the rules which the labeling solution must satisify.
+       *
+       * \see setRules()
+       * \since QGIS 3.40
+       */
+      QList< QgsAbstractLabelingEngineRule * > rules() const { return mRules; }
+
     private:
 
-      std::unordered_map< QgsAbstractLabelProvider *, std::unique_ptr< Layer > > mLayers;
+      std::vector< std::pair< QgsAbstractLabelProvider *, std::unique_ptr< Layer > > > mLayers;
+
+      QList< QgsAbstractLabelingEngineRule * > mRules;
 
       QMutex mMutex;
 
@@ -279,19 +312,12 @@ namespace pal
       int mGlobalCandidatesLimitLine = 0;
       int mGlobalCandidatesLimitPolygon = 0;
 
-      QgsLabelingEngineSettings::PlacementEngineVersion mPlacementVersion = QgsLabelingEngineSettings::PlacementEngineVersion2;
+      Qgis::LabelPlacementEngineVersion mPlacementVersion = Qgis::LabelPlacementEngineVersion::Version2;
 
       //! Callback that may be called from PAL to check whether the job has not been canceled in meanwhile
       FnIsCanceled fnIsCanceled = nullptr;
       //! Application-specific context for the cancellation check function
       void *fnIsCanceledContext = nullptr;
-
-      /**
-       * Creates a Problem, by extracting labels and generating candidates from the given \a extent.
-       * The \a mapBoundary geometry specifies the actual visible region of the map, and is used
-       * for pruning candidates which fall outside the visible region.
-       */
-      std::unique_ptr< Problem > extract( const QgsRectangle &extent, const QgsGeometry &mapBoundary );
 
       /**
        * \brief Choose the size of popmusic subpart's
@@ -334,13 +360,13 @@ namespace pal
        * Returns the minimum number of iterations used for POPMUSIC_TABU, POPMUSIC_CHAIN and POPMUSIC_TABU_CHAIN.
        * \see getMaxIt()
        */
-      int getMinIt();
+      int getMinIt() const;
 
       /**
        * Returns the maximum number of iterations allowed for POPMUSIC_TABU, POPMUSIC_CHAIN and POPMUSIC_TABU_CHAIN.
        * \see getMinIt()
        */
-      int getMaxIt();
+      int getMaxIt() const;
 
   };
 

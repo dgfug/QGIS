@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgscheckboxsearchwidgetwrapper.h"
+#include "moc_qgscheckboxsearchwidgetwrapper.cpp"
 
 #include "qgsfields.h"
 #include "qgscheckboxwidgetfactory.h"
@@ -42,8 +43,19 @@ QVariant QgsCheckboxSearchWidgetWrapper::value() const
 {
   QVariant v;
 
+  const QMetaType::Type fieldType = layer()->fields().at( mFieldIdx ).type();
+
   if ( mCheckBox )
-    v = mCheckBox->isChecked() ? config( QStringLiteral( "CheckedState" ) ) : config( QStringLiteral( "UncheckedState" ) );
+  {
+    if ( fieldType == QMetaType::Type::Bool )
+    {
+      v = mCheckBox->isChecked();
+    }
+    else
+    {
+      v = mCheckBox->isChecked() ? config( QStringLiteral( "CheckedState" ), true ) : config( QStringLiteral( "UncheckedState" ), false );
+    }
+  }
 
   return v;
 }
@@ -60,7 +72,7 @@ QgsSearchWidgetWrapper::FilterFlags QgsCheckboxSearchWidgetWrapper::defaultFlags
 
 QString QgsCheckboxSearchWidgetWrapper::createExpression( QgsSearchWidgetWrapper::FilterFlags flags ) const
 {
-  const QVariant::Type fldType = layer()->fields().at( mFieldIdx ).type();
+  const QMetaType::Type fldType = layer()->fields().at( mFieldIdx ).type();
   const QString fieldName = createFieldIdentifier();
 
   //clear any unsupported flags
@@ -77,11 +89,12 @@ QString QgsCheckboxSearchWidgetWrapper::createExpression( QgsSearchWidgetWrapper
 
   switch ( fldType )
   {
-    case QVariant::Int:
-    case QVariant::UInt:
-    case QVariant::Double:
-    case QVariant::LongLong:
-    case QVariant::ULongLong:
+    case QMetaType::Type::Int:
+    case QMetaType::Type::UInt:
+    case QMetaType::Type::Double:
+    case QMetaType::Type::LongLong:
+    case QMetaType::Type::ULongLong:
+    case QMetaType::Type::Bool:
     {
       if ( flags & EqualTo )
         return fieldName + '=' + v.toString();
@@ -130,9 +143,7 @@ void QgsCheckboxSearchWidgetWrapper::setExpression( const QString &expression )
   const QString fieldName = layer()->fields().at( mFieldIdx ).name();
 
   const QString str = QStringLiteral( "%1 = '%3'" )
-                      .arg( QgsExpression::quotedColumnRef( fieldName ),
-                            exp.replace( '\'', QLatin1String( "''" ) )
-                          );
+                        .arg( QgsExpression::quotedColumnRef( fieldName ), exp.replace( '\'', QLatin1String( "''" ) ) );
   mExpression = str;
 }
 
@@ -165,5 +176,3 @@ void QgsCheckboxSearchWidgetWrapper::initWidget( QWidget *editor )
     connect( mCheckBox, &QCheckBox::stateChanged, this, &QgsCheckboxSearchWidgetWrapper::stateChanged );
   }
 }
-
-

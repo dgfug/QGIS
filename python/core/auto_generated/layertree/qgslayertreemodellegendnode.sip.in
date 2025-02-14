@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layertree/qgslayertreemodellegendnode.h                     *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -19,8 +19,6 @@ returned from :py:class:`QgsMapLayerLegend` implementation.
 
 The objects are used in :py:class:`QgsLayerTreeModel`. Custom implementations may offer additional interactivity
 and customized look.
-
-.. versionadded:: 2.6
 %End
 
 %TypeHeaderCode
@@ -47,11 +45,13 @@ and customized look.
 %End
   public:
 
-    enum LegendNodeRoles
+
+    enum class CustomRole
     {
-      RuleKeyRole,
-      ParentRuleKeyRole,
-      NodeTypeRole,
+      RuleKey,
+      ParentRuleKey,
+      NodeType,
+      IsDataDefinedSize,
     };
 
     enum NodeTypes
@@ -169,6 +169,13 @@ Default implementation does nothing.
       QgsLegendPatchShape patchShape;
 
       QSizeF patchSize;
+
+      const QgsTextDocument *textDocument;
+
+      const QgsTextDocumentMetrics *textDocumentMetrics;
+
+      QgsScreenProperties screenProperties;
+
     };
 
     struct ItemMetrics
@@ -226,6 +233,12 @@ Draws label on the right side of the item
 :param symbolSize: Real size of the associated symbol - used for correct positioning when rendering
 
 :return: Size of the label (may span multiple lines)
+%End
+
+    SIP_PYOBJECT __repr__();
+%MethodCode
+    QString str = QStringLiteral( "<QgsLayerTreeModelLegendNode: \"%1\">" ).arg( sipCpp->data( Qt::DisplayRole ).toString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
 %End
 
   public slots:
@@ -297,8 +310,6 @@ class QgsSymbolLegendNode : QgsLayerTreeModelLegendNode
 %Docstring(signature="appended")
 Implementation of legend node interface for displaying preview of vector symbols and their labels
 and allowing interaction with the symbol / renderer.
-
-.. versionadded:: 2.6
 %End
 
 %TypeHeaderCode
@@ -317,6 +328,7 @@ Constructor for QgsSymbolLegendNode.
 :param item: the legend symbol item
 :param parent: attach a parent QObject to the legend node.
 %End
+    ~QgsSymbolLegendNode();
 
     virtual Qt::ItemFlags flags() const;
 
@@ -344,14 +356,8 @@ Constructor for QgsSymbolLegendNode.
     void setIconSize( QSize sz );
 %Docstring
 Set the icon size
-
-.. versionadded:: 2.10
 %End
     QSize iconSize() const;
-%Docstring
-
-.. versionadded:: 2.10
-%End
 
     QSize minimumIconSize() const;
 %Docstring
@@ -359,8 +365,6 @@ Calculates the minimum icon size to prevent cropping. When evaluating
 the size for multiple icons it is more efficient to create a single
 render context in advance and use the variant which accepts a :py:class:`QgsRenderContext`
 argument.
-
-.. versionadded:: 2.10
 %End
 
     QSize minimumIconSize( QgsRenderContext *context ) const;
@@ -368,8 +372,6 @@ argument.
 Calculates the minimum icon size to prevent cropping. When evaluating
 the size for multiple icons it is more efficient to create a single
 render context in advance and call this method instead of :py:func:`~QgsSymbolLegendNode.minimumIconSize`.
-
-.. versionadded:: 2.18
 %End
 
     const QgsSymbol *symbol() const;
@@ -377,8 +379,6 @@ render context in advance and call this method instead of :py:func:`~QgsSymbolLe
 Returns the symbol used by the legend node.
 
 .. seealso:: :py:func:`setSymbol`
-
-.. versionadded:: 2.14
 %End
 
     void setSymbol( QgsSymbol *symbol /Transfer/ );
@@ -389,8 +389,6 @@ to the associated vector layer's renderer.
 :param symbol: new symbol for node. Ownership is transferred.
 
 .. seealso:: :py:func:`symbol`
-
-.. versionadded:: 2.14
 %End
 
     QString textOnSymbolLabel() const;
@@ -482,6 +480,23 @@ Evaluates  and returns the text label of the current node
 .. versionadded:: 3.10
 %End
 
+    QgsExpressionContextScope *createSymbolScope() const /Factory/;
+%Docstring
+Create an expression context scope containing symbol related variables.
+
+The caller takes ownership of the returned object.
+
+.. versionadded:: 3.36
+%End
+
+    SIP_PYOBJECT __repr__();
+%MethodCode
+    QString str = QStringLiteral( "<QgsSymbolLegendNode: %1 \"%2\"" ).arg(
+                    sipCpp->data( static_cast< int >( QgsLayerTreeModelLegendNode::CustomRole::RuleKey ) ).toString(),
+                    sipCpp->data( Qt::DisplayRole ).toString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+%End
+
 };
 
 
@@ -489,8 +504,6 @@ class QgsSimpleLegendNode : QgsLayerTreeModelLegendNode
 {
 %Docstring(signature="appended")
 Implementation of legend node interface for displaying arbitrary label with icon.
-
-.. versionadded:: 2.6
 %End
 
 %TypeHeaderCode
@@ -512,6 +525,12 @@ Constructor for QgsSimpleLegendNode.
     virtual QVariant data( int role ) const;
 
 
+    SIP_PYOBJECT __repr__();
+%MethodCode
+    QString str = QStringLiteral( "<QgsSimpleLegendNode: \"%1\">" ).arg( sipCpp->data( Qt::DisplayRole ).toString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+%End
+
 };
 
 
@@ -519,8 +538,6 @@ class QgsImageLegendNode : QgsLayerTreeModelLegendNode
 {
 %Docstring(signature="appended")
 Implementation of legend node interface for displaying arbitrary raster image
-
-.. versionadded:: 2.6
 %End
 
 %TypeHeaderCode
@@ -546,14 +563,18 @@ Constructor for QgsImageLegendNode.
     virtual QJsonObject exportSymbolToJson( const QgsLegendSettings &settings, const QgsRenderContext &context ) const;
 
 
+    SIP_PYOBJECT __repr__();
+%MethodCode
+    QString str = QStringLiteral( "<QgsImageLegendNode: \"%1\">" ).arg( sipCpp->data( Qt::DisplayRole ).toString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+%End
+
 };
 
 class QgsRasterSymbolLegendNode : QgsLayerTreeModelLegendNode
 {
 %Docstring(signature="appended")
 Implementation of legend node interface for displaying raster legend entries
-
-.. versionadded:: 2.6
 %End
 
 %TypeHeaderCode
@@ -561,7 +582,8 @@ Implementation of legend node interface for displaying raster legend entries
 %End
   public:
 
-    QgsRasterSymbolLegendNode( QgsLayerTreeLayer *nodeLayer, const QColor &color, const QString &label, QObject *parent /TransferThis/ = 0, bool isCheckable = false, const QString &ruleKey = QString() );
+    QgsRasterSymbolLegendNode( QgsLayerTreeLayer *nodeLayer, const QColor &color, const QString &label, QObject *parent /TransferThis/ = 0,
+                               bool isCheckable = false, const QString &ruleKey = QString(), const QString &parentRuleKey = QString() );
 %Docstring
 Constructor for QgsRasterSymbolLegendNode.
 
@@ -571,6 +593,7 @@ Constructor for QgsRasterSymbolLegendNode.
 :param parent: attach a parent QObject to the legend node.
 :param isCheckable: set to ``True`` to enable the checkbox for the node (since QGIS 3.18)
 :param ruleKey: optional identifier to allow a unique ID to be assigned to the node by a renderer (since QGIS 3.18)
+:param parentRuleKey: rule key of parent (since QGIS 3.40)
 %End
 
     virtual Qt::ItemFlags flags() const;
@@ -598,6 +621,12 @@ Returns whether the item is user-checkable - whether renderer supports enabling/
 .. versionadded:: 3.18
 %End
 
+    SIP_PYOBJECT __repr__();
+%MethodCode
+    QString str = QStringLiteral( "<QgsRasterSymbolLegendNode: \"%1\">" ).arg( sipCpp->data( Qt::DisplayRole ).toString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+%End
+
 };
 
 
@@ -605,8 +634,6 @@ class QgsWmsLegendNode : QgsLayerTreeModelLegendNode
 {
 %Docstring(signature="appended")
 Implementation of legend node interface for displaying WMS legend entries
-
-.. versionadded:: 2.8
 %End
 
 %TypeHeaderCode
@@ -636,6 +663,20 @@ Constructor for QgsWmsLegendNode.
     virtual void invalidateMapBasedData();
 
 
+    QImage getLegendGraphicBlocking( ) const;
+%Docstring
+Fetches the image from the server and returns it.
+
+.. versionadded:: 3.40
+%End
+
+
+    SIP_PYOBJECT __repr__();
+%MethodCode
+    QString str = QStringLiteral( "<QgsWmsLegendNode: \"%1\">" ).arg( sipCpp->data( Qt::DisplayRole ).toString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+%End
+
 };
 
 
@@ -643,8 +684,6 @@ class QgsDataDefinedSizeLegendNode : QgsLayerTreeModelLegendNode
 {
 %Docstring(signature="appended")
 Produces legend node with a marker symbol
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -662,6 +701,12 @@ Construct the node using :py:class:`QgsDataDefinedSizeLegend` as definition of t
 
     virtual ItemMetrics draw( const QgsLegendSettings &settings, ItemContext *ctx );
 
+
+    SIP_PYOBJECT __repr__();
+%MethodCode
+    QString str = QStringLiteral( "<QgsDataDefinedSizeLegendNode: \"%1\">" ).arg( sipCpp->data( Qt::DisplayRole ).toString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+%End
 
 };
 
@@ -721,6 +766,12 @@ exportSymbolToJson
 :return: the json object
 %End
 
+    SIP_PYOBJECT __repr__();
+%MethodCode
+    QString str = QStringLiteral( "<QgsVectorLabelLegendNode: \"%1\">" ).arg( sipCpp->data( Qt::DisplayRole ).toString() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+%End
+
 };
 
 
@@ -729,5 +780,5 @@ exportSymbolToJson
  *                                                                      *
  * src/core/layertree/qgslayertreemodellegendnode.h                     *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

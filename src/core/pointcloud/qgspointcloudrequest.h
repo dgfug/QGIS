@@ -29,6 +29,8 @@
 
 #include "qgspointcloudattribute.h"
 
+#include "qgsrectangle.h"
+
 /**
  * \ingroup core
  *
@@ -39,8 +41,10 @@
 class CORE_EXPORT QgsPointCloudRequest
 {
   public:
-    //! Ctor
+
     QgsPointCloudRequest();
+
+    bool operator==( const QgsPointCloudRequest &other ) const;
 
     //! Returns attributes
     QgsPointCloudAttributeCollection attributes() const;
@@ -48,8 +52,44 @@ class CORE_EXPORT QgsPointCloudRequest
     //! Set attributes filter in the request
     void setAttributes( const QgsPointCloudAttributeCollection &attributes );
 
+    /**
+     * Returns the rectangle from which points will be taken, in point cloud's crs. If the returned rectangle is empty, then no filter rectangle is set.
+     * \since QGIS 3.30
+     */
+    QgsRectangle filterRect() const { return mFilterRect; }
+
+    /**
+     * Sets the rectangle from which points will be taken, in point cloud's crs. An empty rectangle removes the filter.
+     * \since QGIS 3.30
+     */
+    void setFilterRect( QgsRectangle extent ) { mFilterRect = extent; }
+
+    /**
+     * When \a enable is TRUE, the request will ignore the point cloud index's filter expression and use an empty subsetString
+     * practically returning all the points. Defaults to FALSE, which means the returned points will be filtered
+     * using the point cloud index's filter expression.
+     * This is used in point cloud editing where we want to iterate all points so we have the correct point indexes within each node.
+     *
+     * \see ignoreIndexFilterEnabled
+     * \since QGIS 3.42
+     */
+    void setIgnoreIndexFilterEnabled( bool enable ) { mIgnoreIndexFilter = enable; }
+
+    /**
+     * Returns whether the request will ignore the point cloud index's filter expression, practically returning all the points.
+     *
+     * \see setIgnoreIndexFilterEnabled
+     * \since QGIS 3.42
+     */
+    bool ignoreIndexFilterEnabled() const { return mIgnoreIndexFilter; }
+
   private:
     QgsPointCloudAttributeCollection mAttributes;
+    QgsRectangle mFilterRect;
+    bool mIgnoreIndexFilter = false;
 };
+
+//! Hash function for QgsPointCloudRequest
+uint qHash( const QgsPointCloudRequest &request );
 
 #endif // QGSPOINTCLOUDREQUEST_H

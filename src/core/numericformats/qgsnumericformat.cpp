@@ -15,6 +15,7 @@
  ***************************************************************************/
 
 #include "qgsnumericformat.h"
+#include "moc_qgsnumericformat.cpp"
 #include "qgsxmlutils.h"
 #include "qgsreadwritecontext.h"
 
@@ -45,9 +46,19 @@ QgsNumericFormatContext::QgsNumericFormatContext()
 #endif
 }
 
+QgsExpressionContext QgsNumericFormatContext::expressionContext() const
+{
+  return mExpressionContext;
+}
+
+void QgsNumericFormatContext::setExpressionContext( const QgsExpressionContext &context )
+{
+  mExpressionContext = context;
+}
+
 int QgsNumericFormat::sortKey()
 {
-  return 100;
+  return DEFAULT_SORT_KEY;
 }
 
 double QgsNumericFormat::suggestSampleValue() const
@@ -72,4 +83,3 @@ bool QgsNumericFormat::operator!=( const QgsNumericFormat &other ) const
 {
   return !operator==( other );
 }
-

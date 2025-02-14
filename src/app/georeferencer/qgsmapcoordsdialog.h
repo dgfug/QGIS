@@ -25,7 +25,7 @@
 
 #include "ui_qgsmapcoordsdialogbase.h"
 
-class QgsGCPCanvasItem;
+class QgsGeorefDataPoint;
 
 class QPushButton;
 
@@ -49,7 +49,6 @@ class QgsGeorefMapToolEmitPoint : public QgsMapTool
     void mouseReleased();
 
   private:
-
     QgsPointLocator::Match mapPointMatch( QMouseEvent *e );
 
     std::unique_ptr<QgsSnapIndicator> mSnapIndicator;
@@ -60,8 +59,18 @@ class QgsMapCoordsDialog : public QDialog, private Ui::QgsMapCoordsDialogBase
     Q_OBJECT
 
   public:
-    QgsMapCoordsDialog( QgsMapCanvas *qgisCanvas, const QgsPointXY &pixelCoords, QgsCoordinateReferenceSystem &rasterCrs, QWidget *parent = nullptr );
+    /**
+     * Constructor for QgsMapCoordsDialog.
+     * \param qgisCanvas
+     * \param georefDataPoint Temporary data point used for preview on source and destination canvases while dialog is visible
+     * \param rasterCrs
+     * \param parent
+     */
+    QgsMapCoordsDialog( QgsMapCanvas *qgisCanvas, QgsGeorefDataPoint *georefDataPoint, QgsCoordinateReferenceSystem &rasterCrs, QWidget *parent = nullptr );
     ~QgsMapCoordsDialog() override;
+
+    //! Update the source coordinates of the newly added
+    void updateSourceCoordinates( const QgsPointXY &sourceCoordinates );
 
   private slots:
     void buttonBox_accepted();
@@ -73,7 +82,14 @@ class QgsMapCoordsDialog : public QDialog, private Ui::QgsMapCoordsDialogBase
     void setPrevTool();
 
   signals:
-    void pointAdded( const QgsPointXY &a, const QgsPointXY &b, const QgsCoordinateReferenceSystem &crs );
+
+    /**
+     * Emitted when a point should be added through the dialog.
+     * \param sourceCoordinate source point, which MUST be in source layer coordinates not pixels
+     * \param destinationCoordinate
+     * \param destinationCrs
+     */
+    void pointAdded( const QgsPointXY &sourceCoordinate, const QgsPointXY &destinationCoordinate, const QgsCoordinateReferenceSystem &destinationCrs );
 
   private:
     double dmsToDD( const QString &dms );
@@ -86,11 +102,10 @@ class QgsMapCoordsDialog : public QDialog, private Ui::QgsMapCoordsDialogBase
     QgsMapTool *mPrevMapTool = nullptr;
     QgsMapCanvas *mQgisCanvas = nullptr;
 
-    QgsGCPCanvasItem *mNewlyAddedPointItem = nullptr;
-
     QgsCoordinateReferenceSystem mRasterCrs;
 
-    QgsPointXY mPixelCoords;
+    //! Used for point preview. Holds the source layer coordinates -- must be in source layer coordinates, not pixels (unless source image is completely non-referenced)
+    QgsGeorefDataPoint *mNewlyAddedPoint = nullptr;
 };
 
 #endif

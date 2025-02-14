@@ -19,25 +19,35 @@
 #include "qgspointcloudblock.h"
 #include "qgsstyle.h"
 #include "qgscolorramp.h"
-#include "qgssymbollayerutils.h"
+#include "qgscolorutils.h"
 #include "qgslayertreemodellegendnode.h"
 #include "qgspointclouddataprovider.h"
 
-QgsPointCloudCategory::QgsPointCloudCategory( const int value, const QColor &color, const QString &label, bool render )
+QgsPointCloudCategory::QgsPointCloudCategory( const int value, const QColor &color, const QString &label, bool render, double pointSize )
   : mValue( value )
   , mColor( color )
+  , mPointSize( pointSize )
   , mLabel( label )
   , mRender( render )
 {
 }
 
+bool QgsPointCloudCategory::operator==( const QgsPointCloudCategory &other ) const
+{
+  return mValue == other.value() &&
+         mColor == other.color() &&
+         mPointSize == other.pointSize() &&
+         mLabel == other.label() &&
+         mRender == other.renderState();
+}
 
 //
 // QgsPointCloudClassifiedRenderer
 //
 
-QgsPointCloudClassifiedRenderer::QgsPointCloudClassifiedRenderer()
-  :  mCategories( defaultCategories() )
+QgsPointCloudClassifiedRenderer::QgsPointCloudClassifiedRenderer( const QString &attributeName, const QgsPointCloudCategoryList &categories )
+  : mAttribute( attributeName )
+  , mCategories( categories )
 {
 }
 
@@ -48,7 +58,7 @@ QString QgsPointCloudClassifiedRenderer::type() const
 
 QgsPointCloudRenderer *QgsPointCloudClassifiedRenderer::clone() const
 {
-  std::unique_ptr< QgsPointCloudClassifiedRenderer > res = std::make_unique< QgsPointCloudClassifiedRenderer >();
+  auto res = std::make_unique< QgsPointCloudClassifiedRenderer >();
   res->mAttribute = mAttribute;
   res->mCategories = mCategories;
 
@@ -59,7 +69,13 @@ QgsPointCloudRenderer *QgsPointCloudClassifiedRenderer::clone() const
 
 void QgsPointCloudClassifiedRenderer::renderBlock( const QgsPointCloudBlock *block, QgsPointCloudRenderContext &context )
 {
-  const QgsRectangle visibleExtent = context.renderContext().extent();
+  QgsRectangle visibleExtent = context.renderContext().extent();
+  if ( renderAsTriangles() )
+  {
+    // we need to include also points slightly outside of the visible extent,
+    // otherwise the triangulation may be missing triangles near the edges and corners
+    visibleExtent.grow( std::max( visibleExtent.width(), visibleExtent.height() ) * 0.05 );
+  }
 
   const char *ptr = block->data();
   int count = block->pointCount();
@@ -72,8 +88,9 @@ void QgsPointCloudClassifiedRenderer::renderBlock( const QgsPointCloudBlock *blo
     return;
   const QgsPointCloudAttribute::DataType attributeType = attribute->type();
 
+  const bool renderElevation = context.renderContext().elevationMap();
   const QgsDoubleRange zRange = context.renderContext().zRange();
-  const bool considerZ = !zRange.isInfinite();
+  const bool considerZ = !zRange.isInfinite() || renderElevation;
 
   int rendered = 0;
   double x = 0;
@@ -83,12 +100,16 @@ void QgsPointCloudClassifiedRenderer::renderBlock( const QgsPointCloudBlock *blo
   const bool reproject = ct.isValid();
 
   QHash< int, QColor > colors;
+  QHash< int, int > pointSizes;
   for ( const QgsPointCloudCategory &category : std::as_const( mCategories ) )
   {
     if ( !category.renderState() )
       continue;
 
     colors.insert( category.value(), category.color() );
+
+    const double size = category.pointSize() > 0 ? category.pointSize() : pointSize();
+    pointSizes.insert( category.value(), context.renderContext().convertToPainterUnits( size, pointSizeUnit(), pointSizeMapUnitScale() ) );
   }
 
   for ( int i = 0; i < count; ++i )
@@ -98,9 +119,9 @@ void QgsPointCloudClassifiedRenderer::renderBlock( const QgsPointCloudBlock *blo
       break;
     }
 
+    // z value filtering is cheapest, if we're doing it...
     if ( considerZ )
     {
-      // z value filtering is cheapest, if we're doing it...
       z = pointZ( context, ptr, i );
       if ( !zRange.contains( z ) )
         continue;
@@ -127,7 +148,20 @@ void QgsPointCloudClassifiedRenderer::renderBlock( const QgsPointCloudBlock *blo
         }
       }
 
-      drawPoint( x, y, color, context );
+      if ( renderAsTriangles() )
+      {
+        addPointToTriangulation( x, y, z, color, context );
+
+        // We don't want to render any points if we're rendering triangles and there is no preview painter
+        if ( !context.renderContext().previewRenderPainter() )
+          continue;
+      }
+
+      const double size = pointSizes.value( attributeValue );
+      drawPoint( x, y, color, size, context );
+      if ( renderElevation )
+        drawPointToElevationMap( x, y, z, size, context );
+
       rendered++;
     }
   }
@@ -152,7 +186,7 @@ bool QgsPointCloudClassifiedRenderer::willRenderPoint( const QVariantMap &pointA
 
 QgsPointCloudRenderer *QgsPointCloudClassifiedRenderer::create( QDomElement &element, const QgsReadWriteContext &context )
 {
-  std::unique_ptr< QgsPointCloudClassifiedRenderer > r = std::make_unique< QgsPointCloudClassifiedRenderer >();
+  auto r = std::make_unique< QgsPointCloudClassifiedRenderer >();
 
   r->setAttribute( element.attribute( QStringLiteral( "attribute" ), QStringLiteral( "Classification" ) ) );
 
@@ -166,10 +200,11 @@ QgsPointCloudRenderer *QgsPointCloudClassifiedRenderer::create( QDomElement &ele
       if ( catElem.tagName() == QLatin1String( "category" ) )
       {
         const int value = catElem.attribute( QStringLiteral( "value" ) ).toInt();
+        const double size = catElem.attribute( QStringLiteral( "pointSize" ), QStringLiteral( "0" ) ).toDouble();
         const QString label = catElem.attribute( QStringLiteral( "label" ) );
         const bool render = catElem.attribute( QStringLiteral( "render" ) ) != QLatin1String( "false" );
-        const QColor color = QgsSymbolLayerUtils::decodeColor( catElem.attribute( QStringLiteral( "color" ) ) );
-        categories.append( QgsPointCloudCategory( value, color, label, render ) );
+        const QColor color = QgsColorUtils::colorFromString( catElem.attribute( QStringLiteral( "color" ) ) );
+        categories.append( QgsPointCloudCategory( value, color, label, render, size ) );
       }
       catElem = catElem.nextSiblingElement();
     }
@@ -183,7 +218,8 @@ QgsPointCloudRenderer *QgsPointCloudClassifiedRenderer::create( QDomElement &ele
 
 QgsPointCloudCategoryList QgsPointCloudClassifiedRenderer::defaultCategories()
 {
-  return QgsPointCloudCategoryList() << QgsPointCloudCategory( 1, QColor( "#AAAAAA" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 1 ) )
+  return QgsPointCloudCategoryList() << QgsPointCloudCategory( 0, QColor( "#BABABA" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 0 ) )
+         << QgsPointCloudCategory( 1, QColor( "#AAAAAA" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 1 ) )
          << QgsPointCloudCategory( 2, QColor( "#AA5500" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 2 ) )
          << QgsPointCloudCategory( 3, QColor( "#00AAAA" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 3 ) )
          << QgsPointCloudCategory( 4, QColor( "#55FF55" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 4 ) )
@@ -200,7 +236,7 @@ QgsPointCloudCategoryList QgsPointCloudClassifiedRenderer::defaultCategories()
          << QgsPointCloudCategory( 15, QColor( "#FF55FF" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 15 ) )
          << QgsPointCloudCategory( 16, QColor( "#FFFF55" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 16 ) )
          << QgsPointCloudCategory( 17, QColor( "#5555FF" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 17 ) )
-         << QgsPointCloudCategory( 18, QColor( 100, 100, 100 ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 18 ) );
+         << QgsPointCloudCategory( 18, QColor( "#646464" ), QgsPointCloudDataProvider::translatedLasClassificationCodes().value( 18 ) );
 }
 
 QDomElement QgsPointCloudClassifiedRenderer::save( QDomDocument &doc, const QgsReadWriteContext &context ) const
@@ -216,8 +252,9 @@ QDomElement QgsPointCloudClassifiedRenderer::save( QDomDocument &doc, const QgsR
   {
     QDomElement catElem = doc.createElement( QStringLiteral( "category" ) );
     catElem.setAttribute( QStringLiteral( "value" ), QString::number( category.value() ) );
+    catElem.setAttribute( QStringLiteral( "pointSize" ), QString::number( category.pointSize() ) );
     catElem.setAttribute( QStringLiteral( "label" ), category.label() );
-    catElem.setAttribute( QStringLiteral( "color" ), QgsSymbolLayerUtils::encodeColor( category.color() ) );
+    catElem.setAttribute( QStringLiteral( "color" ), QgsColorUtils::colorToString( category.color() ) );
     catElem.setAttribute( QStringLiteral( "render" ), category.renderState() ? "true" : "false" );
     catsElem.appendChild( catElem );
   }
@@ -313,4 +350,44 @@ void QgsPointCloudClassifiedRenderer::addCategory( const QgsPointCloudCategory &
 {
   mCategories.append( category );
 }
+
+std::unique_ptr<QgsPreparedPointCloudRendererData> QgsPointCloudClassifiedRenderer::prepare()
+{
+  auto data = std::make_unique< QgsPointCloudClassifiedRendererPreparedData >();
+  data->attributeName = mAttribute;
+
+  for ( const QgsPointCloudCategory &category : std::as_const( mCategories ) )
+  {
+    if ( !category.renderState() )
+      continue;
+
+    data->colors.insert( category.value(), category.color() );
+  }
+
+  return data;
+}
+
+QSet<QString> QgsPointCloudClassifiedRendererPreparedData::usedAttributes() const
+{
+  return { attributeName };
+}
+
+bool QgsPointCloudClassifiedRendererPreparedData::prepareBlock( const QgsPointCloudBlock *block )
+{
+  const QgsPointCloudAttributeCollection attributes = block->attributes();
+  const QgsPointCloudAttribute *attribute = attributes.find( attributeName, attributeOffset );
+  if ( !attribute )
+    return false;
+
+  attributeType = attribute->type();
+  return true;
+}
+
+QColor QgsPointCloudClassifiedRendererPreparedData::pointColor( const QgsPointCloudBlock *block, int i, double )
+{
+  int attributeValue = 0;
+  QgsPointCloudRenderContext::getAttribute( block->data(), i * block->pointRecordSize() + attributeOffset, attributeType, attributeValue );
+  return colors.value( attributeValue );
+}
+
 

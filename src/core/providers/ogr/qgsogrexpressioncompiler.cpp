@@ -104,6 +104,7 @@ QgsSqlExpressionCompiler::Result QgsOgrExpressionCompiler::compileNode( const Qg
     case QgsExpressionNode::ntInOperator:
     case QgsExpressionNode::ntLiteral:
     case QgsExpressionNode::ntIndexOperator:
+    case QgsExpressionNode::ntBetweenOperator:
       break;
   }
 
@@ -158,7 +159,7 @@ QString QgsOgrExpressionCompiler::quotedValue( const QVariant &value, bool &ok )
 {
   ok = true;
 
-  if ( value.type() == QVariant::Bool )
+  if ( value.userType() == QMetaType::Type::Bool )
   {
     // No support for boolean literals, so fake them
     return value.toBool() ? "(1=1)" : "(1=0)";

@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/geometry/qgspoint.h                                         *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -25,8 +25,6 @@ documentation for examples of situations where it is appropriate to use :py:clas
 instead of :py:class:`QgsPoint`.
 
 .. seealso:: :py:class:`QgsPointXY`
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -37,12 +35,12 @@ instead of :py:class:`QgsPoint`.
 
   public:
 
-    QgsPoint( SIP_PYOBJECT x /TypeHint="Optional[Union[QgsPoint, QPointF, float]]"/ = Py_None, SIP_PYOBJECT y /TypeHint="Optional[float]"/ = Py_None, SIP_PYOBJECT z /TypeHint="Optional[float]"/ = Py_None, SIP_PYOBJECT m /TypeHint="Optional[float]"/ = Py_None, SIP_PYOBJECT wkbType /TypeHint="Optional[int]"/ = Py_None ) [( double x = 0.0, double y = 0.0, double z = 0.0, double m = 0.0, QgsWkbTypes::Type wkbType = QgsWkbTypes::Unknown )];
+    QgsPoint( SIP_PYOBJECT x /TypeHint="Optional[Union[QgsPoint, QPointF, float]]"/ = Py_None, SIP_PYOBJECT y /TypeHint="Optional[float]"/ = Py_None, SIP_PYOBJECT z /TypeHint="Optional[float]"/ = Py_None, SIP_PYOBJECT m /TypeHint="Optional[float]"/ = Py_None, SIP_PYOBJECT wkbType /TypeHint="Optional[int]"/ = Py_None ) [( double x = 0.0, double y = 0.0, double z = 0.0, double m = 0.0, Qgis::WkbType wkbType = Qgis::WkbType::Unknown )];
 %Docstring
 Construct a point with the provided initial coordinate values.
 
-If ``wkbType`` is set to `QgsWkbTypes.Point`, `QgsWkbTypes.PointZ`, `QgsWkbTypes.PointM` or `QgsWkbTypes.PointZM`
-the type will be set accordingly. If it is left to the default `QgsWkbTypes.Unknown`, the type will be set
+If ``wkbType`` is set to `Qgis.WkbType.Point`, `Qgis.WkbType.PointZ`, `Qgis.WkbType.PointM` or `Qgis.WkbType.PointZM`
+the type will be set accordingly. If it is left to the default `Qgis.WkbType.Unknown`, the type will be set
 based on the following rules:
 
 - If only x and y are specified, the type will be a 2D point.
@@ -105,7 +103,7 @@ based on the following rules:
       double y = a1 == Py_None ? std::numeric_limits<double>::quiet_NaN() : PyFloat_AsDouble( a1 );
       double z = a2 == Py_None ? std::numeric_limits<double>::quiet_NaN() : PyFloat_AsDouble( a2 );
       double m = a3 == Py_None ? std::numeric_limits<double>::quiet_NaN() : PyFloat_AsDouble( a3 );
-      QgsWkbTypes::Type wkbType = a4 == Py_None ? QgsWkbTypes::Unknown : static_cast<QgsWkbTypes::Type>( sipConvertToEnum( a4, sipType_QgsWkbTypes_Type ) );
+      Qgis::WkbType wkbType = a4 == Py_None ? Qgis::WkbType::Unknown : static_cast<Qgis::WkbType>( sipConvertToEnum( a4, sipType_Qgis_WkbType ) );
       sipCpp = new sipQgsPoint( QgsPoint( x, y, z, m, wkbType ) );
     }
     else // Invalid ctor arguments
@@ -117,6 +115,12 @@ based on the following rules:
 
 
 
+
+
+  public:
+    virtual bool fuzzyEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const /HoldGIL/;
+
+    virtual bool fuzzyDistanceEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const /HoldGIL/;
 
     virtual bool operator==( const QgsAbstractGeometry &other ) const /HoldGIL/;
 
@@ -211,8 +215,6 @@ Sets the point's m-value.
     QPointF toQPointF() const /HoldGIL/;
 %Docstring
 Returns the point as a QPointF.
-
-.. versionadded:: 2.14
 %End
 
     double distance( double x, double y ) const /HoldGIL/;
@@ -222,8 +224,6 @@ cases it may be more appropriate to call the faster :py:func:`~QgsPoint.distance
 when comparing distances.
 
 .. seealso:: :py:func:`distanceSquared`
-
-.. versionadded:: 3.0
 %End
 
     double distance( const QgsPoint &other ) const /HoldGIL/;
@@ -233,8 +233,6 @@ cases it may be more appropriate to call the faster :py:func:`~QgsPoint.distance
 when comparing distances.
 
 .. seealso:: :py:func:`distanceSquared`
-
-.. versionadded:: 3.0
 %End
 
     double distanceSquared( double x, double y ) const /HoldGIL/;
@@ -244,8 +242,6 @@ this is faster than calling :py:func:`~QgsPoint.distance`, and may be useful in 
 distances where the extra expense of calling :py:func:`~QgsPoint.distance` is not required.
 
 .. seealso:: :py:func:`distance`
-
-.. versionadded:: 3.0
 %End
 
     double distanceSquared( const QgsPoint &other ) const /HoldGIL/;
@@ -255,8 +251,6 @@ this is faster than calling :py:func:`~QgsPoint.distance`, and may be useful in 
 distances where the extra expense of calling :py:func:`~QgsPoint.distance` is not required.
 
 .. seealso:: :py:func:`distance`
-
-.. versionadded:: 3.0
 %End
 
     double distance3D( double x, double y, double z ) const /HoldGIL/;
@@ -266,8 +260,6 @@ cases it may be more appropriate to call the faster :py:func:`~QgsPoint.distance
 when comparing distances.
 
 .. seealso:: :py:func:`distanceSquared3D`
-
-.. versionadded:: 3.0
 %End
 
     double distance3D( const QgsPoint &other ) const /HoldGIL/;
@@ -277,8 +269,6 @@ cases it may be more appropriate to call the faster :py:func:`~QgsPoint.distance
 when comparing distances.
 
 .. seealso:: :py:func:`distanceSquared3D`
-
-.. versionadded:: 3.0
 %End
 
     double distanceSquared3D( double x, double y, double z ) const /HoldGIL/;
@@ -288,8 +278,6 @@ this is faster than calling :py:func:`~QgsPoint.distance3D`, and may be useful i
 distances where the extra expense of calling :py:func:`~QgsPoint.distance3D` is not required.
 
 .. seealso:: :py:func:`distance3D`
-
-.. versionadded:: 3.0
 %End
 
     double distanceSquared3D( const QgsPoint &other ) const /HoldGIL/;
@@ -299,23 +287,17 @@ this is faster than calling :py:func:`~QgsPoint.distance3D`, and may be useful i
 distances where the extra expense of calling :py:func:`~QgsPoint.distance3D` is not required.
 
 .. seealso:: :py:func:`distance3D`
-
-.. versionadded:: 3.0
 %End
 
     double azimuth( const QgsPoint &other ) const /HoldGIL/;
 %Docstring
 Calculates Cartesian azimuth between this point and other one (clockwise in degree, starting from north)
-
-.. versionadded:: 3.0
 %End
 
     double inclination( const QgsPoint &other ) const /HoldGIL/;
 %Docstring
 Calculates Cartesian inclination between this point and other one (starting from zenith = 0 to nadir = 180. Horizon = 90)
 Returns 90.0 if the distance between this point and other one is equal to 0 (same point).
-
-.. versionadded:: 3.0
 %End
 
     QgsPoint project( double distance, double azimuth, double inclination = 90.0 ) const /HoldGIL/;
@@ -332,7 +314,7 @@ M value is preserved.
          inclination is 90. A 3D point is always returned if a 3D point is projected.
 
 Example
--------
+-------------------------------------
 
 .. code-block:: python
 
@@ -350,8 +332,6 @@ Example
        # pr is a 3D point: 'PointZ (1 3 2)'
        pr = p.project (1, 0, 0 )
        # pr is a 3D point: 'PointZ (1 2 3)'
-
-.. versionadded:: 3.0
 %End
 
     QgsVector operator-( const QgsPoint &p ) const /HoldGIL/;
@@ -367,7 +347,7 @@ Example
     void normalize() final /HoldGIL/;
     virtual bool isEmpty() const /HoldGIL/;
 
-    virtual QgsRectangle boundingBox() const /HoldGIL/;
+    virtual QgsBox3D boundingBox3D() const /HoldGIL/;
 
     virtual QString geometryType() const /HoldGIL/;
 
@@ -375,7 +355,9 @@ Example
 
     virtual QgsPoint *clone() const /Factory/;
 
-    virtual QgsPoint *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0 ) const /Factory/;
+    virtual QgsPoint *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0, bool removeRedundantPoints = false ) const /Factory/;
+
+    virtual QgsPoint *simplifyByDistance( double tolerance ) const /Factory/;
 
     virtual bool removeDuplicateNodes( double epsilon = 4 * DBL_EPSILON, bool useZValues = false );
 
@@ -454,6 +436,8 @@ Angle undefined. Always returns 0.0
 
     virtual bool boundingBoxIntersects( const QgsRectangle &rectangle ) const /HoldGIL/;
 
+    virtual bool boundingBoxIntersects( const QgsBox3D &box3d ) const /HoldGIL/;
+
 
     virtual bool addZValue( double zValue = 0 );
 
@@ -465,7 +449,7 @@ Angle undefined. Always returns 0.0
 
     virtual void swapXy();
 
-    virtual bool convertTo( QgsWkbTypes::Type type );
+    virtual bool convertTo( Qgis::WkbType type );
 
 
     virtual bool transform( QgsAbstractGeometryTransformer *transformer, QgsFeedback *feedback = 0 );
@@ -497,5 +481,5 @@ Angle undefined. Always returns 0.0
  *                                                                      *
  * src/core/geometry/qgspoint.h                                         *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

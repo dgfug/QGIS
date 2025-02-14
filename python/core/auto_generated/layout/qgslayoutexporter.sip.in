@@ -3,8 +3,9 @@
  *                                                                      *
  * src/core/layout/qgslayoutexporter.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
+
 
 
 
@@ -13,14 +14,16 @@ class QgsLayoutExporter
 {
 %Docstring(signature="appended")
 Handles rendering and exports of layouts to various formats.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgslayoutexporter.h"
 %End
   public:
+
+
+
+
 
     struct PageExportDetails
     {
@@ -120,9 +123,6 @@ Returns the rendered image, or a null QImage if the image does not fit into avai
     struct ImageExportSettings
     {
       ImageExportSettings();
-%Docstring
-Constructor for ImageExportSettings
-%End
 
       double dpi;
 
@@ -142,6 +142,9 @@ Constructor for ImageExportSettings
       QgsLayoutRenderContext::Flags flags;
 
       QVector<qreal> predefinedMapScales;
+
+
+      int quality;
 
     };
 
@@ -176,9 +179,6 @@ to the error description.
     struct PdfExportSettings
     {
       PdfExportSettings();
-%Docstring
-Constructor for PdfExportSettings
-%End
 
       double dpi;
 
@@ -209,7 +209,6 @@ Constructor for PdfExportSettings
       QStringList exportThemes;
 
       QVector<qreal> predefinedMapScales;
-
     };
 
     ExportResult exportToPdf( const QString &filePath, const QgsLayoutExporter::PdfExportSettings &settings );
@@ -255,9 +254,6 @@ to the error description.
     struct PrintExportSettings
     {
       PrintExportSettings();
-%Docstring
-Constructor for PrintExportSettings
-%End
 
       double dpi;
 
@@ -268,6 +264,8 @@ Constructor for PrintExportSettings
       QVector<qreal> predefinedMapScales;
 
     };
+
+%If (HAVE_QTPRINTER)
 
     ExportResult print( QPrinter &printer, const QgsLayoutExporter::PrintExportSettings &settings );
 %Docstring
@@ -288,13 +286,11 @@ error was encountered. If an error was obtained then ``error`` will be set
 to the error description.
 %End
 
+%End
 
     struct SvgExportSettings
     {
       SvgExportSettings();
-%Docstring
-Constructor for SvgExportSettings
-%End
 
       double dpi;
 
@@ -346,6 +342,13 @@ to the error description.
 %Docstring
 Returns the file name corresponding to the last error encountered during
 an export.
+%End
+
+    QString errorMessage() const;
+%Docstring
+Returns a string describing the last error encountered during an export.
+
+.. versionadded:: 3.38
 %End
 
     QMap< QString, QgsLabelingResults * > labelingResults();
@@ -426,11 +429,10 @@ Subclasses can override this method to customize page file naming.
 
 
 
-
 /************************************************************************
  * This file has been generated automatically from                      *
  *                                                                      *
  * src/core/layout/qgslayoutexporter.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

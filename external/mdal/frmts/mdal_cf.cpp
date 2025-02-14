@@ -251,17 +251,17 @@ MDAL::cfdataset_info_map MDAL::DriverCF::parseDatasetGroupInfo()
   return dsinfo_map;
 }
 
-static void populate_vector_vals( double *vals, size_t i,
-                                  const std::vector<double> &vals_x, const std::vector<double> &vals_y,
-                                  size_t idx, double fill_val_x, double fill_val_y )
+void MDAL::CFDataset2D::populate_vector_vals( double *vals, size_t i,
+    const std::vector<double> &vals_x, const std::vector<double> &vals_y,
+    size_t idx, double fill_val_x, double fill_val_y )
 {
   vals[2 * i] = MDAL::safeValue( vals_x[idx], fill_val_x );
   vals[2 * i + 1] = MDAL::safeValue( vals_y[idx], fill_val_y );
 }
 
-static void populate_polar_vector_vals( double *vals, size_t i,
-                                        const std::vector<double> &vals_x, const std::vector<double> &vals_y,
-                                        size_t idx, double fill_val_x, double fill_val_y, std::pair<double, double> referenceAngles )
+void MDAL::CFDataset2D::populate_polar_vector_vals( double *vals, size_t i,
+    const std::vector<double> &vals_x, const std::vector<double> &vals_y,
+    size_t idx, double fill_val_x, double fill_val_y, std::pair<double, double> referenceAngles )
 {
   double magnitude = MDAL::safeValue( vals_x[idx], fill_val_x );
   double direction = MDAL::safeValue( vals_y[idx], fill_val_y );
@@ -272,20 +272,19 @@ static void populate_polar_vector_vals( double *vals, size_t i,
   vals[2 * i + 1] = magnitude * sin( direction );
 }
 
-static void populate_scalar_vals( double *vals, size_t i,
-                                  const std::vector<double> &rawVals,
-                                  size_t idx,
-                                  double fill_val )
+void MDAL::CFDataset2D::populate_scalar_vals( double *vals, size_t i,
+    const std::vector<double> &rawVals,
+    size_t idx,
+    double fill_val )
 {
   vals[i] = MDAL::safeValue( rawVals[idx], fill_val );
 }
 
-static void fromClassificationToValue( const MDAL::Classification &classification, std::vector<double> &values, size_t classStartAt = 0 )
+void MDAL::CFDataset2D::fromClassificationToValue( const MDAL::Classification &classification, std::vector<double> &values, size_t classStartAt )
 {
   for ( size_t i = 0; i < values.size(); ++i )
   {
-    if ( std::isnan( values[i] ) )
-      continue;
+    if ( std::isnan( values[i] ) ) {continue;}
 
     size_t boundIndex = size_t( values[i] ) - classStartAt;
     if ( boundIndex >= classification.size() )
@@ -297,12 +296,9 @@ static void fromClassificationToValue( const MDAL::Classification &classificatio
     std::pair<double, double> bounds = classification.at( boundIndex );
     double bound1 = bounds.first;
     double bound2 = bounds.second;
-    if ( bound1 == NC_FILL_DOUBLE )
-      bound1 = bound2;
-    if ( bound2 == NC_FILL_DOUBLE )
-      bound2 = bound1;
-    if ( bound1 == NC_FILL_DOUBLE || bound2 == NC_FILL_DOUBLE )
-      values[i] = std::numeric_limits<double>::quiet_NaN();
+    if ( bound1 == NC_FILL_DOUBLE ) {bound1 = bound2;}
+    if ( bound2 == NC_FILL_DOUBLE ) {bound2 = bound1;}
+    if ( bound1 == NC_FILL_DOUBLE || bound2 == NC_FILL_DOUBLE ) {values[i] = std::numeric_limits<double>::quiet_NaN();}
     else
       values[i] = ( bound1 + bound2 ) / 2;
   }
@@ -446,8 +442,7 @@ std::shared_ptr<MDAL::Dataset> MDAL::DriverCF::create3DDataset( std::shared_ptr<
     size_t, const MDAL::CFDatasetGroupInfo &,
     double, double )
 {
-  std::shared_ptr<MDAL::Dataset> dataset;
-  return dataset;
+  return std::shared_ptr<MDAL::Dataset>();
 }
 
 
@@ -468,13 +463,16 @@ bool MDAL::DriverCF::canReadMesh( const std::string &uri )
     mNcFile.reset( new NetCDFFile );
     mNcFile->openFile( uri );
     populateDimensions( );
+    mNcFile.reset();
   }
   catch ( MDAL_Status )
   {
+    mNcFile.reset();
     return false;
   }
   catch ( MDAL::Error )
   {
+    mNcFile.reset();
     return false;
   }
   return true;
@@ -527,6 +525,7 @@ void MDAL::DriverCF::setProjection( MDAL::Mesh *mesh )
       }
       else
       {
+        wkt = MDAL::replace( wkt, "\n", "" );
         mesh->setSourceCrsFromWKT( wkt );
       }
     }
@@ -572,7 +571,7 @@ std::unique_ptr< MDAL::Mesh > MDAL::DriverCF::load( const std::string &fileName,
       new MemoryMesh(
         name(),
         mDimensions.size( mDimensions.MaxVerticesInFace ),
-        mFileName
+        buildMeshUri( fileName, meshName, name() )
       )
     );
     mesh->setFaces( std::move( faces ) );
@@ -589,6 +588,8 @@ std::unique_ptr< MDAL::Mesh > MDAL::DriverCF::load( const std::string &fileName,
 
     // Create datasets
     addDatasetGroups( mesh.get(), times, dsinfo_map, referenceTime );
+
+    mNcFile.reset();
 
     return std::unique_ptr<Mesh>( mesh.release() );
   }
@@ -640,6 +641,15 @@ bool MDAL::CFDimensions::isDatasetType( MDAL::CFDimensions::Type type ) const
            ( type == Face ) ||
            ( type == Volume3D )
          );
+}
+
+int MDAL::CFDimensions::netCfdId( MDAL::CFDimensions::Type type ) const
+{
+  for ( const auto &it : mNcId )
+    if ( it.second == type )
+      return it.first;
+
+  return -1;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

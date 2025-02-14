@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/callouts/qgscallout.h                                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -50,8 +50,8 @@ relevant symbology elements to render them.
 %End
   public:
 
-    enum Property
-    {
+    enum class Property
+      {
       MinimumCalloutLength,
       OffsetFromAnchor,
       OffsetFromLabel,
@@ -442,12 +442,13 @@ The ``calloutContext`` argument is used to specify additional contextual informa
 how a callout is being rendered.
 %End
 
- QgsGeometry labelAnchorGeometry( const QRectF &bodyBoundingBox, const double angle, LabelAnchorPoint anchor ) const /Deprecated/;
+ QgsGeometry labelAnchorGeometry( const QRectF &bodyBoundingBox, const double angle, LabelAnchorPoint anchor ) const /Deprecated="Since 3.20. Use calloutLabelPoint() instead."/;
 %Docstring
 Returns the anchor point geometry for a label with the given bounding box and ``anchor`` point mode.
 
-.. deprecated::
-   QGIS 3.20 use :py:func:`~QgsCallout.calloutLabelPoint` instead
+.. deprecated:: 3.20
+
+   Use :py:func:`~QgsCallout.calloutLabelPoint` instead.
 %End
 
     QgsGeometry calloutLabelPoint( const QRectF &bodyBoundingBox, double angle, LabelAnchorPoint anchor, QgsRenderContext &context, const QgsCalloutContext &calloutContext, bool &pinned ) const;
@@ -547,7 +548,7 @@ Sets the minimum ``length`` of callout lines. Units are specified through :py:fu
 .. seealso:: :py:func:`setMinimumLengthUnit`
 %End
 
-    void setMinimumLengthUnit( QgsUnitTypes::RenderUnit unit );
+    void setMinimumLengthUnit( Qgis::RenderUnit unit );
 %Docstring
 Sets the ``unit`` for the minimum length of callout lines.
 
@@ -556,7 +557,7 @@ Sets the ``unit`` for the minimum length of callout lines.
 .. seealso:: :py:func:`setMinimumLength`
 %End
 
-    QgsUnitTypes::RenderUnit minimumLengthUnit() const;
+    Qgis::RenderUnit minimumLengthUnit() const;
 %Docstring
 Returns the units for the minimum length of callout lines.
 
@@ -606,7 +607,7 @@ Sets the offset ``distance`` from the anchor point at which to start the line. U
 .. seealso:: :py:func:`setOffsetFromAnchorUnit`
 %End
 
-    void setOffsetFromAnchorUnit( QgsUnitTypes::RenderUnit unit );
+    void setOffsetFromAnchorUnit( Qgis::RenderUnit unit );
 %Docstring
 Sets the ``unit`` for the offset from anchor distance.
 
@@ -615,7 +616,7 @@ Sets the ``unit`` for the offset from anchor distance.
 .. seealso:: :py:func:`setOffsetFromAnchor`
 %End
 
-    QgsUnitTypes::RenderUnit offsetFromAnchorUnit() const;
+    Qgis::RenderUnit offsetFromAnchorUnit() const;
 %Docstring
 Returns the units for the offset from anchor point.
 
@@ -664,7 +665,7 @@ Sets the offset ``distance`` from label area at which to end the line. Units are
 .. seealso:: :py:func:`setOffsetFromLabelUnit`
 %End
 
-    void setOffsetFromLabelUnit( QgsUnitTypes::RenderUnit unit );
+    void setOffsetFromLabelUnit( Qgis::RenderUnit unit );
 %Docstring
 Sets the ``unit`` for the offset from label area distance.
 
@@ -673,7 +674,7 @@ Sets the ``unit`` for the offset from label area distance.
 .. seealso:: :py:func:`setOffsetFromLabel`
 %End
 
-    QgsUnitTypes::RenderUnit offsetFromLabelUnit() const;
+    Qgis::RenderUnit offsetFromLabelUnit() const;
 %Docstring
 Returns the units for the offset from label area.
 
@@ -910,6 +911,35 @@ transferred to the callout.
 .. seealso:: :py:func:`fillSymbol`
 %End
 
+    QgsMarkerSymbol *markerSymbol();
+%Docstring
+Returns the marker symbol used to render the callout endpoint.
+
+May be ``None``, if no endpoint marker will be used.
+
+The marker will always be rendered below the fill symbol for the callout.
+
+Ownership is not transferred.
+
+.. seealso:: :py:func:`setMarkerSymbol`
+
+.. versionadded:: 3.40
+%End
+
+    void setMarkerSymbol( QgsMarkerSymbol *symbol /Transfer/ );
+%Docstring
+Sets the marker ``symbol`` used to render the callout endpoint. Ownership of ``symbol`` is
+transferred to the callout.
+
+Set to ``None`` to disable the endpoint marker.
+
+The marker will always be rendered below the fill symbol for the callout.
+
+.. seealso:: :py:func:`markerSymbol`
+
+.. versionadded:: 3.40
+%End
+
     double offsetFromAnchor() const;
 %Docstring
 Returns the offset distance from the anchor point at which to start the line. Units are specified through :py:func:`~QgsBalloonCallout.offsetFromAnchorUnit`.
@@ -928,7 +958,7 @@ Sets the offset ``distance`` from the anchor point at which to start the line. U
 .. seealso:: :py:func:`setOffsetFromAnchorUnit`
 %End
 
-    void setOffsetFromAnchorUnit( QgsUnitTypes::RenderUnit unit );
+    void setOffsetFromAnchorUnit( Qgis::RenderUnit unit );
 %Docstring
 Sets the ``unit`` for the offset from anchor distance.
 
@@ -937,7 +967,7 @@ Sets the ``unit`` for the offset from anchor distance.
 .. seealso:: :py:func:`setOffsetFromAnchor`
 %End
 
-    QgsUnitTypes::RenderUnit offsetFromAnchorUnit() const;
+    Qgis::RenderUnit offsetFromAnchorUnit() const;
 %Docstring
 Returns the units for the offset from anchor point.
 
@@ -998,7 +1028,7 @@ Units are set via :py:func:`~QgsBalloonCallout.setMarginsUnit`
 .. seealso:: :py:func:`setMarginsUnit`
 %End
 
-    void setMarginsUnit( QgsUnitTypes::RenderUnit unit );
+    void setMarginsUnit( Qgis::RenderUnit unit );
 %Docstring
 Sets the ``unit`` for the margins between the outside of the callout frame and the label's bounding rectangle.
 
@@ -1007,7 +1037,7 @@ Sets the ``unit`` for the margins between the outside of the callout frame and t
 .. seealso:: :py:func:`marginsUnit`
 %End
 
-    QgsUnitTypes::RenderUnit marginsUnit() const;
+    Qgis::RenderUnit marginsUnit() const;
 %Docstring
 Returns the units for the margins between the outside of the callout frame and the label's bounding rectangle.
 
@@ -1038,7 +1068,7 @@ Units are specified through :py:func:`~QgsBalloonCallout.setWedgeWidthUnit`.
 .. seealso:: :py:func:`setWedgeWidthUnit`
 %End
 
-    void setWedgeWidthUnit( QgsUnitTypes::RenderUnit unit );
+    void setWedgeWidthUnit( Qgis::RenderUnit unit );
 %Docstring
 Sets the ``unit`` for the wedge width.
 
@@ -1047,7 +1077,7 @@ Sets the ``unit`` for the wedge width.
 .. seealso:: :py:func:`setWedgeWidth`
 %End
 
-    QgsUnitTypes::RenderUnit wedgeWidthUnit() const;
+    Qgis::RenderUnit wedgeWidthUnit() const;
 %Docstring
 Returns the units for the wedge width.
 
@@ -1100,7 +1130,7 @@ Units are specified through :py:func:`~QgsBalloonCallout.setCornerRadiusUnit`.
 .. seealso:: :py:func:`setCornerRadiusUnit`
 %End
 
-    void setCornerRadiusUnit( QgsUnitTypes::RenderUnit unit );
+    void setCornerRadiusUnit( Qgis::RenderUnit unit );
 %Docstring
 Sets the ``unit`` for the corner radius.
 
@@ -1109,7 +1139,7 @@ Sets the ``unit`` for the corner radius.
 .. seealso:: :py:func:`setCornerRadius`
 %End
 
-    QgsUnitTypes::RenderUnit cornerRadiusUnit() const;
+    Qgis::RenderUnit cornerRadiusUnit() const;
 %Docstring
 Returns the units for the corner radius.
 
@@ -1158,5 +1188,5 @@ Returns the map unit scale for the corner radius.
  *                                                                      *
  * src/core/callouts/qgscallout.h                                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

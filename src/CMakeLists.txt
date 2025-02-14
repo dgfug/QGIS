@@ -1,4 +1,3 @@
-add_subdirectory(native)
 add_subdirectory(core)
 
 if (WITH_AUTH)
@@ -12,16 +11,17 @@ endif()
 if (WITH_GUI)
   add_subdirectory(ui)
   add_subdirectory(gui)
+  add_subdirectory(native)
 endif()
 
 add_subdirectory(providers)
-if (NOT IOS)
-  add_subdirectory(crssync)
-endif()
 
-if(WIN32 AND NOT MINGW)
+add_subdirectory(crssync)
+
+if (WITH_CRASH_HANDLER)
   add_subdirectory(crashhandler)
 endif()
+
 add_subdirectory(test)
 
 if (WITH_DESKTOP)

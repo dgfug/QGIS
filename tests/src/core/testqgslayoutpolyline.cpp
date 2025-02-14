@@ -17,65 +17,35 @@
  ***************************************************************************/
 
 #include "qgsapplication.h"
-#include "qgslayout.h"
-#include "qgsmultirenderchecker.h"
 #include "qgslayoutitempolyline.h"
-#include "qgsproject.h"
 
 #include <QLocale>
 #include <QObject>
 #include "qgstest.h"
 
-class TestQgsLayoutPolyline : public QObject
+class TestQgsLayoutPolyline : public QgsTest
 {
     Q_OBJECT
 
   public:
-    TestQgsLayoutPolyline() = default;
+    TestQgsLayoutPolyline()
+      : QgsTest( QStringLiteral( "Layout Polyline Tests" ), QStringLiteral( "composer_utils" ) ) {}
 
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init();// will be called before each testfunction is executed.
-    void cleanup();// will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
     void drawArrowHead();
-
-  private:
-    bool renderCheck( const QString &testName, QImage &image, int mismatchCount = 0 );
-
-    QString mReport;
 };
 
 void TestQgsLayoutPolyline::initTestCase()
 {
   QgsApplication::init();
   QgsApplication::initQgis();
-
-  mReport = QStringLiteral( "<h1>Layout Polyline Tests</h1>\n" );
 }
 
 void TestQgsLayoutPolyline::cleanupTestCase()
 {
-  const QString myReportFile = QDir::tempPath() + "/qgistest.html";
-  QFile myFile( myReportFile );
-  if ( myFile.open( QIODevice::WriteOnly | QIODevice::Append ) )
-  {
-    QTextStream myQTextStream( &myFile );
-    myQTextStream << mReport;
-    myFile.close();
-  }
-
   QgsApplication::exitQgis();
-}
-
-void TestQgsLayoutPolyline::init()
-{
-
-}
-
-void TestQgsLayoutPolyline::cleanup()
-{
-
 }
 
 void TestQgsLayoutPolyline::drawArrowHead()
@@ -90,23 +60,7 @@ void TestQgsLayoutPolyline::drawArrowHead()
   testPainter.begin( &testImage );
   QgsLayoutItemPolyline::drawArrowHead( &testPainter, 100, 100, 45, 30 );
   testPainter.end();
-  QVERIFY( renderCheck( "composerutils_drawarrowhead", testImage, 40 ) );
-}
-
-
-bool TestQgsLayoutPolyline::renderCheck( const QString &testName, QImage &image, int mismatchCount )
-{
-  mReport += "<h2>" + testName + "</h2>\n";
-  const QString myTmpDir = QDir::tempPath() + '/';
-  const QString myFileName = myTmpDir + testName + ".png";
-  image.save( myFileName, "PNG" );
-  QgsRenderChecker myChecker;
-  myChecker.setControlPathPrefix( QStringLiteral( "composer_utils" ) );
-  myChecker.setControlName( "expected_" + testName );
-  myChecker.setRenderedImage( myFileName );
-  const bool myResultFlag = myChecker.compareImages( testName, mismatchCount );
-  mReport += myChecker.report();
-  return myResultFlag;
+  QGSVERIFYIMAGECHECK( "composerutils_drawarrowhead", "composerutils_drawarrowhead", testImage, QString(), 40 );
 }
 
 QGSTEST_MAIN( TestQgsLayoutPolyline )

@@ -7,7 +7,7 @@
 //------------------------------------------------------------------------------
 using namespace std;
 //------------------------------------------------------------------------------
-namespace odbc {
+NS_ODBC_START
 //------------------------------------------------------------------------------
 EnvironmentRef Environment::create()
 {
@@ -151,7 +151,7 @@ vector<DriverInformation> Environment::getDrivers()
                 start = end + 1;
             }
         }
-        ret.push_back(move(driverInfo));
+        ret.push_back(std::move(driverInfo));
 
         direction = SQL_FETCH_NEXT;
     }
@@ -191,4 +191,4 @@ bool Environment::isDriverInstalled(const char* name)
     return false;
 }
 //------------------------------------------------------------------------------
-} // namespace odbc
+NS_ODBC_END

@@ -14,8 +14,8 @@
  ***************************************************************************/
 
 #include "qgsvectorlayer3drendererwidget.h"
+#include "moc_qgsvectorlayer3drendererwidget.cpp"
 
-#include "qgs3dutils.h"
 #include "qgsrulebased3drenderer.h"
 #include "qgsrulebased3drendererwidget.h"
 #include "qgssymbol3dwidget.h"
@@ -24,7 +24,6 @@
 #include "qgsvectorlayer3drenderer.h"
 #include "qgsapplication.h"
 #include "qgs3dsymbolregistry.h"
-#include "qgsabstractmaterialsettings.h"
 #include "qgsvscrollarea.h"
 
 #include <QBoxLayout>
@@ -32,7 +31,6 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QStackedWidget>
-
 
 
 QgsSingleSymbol3DRendererWidget::QgsSingleSymbol3DRendererWidget( QgsVectorLayer *layer, QWidget *parent )
@@ -68,13 +66,14 @@ void QgsSingleSymbol3DRendererWidget::setLayer( QgsVectorLayer *layer )
   else
   {
     const std::unique_ptr<QgsAbstract3DSymbol> sym( QgsApplication::symbol3DRegistry()->defaultSymbolForGeometryType( layer->geometryType() ) );
+    sym->setDefaultPropertiesFromLayer( layer );
     widgetSymbol->setSymbol( sym.get(), layer );
   }
 }
 
 std::unique_ptr<QgsAbstract3DSymbol> QgsSingleSymbol3DRendererWidget::symbol()
 {
-  return widgetSymbol->symbol();  // cloned or null
+  return widgetSymbol->symbol(); // cloned or null
 }
 
 // -------
@@ -83,6 +82,7 @@ QgsVectorLayer3DRendererWidget::QgsVectorLayer3DRendererWidget( QgsMapLayer *lay
   : QgsMapLayerConfigWidget( layer, canvas, parent )
 {
   setPanelTitle( tr( "3D View" ) );
+  setObjectName( QStringLiteral( "mOptsPage_3DView" ) );
 
   QVBoxLayout *layout = new QVBoxLayout( this );
   layout->setContentsMargins( 0, 0, 0, 0 );
@@ -100,18 +100,20 @@ QgsVectorLayer3DRendererWidget::QgsVectorLayer3DRendererWidget( QgsMapLayer *lay
   layout->addWidget( widgetBaseProperties );
 
   widgetNoRenderer = new QLabel;
-  widgetSingleSymbolRenderer = new QgsSingleSymbol3DRendererWidget( qobject_cast< QgsVectorLayer *>( layer ), this );
+  widgetSingleSymbolRenderer = new QgsSingleSymbol3DRendererWidget( qobject_cast<QgsVectorLayer *>( layer ), this );
   widgetRuleBasedRenderer = new QgsRuleBased3DRendererWidget( this );
 
   widgetRendererStack->addWidget( widgetNoRenderer );
   widgetRendererStack->addWidget( widgetSingleSymbolRenderer );
   widgetRendererStack->addWidget( widgetRuleBasedRenderer );
 
-  connect( cboRendererType, qOverload< int >( &QComboBox::currentIndexChanged ), this, &QgsVectorLayer3DRendererWidget::onRendererTypeChanged );
+  connect( cboRendererType, qOverload<int>( &QComboBox::currentIndexChanged ), this, &QgsVectorLayer3DRendererWidget::onRendererTypeChanged );
   connect( widgetSingleSymbolRenderer, &QgsSingleSymbol3DRendererWidget::widgetChanged, this, &QgsVectorLayer3DRendererWidget::widgetChanged );
   connect( widgetRuleBasedRenderer, &QgsRuleBased3DRendererWidget::widgetChanged, this, &QgsVectorLayer3DRendererWidget::widgetChanged );
   connect( widgetRuleBasedRenderer, &QgsRuleBased3DRendererWidget::showPanel, this, &QgsPanelWidget::openPanel );
   connect( widgetBaseProperties, &QgsVectorLayer3DPropertiesWidget::changed, this, &QgsVectorLayer3DRendererWidget::widgetChanged );
+
+  setProperty( "helpPage", QStringLiteral( "working_with_vector/vector_properties.html#d-view-properties" ) );
 
   syncToLayer( layer );
 }
@@ -168,7 +170,7 @@ void QgsVectorLayer3DRendererWidget::apply()
       break;
     case 1:
     {
-      std::unique_ptr< QgsAbstract3DSymbol > symbol = widgetSingleSymbolRenderer->symbol();
+      std::unique_ptr<QgsAbstract3DSymbol> symbol = widgetSingleSymbolRenderer->symbol();
       QgsVectorLayer3DRenderer *r = new QgsVectorLayer3DRenderer( symbol ? symbol.release() : nullptr );
       r->setLayer( qobject_cast<QgsVectorLayer *>( mLayer ) );
       widgetBaseProperties->apply( r );
@@ -228,7 +230,7 @@ bool QgsVectorLayer3DRendererWidgetFactory::supportLayerPropertiesDialog() const
 
 bool QgsVectorLayer3DRendererWidgetFactory::supportsLayer( QgsMapLayer *layer ) const
 {
-  return layer->type() == QgsMapLayerType::VectorLayer;
+  return layer->type() == Qgis::LayerType::Vector;
 }
 
 QString QgsVectorLayer3DRendererWidgetFactory::layerPropertiesPagePositionHint() const

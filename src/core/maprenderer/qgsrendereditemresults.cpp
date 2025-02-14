@@ -133,7 +133,8 @@ QList<const QgsRenderedAnnotationItemDetails *> QgsRenderedItemResults::rendered
 
 void QgsRenderedItemResults::appendResults( const QList<QgsRenderedItemDetails *> &results, const QgsRenderContext &context )
 {
-  const QgsCoordinateTransform layerToMapTransform = context.coordinateTransform();
+  QgsCoordinateTransform layerToMapTransform = context.coordinateTransform();
+  layerToMapTransform.setBallparkTransformsAreAppropriate( true );
   for ( QgsRenderedItemDetails *details : results )
   {
     try
@@ -143,7 +144,7 @@ void QgsRenderedItemResults::appendResults( const QList<QgsRenderedItemDetails *
     }
     catch ( QgsCsException & )
     {
-      QgsDebugMsg( QStringLiteral( "Could not transform rendered item's bounds to map CRS" ) );
+      QgsDebugError( QStringLiteral( "Could not transform rendered item's bounds to map CRS" ) );
     }
 
     if ( QgsRenderedAnnotationItemDetails *annotationDetails = dynamic_cast< QgsRenderedAnnotationItemDetails * >( details ) )

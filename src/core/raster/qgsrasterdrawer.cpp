@@ -25,14 +25,25 @@
 #include "qgsrendercontext.h"
 #include <QImage>
 #include <QPainter>
-#ifndef QT_NO_PRINTER
-#include <QPrinter>
-#endif
+#include <QPdfWriter>
 
 QgsRasterDrawer::QgsRasterDrawer( QgsRasterIterator *iterator, double dpiTarget )
   : mIterator( iterator )
   , mDpiTarget( dpiTarget )
 {
+}
+
+QgsRasterDrawer::QgsRasterDrawer( QgsRasterIterator *iterator )
+  : mIterator( iterator )
+{
+}
+
+void QgsRasterDrawer::draw( QgsRenderContext &context, QgsRasterViewPort *viewPort, QgsRasterBlockFeedback *feedback )
+{
+  mDpiScaleFactor = context.dpiTarget() >= 0.0 ? context.dpiTarget() / ( context.scaleFactor() * 25.4 ) : 1.0;
+  mDevicePixelRatio = context.devicePixelRatio();
+
+  draw( context.painter(), viewPort, &context.mapToPixel(), feedback );
 }
 
 void QgsRasterDrawer::draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsMapToPixel *qgsMapToPixel, QgsRasterBlockFeedback *feedback )
@@ -43,9 +54,14 @@ void QgsRasterDrawer::draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsM
     return;
   }
 
+  if ( mDpiTarget >= 0 )
+  {
+    mDpiScaleFactor = mDpiTarget / p->device()->logicalDpiX();
+  }
+
   // last pipe filter has only 1 band
   const int bandNumber = 1;
-  mIterator->startRasterRead( bandNumber, viewPort->mWidth, viewPort->mHeight, viewPort->mDrawnExtent, feedback );
+  mIterator->startRasterRead( bandNumber, std::floor( static_cast<double>( viewPort->mWidth ) * mDevicePixelRatio ), std::floor( static_cast<double>( viewPort->mHeight ) * mDevicePixelRatio ), viewPort->mDrawnExtent, feedback );
 
   //number of cols/rows in output pixels
   int nCols = 0;
@@ -64,17 +80,16 @@ void QgsRasterDrawer::draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsM
   {
     if ( !block )
     {
-      QgsDebugMsg( QStringLiteral( "Cannot get block" ) );
+      QgsDebugError( QStringLiteral( "Cannot get block" ) );
       continue;
     }
 
     QImage img = block->image();
 
-#ifndef QT_NO_PRINTER
     // Because of bug in Acrobat Reader we must use "white" transparent color instead
     // of "black" for PDF. See #9101.
-    QPrinter *printer = dynamic_cast<QPrinter *>( p->device() );
-    if ( printer && printer->outputFormat() == QPrinter::PdfFormat )
+    QPdfWriter *pdfWriter = dynamic_cast<QPdfWriter *>( p->device() );
+    if ( pdfWriter )
     {
       QgsDebugMsgLevel( QStringLiteral( "PdfFormat" ), 4 );
 
@@ -92,7 +107,6 @@ void QgsRasterDrawer::draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsM
         }
       }
     }
-#endif
 
     if ( feedback && feedback->renderPartialOutput() )
     {
@@ -124,12 +138,16 @@ void QgsRasterDrawer::drawImage( QPainter *p, QgsRasterViewPort *viewPort, const
     return;
   }
 
-  const double dpiScaleFactor = mDpiTarget >= 0.0 ? mDpiTarget / p->device()->logicalDpiX() : 1.0;
-  //top left position in device coords
-  const QPoint tlPoint = QPoint( viewPort->mTopLeftPoint.x() + std::floor( topLeftCol / dpiScaleFactor ), viewPort->mTopLeftPoint.y() + std::floor( topLeftRow / dpiScaleFactor ) );
-
+  // top left position in device coords
+  const QPoint tlPoint = QPoint( std::floor( viewPort->mTopLeftPoint.x() + topLeftCol / mDpiScaleFactor / mDevicePixelRatio ),
+                                 std::floor( viewPort->mTopLeftPoint.y() + topLeftRow / mDpiScaleFactor / mDevicePixelRatio ) );
   const QgsScopedQPainterState painterState( p );
   p->setRenderHint( QPainter::Antialiasing, false );
+  // Improve rendering of rasters on high DPI screens with Qt's auto scaling enabled
+  if ( !qgsDoubleNear( mDevicePixelRatio, 1.0 ) || !qgsDoubleNear( mDpiScaleFactor, 1.0 ) )
+  {
+    p->setRenderHint( QPainter::SmoothPixmapTransform, true );
+  }
 
   // Blending problem was reported with PDF output if background color has alpha < 255
   // in #7766, it seems to be a bug in Qt, setting a brush with alpha 255 is a workaround
@@ -151,11 +169,14 @@ void QgsRasterDrawer::drawImage( QPainter *p, QgsRasterViewPort *viewPort, const
     }
   }
 
-  p->drawImage( tlPoint, dpiScaleFactor != 1.0 ? img.scaledToHeight( std::ceil( img.height() / dpiScaleFactor ) ) : img );
+  p->drawImage( QRect( tlPoint.x(), tlPoint.y(),
+                       std::ceil( img.width() / mDpiScaleFactor / mDevicePixelRatio ),
+                       std::ceil( img.height() / mDpiScaleFactor / mDevicePixelRatio ) ),
+                img );
 
 #if 0
   // For debugging:
-  QRectF br = QRectF( tlPoint, img.size() );
+  QRectF br = QRectF( tlPoint, img.size() / mDpiScaleFactor / devicePixelRatio );
   QPointF c = br.center();
   double rad = std::max( br.width(), br.height() ) / 10;
   p->drawRoundedRect( br, rad, rad );

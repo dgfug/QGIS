@@ -19,9 +19,12 @@
 #include "qgis_core.h"
 #include "qgis_sip.h"
 #include "qgslayertreenode.h"
+#include "qgsmaplayerref.h"
+#include "qgsgrouplayer.h"
 
 class QgsMapLayer;
 class QgsLayerTreeLayer;
+class QgsGroupLayer;
 
 /**
  * \ingroup core
@@ -29,7 +32,9 @@ class QgsLayerTreeLayer;
  *
  * Group names do not need to be unique within one tree nor within one parent.
  *
- * \since QGIS 2.4
+ * While a layer tree group is typically used for hierarchical organisation of a QgsProject,
+ * they can optionally be associated with a QgsGroupLayer for map rendering purposes.
+ *
  */
 class CORE_EXPORT QgsLayerTreeGroup : public QgsLayerTreeNode
 {
@@ -125,7 +130,6 @@ class CORE_EXPORT QgsLayerTreeGroup : public QgsLayerTreeNode
 
     /**
      * Find layer node representing the map layer. Searches recursively the whole sub-tree.
-     * \since QGIS 3.0
      */
     QgsLayerTreeLayer *findLayer( QgsMapLayer *layer ) const;
 
@@ -138,6 +142,29 @@ class CORE_EXPORT QgsLayerTreeGroup : public QgsLayerTreeNode
      * Find all layer nodes. Searches recursively the whole sub-tree.
      */
     QList<QgsLayerTreeLayer *> findLayers() const;
+
+    /**
+     * Reorders layers in the group to match the order specified by \a order.
+     *
+     * Only layers which are direct children of this group will be reordered, other
+     * layers will be ignored.
+     *
+     * \note This method does not recursively reorder child groups.
+     * \note Matching layers will be moved to the start of the group, with any existing
+     * non-matching layers and group nodes moved to sit after the re-ordered matching layers.
+     *
+     * \since QGIS 3.30
+     */
+    void reorderGroupLayers( const QList< QgsMapLayer * > &order );
+
+    /**
+     * Returns an ordered list of map layers in the group, ignoring any layers which
+     * are child layers of QgsGroupLayers. Searches recursively the whole sub-tree.
+     *
+     * \note Not available in Python bindings
+     * \since QGIS 3.24
+     */
+    QList<QgsMapLayer *> layerOrderRespectingGroupLayers() const SIP_SKIP;
 
     /**
      * Find layer IDs used in all layer nodes. Searches recursively the whole sub-tree.
@@ -158,12 +185,11 @@ class CORE_EXPORT QgsLayerTreeGroup : public QgsLayerTreeNode
      * Read group (tree) from XML element <layer-tree-group> and return the newly created group (or NULLPTR on error).
      * Does not resolve textual references to layers. Call resolveReferences() afterwards to do it.
      */
-    static QgsLayerTreeGroup *readXml( QDomElement &element, const QgsReadWriteContext &context ) SIP_FACTORY;
+    static QgsLayerTreeGroup *readXml( QDomElement &element, const QgsReadWriteContext &context ) SIP_FACTORY;  // cppcheck-suppress duplInheritedMember
 
     /**
      * Read group (tree) from XML element <layer-tree-group> and return the newly created group (or NULLPTR on error).
      * Also resolves textual references to layers from the project (calls resolveReferences() internally).
-     * \since QGIS 3.0
      */
     static QgsLayerTreeGroup *readXml( QDomElement &element, const QgsProject *project, const QgsReadWriteContext &context ) SIP_FACTORY;
 
@@ -190,7 +216,6 @@ class CORE_EXPORT QgsLayerTreeGroup : public QgsLayerTreeNode
 
     /**
      * Calls resolveReferences() on child tree nodes
-     * \since QGIS 3.0
      */
     void resolveReferences( const QgsProject *project, bool looseMatching = false ) override;
 
@@ -201,7 +226,6 @@ class CORE_EXPORT QgsLayerTreeGroup : public QgsLayerTreeNode
 
     /**
      * Returns whether the group is mutually exclusive (only one child can be checked at a time)
-     * \since QGIS 2.12
      */
     bool isMutuallyExclusive() const;
 
@@ -209,9 +233,47 @@ class CORE_EXPORT QgsLayerTreeGroup : public QgsLayerTreeNode
      * Set whether the group is mutually exclusive (only one child can be checked at a time).
      * The initial child index determines which child should be initially checked. The default value
      * of -1 will determine automatically (either first one currently checked or none)
-     * \since QGIS 2.12
      */
     void setIsMutuallyExclusive( bool enabled, int initialChildIndex = -1 );
+
+    /**
+     * Returns a reference to the associated group layer, if the layer tree group will be treated
+     * as group layer during map rendering.
+     *
+     * \see setGroupLayer()
+     * \see convertToGroupLayer()
+     * \since QGIS 3.24
+     */
+    QgsGroupLayer *groupLayer();
+
+    /**
+     * Sets the associated group \a layer, if the layer tree group will be treated
+     * as group layer during map rendering.
+     *
+     * This method does not take ownership of the group layer, and only a weak reference
+     * to the layer is stored.
+     *
+     * \see groupLayer()
+     * \see convertToGroupLayer()
+     * \since QGIS 3.24
+     */
+    void setGroupLayer( QgsGroupLayer *layer );
+
+    /**
+     * Converts the group to a QgsGroupLayer.
+     *
+     * This method will convert the layer tree group to an equivalent QgsGroupLayer, and
+     * return the result. The caller takes ownership of the returned layer, and it is the
+     * caller's responsibility to add the layer to the associated QgsProject.
+     *
+     * If the group is already associated with a group layer (see groupLayer()), NULLPTR
+     * will be returned.
+     *
+     * \see groupLayer()
+     * \see setGroupLayer()
+     * \since QGIS 3.24
+     */
+    QgsGroupLayer *convertToGroupLayer( const QgsGroupLayer::LayerOptions &options ) SIP_FACTORY;
 
   protected slots:
 
@@ -252,7 +314,11 @@ class CORE_EXPORT QgsLayerTreeGroup : public QgsLayerTreeNode
 
     QgsLayerTreeGroup &operator= ( const QgsLayerTreeGroup & ) = delete;
 
+    void init();
+    void updateGroupLayers();
+    void refreshParentGroupLayerMembers();
 
+    QgsMapLayerRef mGroupLayer;
 };
 
 

@@ -34,13 +34,22 @@ void QgsDataItemGuiContext::setMessageBar( QgsMessageBar *messageBar )
   mMessageBar = messageBar;
 }
 
+QgsBrowserTreeView *QgsDataItemGuiContext::view() const
+{
+  return mView;
+}
+
+void QgsDataItemGuiContext::setView( QgsBrowserTreeView *view )
+{
+  mView = view;
+}
+
 //
 // QgsDataItemGuiProvider
 //
 
 void QgsDataItemGuiProvider::populateContextMenu( QgsDataItem *, QMenu *, const QList<QgsDataItem *> &, QgsDataItemGuiContext )
 {
-
 }
 
 int QgsDataItemGuiProvider::precedenceWhenPopulatingMenus() const

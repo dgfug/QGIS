@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layout/qgslayoutmanager.h                                   *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -21,8 +21,6 @@ rather accessed through a :py:class:`QgsProject` via :py:func:`QgsProject.layout
 
 :py:class:`QgsLayoutManager` retains ownership of all the layouts contained
 in the manager.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -171,9 +169,10 @@ layout manager.
 %End
   public:
 
-    enum Role
+
+    enum class CustomRole
     {
-      LayoutRole,
+      Layout,
     };
 
     explicit QgsLayoutManagerModel( QgsLayoutManager *manager, QObject *parent /TransferThis/ = 0 );
@@ -225,7 +224,7 @@ class QgsLayoutManagerProxyModel : QSortFilterProxyModel
 {
 %Docstring(signature="appended")
 
-QSortFilterProxyModel subclass for QgsLayoutManagerModel
+QSortFilterProxyModel subclass for :py:class:`QgsLayoutManagerModel`
 
 .. versionadded:: 3.8
 %End
@@ -297,5 +296,5 @@ QFlags<QgsLayoutManagerProxyModel::Filter> operator|(QgsLayoutManagerProxyModel:
  *                                                                      *
  * src/core/layout/qgslayoutmanager.h                                   *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

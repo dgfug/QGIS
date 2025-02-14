@@ -47,6 +47,7 @@ class CORE_EXPORT QgsPointDisplacementRenderer: public QgsPointDistanceRenderer
      */
     QgsPointDisplacementRenderer( const QString &labelAttributeName = QString() );
 
+    Qgis::FeatureRendererFlags flags() const override;
     QgsPointDisplacementRenderer *clone() const override SIP_FACTORY;
     void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
     void stopRender( QgsRenderContext &context ) override;
@@ -118,7 +119,6 @@ class CORE_EXPORT QgsPointDisplacementRenderer: public QgsPointDistanceRenderer
     /**
      * Returns the placement method used for dispersing the points.
      * \see setPlacement()
-     * \since QGIS 2.12
      */
     Placement placement() const { return mPlacement; }
 
@@ -126,7 +126,6 @@ class CORE_EXPORT QgsPointDisplacementRenderer: public QgsPointDistanceRenderer
      * Sets the placement method used for dispersing the points.
      * \param placement placement method
      * \see placement()
-     * \since QGIS 2.12
      */
     void setPlacement( Placement placement ) { mPlacement = placement; }
 
@@ -146,7 +145,6 @@ class CORE_EXPORT QgsPointDisplacementRenderer: public QgsPointDistanceRenderer
     /**
      * Creates a QgsPointDisplacementRenderer from an existing renderer.
      * \returns a new renderer if the conversion was possible, otherwise NULLPTR.
-     * \since QGIS 2.5
      */
     static QgsPointDisplacementRenderer *convertFromRenderer( const QgsFeatureRenderer *renderer ) SIP_FACTORY;
 
@@ -171,15 +169,15 @@ class CORE_EXPORT QgsPointDisplacementRenderer: public QgsPointDistanceRenderer
     //! Factor for label distance
     double mLabelDistanceFactor = 0.5;
 
-    void drawGroup( QPointF centerPoint, QgsRenderContext &context, const QgsPointDistanceRenderer::ClusteredGroup &group ) override SIP_FORCE;
+    void drawGroup( QPointF centerPoint, QgsRenderContext &context, const QgsPointDistanceRenderer::ClusteredGroup &group ) const override SIP_FORCE;
 
     //helper functions
     void calculateSymbolAndLabelPositions( QgsSymbolRenderContext &symbolContext, QPointF centerPoint, int nPosition, double symbolDiagonal, QList<QPointF> &symbolPositions, QList<QPointF> &labelShifts, double &circleRadius,
                                            double &gridRadius, int &gridSize, QVector<double> &diagonals ) const;
-    void drawCircle( double radiusPainterUnits, QgsSymbolRenderContext &context, QPointF centerPoint, int nSymbols );
-    void drawSymbols( const ClusteredGroup &group, QgsRenderContext &context, const QList<QPointF> &symbolPositions );
+    void drawCircle( double radiusPainterUnits, QgsSymbolRenderContext &context, QPointF centerPoint, int nSymbols ) const;
+    void drawSymbols( const ClusteredGroup &group, QgsRenderContext &context, const QList<QPointF> &symbolPositions ) const;
     void drawGrid( int gridSizeUnits, QgsSymbolRenderContext &context,
-                   QList<QPointF> pointSymbolPositions, int nSymbols );
+                   QList<QPointF> pointSymbolPositions, int nSymbols ) const;
     void centralizeGrid( QList<QPointF> &pointSymbolPositions, double radius, int size ) const;
 };
 

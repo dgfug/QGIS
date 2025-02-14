@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layout/qgslayoutobject.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -13,13 +13,11 @@ class QgsLayoutObject: QObject, QgsExpressionContextGenerator
 {
 %Docstring(signature="appended")
 A base class for objects which belong to a layout.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgslayoutobject.h"
-#include <qgslayoutitem.h>
+#include "qgslayoutitem.h"
 #include "qgslayoutitemgroup.h"
 #include "qgslayoutitemmap.h"
 #include "qgslayoutitempicture.h"
@@ -31,6 +29,8 @@ A base class for objects which belong to a layout.
 #include "qgslayoutframe.h"
 #include "qgslayoutitemshape.h"
 #include "qgslayoutitempage.h"
+#include "qgslayoutitemmarker.h"
+#include "qgslayoutitemelevationprofile.h"
 %End
 %ConvertToSubClassCode
     if ( QgsLayoutItem *item = qobject_cast< QgsLayoutItem * >( sipCpp ) )
@@ -89,6 +89,14 @@ A base class for objects which belong to a layout.
           sipType = sipType_QgsLayoutFrame;
           *sipCppRet = static_cast<QgsLayoutFrame *>( sipCpp );
           break;
+        case QGraphicsItem::UserType + 117:
+          sipType = sipType_QgsLayoutItemMarker;
+          *sipCppRet = static_cast<QgsLayoutItemMarker *>( sipCpp );
+          break;
+        case QGraphicsItem::UserType + 118:
+          sipType = sipType_QgsLayoutItemElevationProfile;
+          *sipCppRet = static_cast<QgsLayoutItemElevationProfile *>( sipCpp );
+          break;
 
         // did you read that comment above? NO? Go read it now. You're about to break stuff.
 
@@ -101,8 +109,9 @@ A base class for objects which belong to a layout.
 %End
   public:
 
-    enum DataDefinedProperty
-    {
+
+    enum class DataDefinedProperty
+      {
       NoProperty,
       AllProperties,
       TestProperty,
@@ -125,6 +134,10 @@ A base class for objects which belong to a layout.
       ExcludeFromExports,
       FrameColor,
       BackgroundColor,
+      MarginLeft,
+      MarginTop,
+      MarginRight,
+      MarginBottom,
       //composer map
       MapRotation,
       MapScale,
@@ -154,6 +167,11 @@ A base class for objects which belong to a layout.
       MapGridFrameDivisionsRight,
       MapGridFrameDivisionsTop,
       MapGridFrameDivisionsBottom,
+      MapCrs,
+      StartDateTime,
+      EndDateTime,
+      MapZRangeLower,
+      MapZRangeUpper,
       //composer picture
       PictureSource,
       PictureSvgBackgroundColor,
@@ -165,16 +183,33 @@ A base class for objects which belong to a layout.
       LegendTitle,
       LegendColumnCount,
       //scalebar item
+      ScalebarLeftSegments,
+      ScalebarRightSegments,
+      ScalebarSegmentWidth,
+      ScalebarMinimumWidth,
+      ScalebarMaximumWidth,
+      ScalebarHeight,
+      ScalebarRightSegmentSubdivisions,
+      ScalebarSubdivisionHeight,
       ScalebarFillColor,
       ScalebarFillColor2,
       ScalebarLineColor,
       ScalebarLineWidth,
       //table item
       AttributeTableSourceLayer,
-      MapCrs,
-      StartDateTime,
-      EndDateTime,
+      ElevationProfileTolerance,
+      ElevationProfileDistanceMajorInterval,
+      ElevationProfileDistanceMinorInterval,
+      ElevationProfileDistanceLabelInterval,
+      ElevationProfileElevationMajorInterval,
+      ElevationProfileElevationMinorInterval,
+      ElevationProfileElevationLabelInterval,
+      ElevationProfileMinimumDistance,
+      ElevationProfileMaximumDistance,
+      ElevationProfileMinimumElevation,
+      ElevationProfileMaximumElevation,
     };
+
 
     enum PropertyValueType
     {
@@ -349,5 +384,5 @@ Sets object properties from a DOM element
  *                                                                      *
  * src/core/layout/qgslayoutobject.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

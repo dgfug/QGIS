@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/geometry/qgsabstractgeometry.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -31,8 +31,6 @@ Abstract base class for all geometries
    methods for working with geodesic calculations and spatial operations on geometries,
    and should be used whenever calculations which account for the curvature of the Earth (or any other celestial body)
    are required.
-
-.. versionadded:: 2.10
 %End
 
 %TypeHeaderCode
@@ -90,14 +88,40 @@ Abstract base class for all geometries
     };
 
     QgsAbstractGeometry();
-%Docstring
-Constructor for QgsAbstractGeometry.
-%End
     virtual ~QgsAbstractGeometry();
     QgsAbstractGeometry( const QgsAbstractGeometry &geom );
 
     virtual bool operator==( const QgsAbstractGeometry &other ) const = 0;
     virtual bool operator!=( const QgsAbstractGeometry &other ) const = 0;
+
+    virtual bool fuzzyEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const = 0;
+%Docstring
+Performs fuzzy comparison between this geometry and ``other`` using an ``epsilon``.
+
+The comparison is done by examining the specific values (such as x and y) that define the location of vertices in the geometry.
+
+.. seealso:: :py:func:`fuzzyDistanceEqual`
+
+.. seealso:: :py:func:`QgsGeometryUtilsBase.fuzzyDistanceEqual`
+
+.. versionadded:: 3.36
+%End
+
+    virtual bool fuzzyDistanceEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const = 0;
+%Docstring
+Performs fuzzy distance comparison between this geometry and ``other`` using an ``epsilon``.
+
+Traditionally, the comparison is done by examining the specific values (such as x and y) that define the location of vertices in the geometry.
+It focuses on the numerical differences or relationships between these values.
+On the other hand, comparing distances between points considers the actual spatial separation or length between the points, regardless of their coordinate values.
+This comparison involves measuring the distance between two points using formulas like the distance formula. Here, it's the "distance comparison" (fuzzyDistanceEqual).
+
+.. seealso:: :py:func:`fuzzyEqual`
+
+.. seealso:: :py:func:`QgsGeometryUtilsBase.fuzzyEqual`
+
+.. versionadded:: 3.36
+%End
 
     virtual QgsAbstractGeometry *clone() const = 0 /Factory/;
 %Docstring
@@ -116,9 +140,16 @@ Comparator for sorting of geometry.
 Clears the geometry, ie reset it to a null geometry
 %End
 
-    virtual QgsRectangle boundingBox() const = 0;
+    virtual QgsRectangle boundingBox() const;
 %Docstring
 Returns the minimal bounding box for the geometry
+%End
+
+    virtual QgsBox3D boundingBox3D() const = 0;
+%Docstring
+Returns the 3D bounding box for the geometry.
+
+.. versionadded:: 3.34
 %End
 
 
@@ -137,7 +168,7 @@ Returns a unique string representing the geometry type.
 .. seealso:: :py:func:`wktTypeStr`
 %End
 
-    QgsWkbTypes::Type wkbType() const /HoldGIL/;
+    Qgis::WkbType wkbType() const /HoldGIL/;
 %Docstring
 Returns the WKB type of the geometry.
 
@@ -175,8 +206,6 @@ Returns the closure of the combinatorial boundary of the geometry (ie the topolo
 For instance, a polygon geometry will have a boundary consisting of the linestrings for each ring in the polygon.
 
 :return: boundary for geometry. May be ``None`` for some geometry types.
-
-.. versionadded:: 3.0
 %End
 
     virtual void normalize() = 0;
@@ -210,6 +239,7 @@ Sets the geometry from a WKT string.
     enum WkbFlag
     {
       FlagExportTrianglesAsPolygons,
+      FlagExportNanAsDoubleMin,
     };
     typedef QFlags<QgsAbstractGeometry::WkbFlag> WkbFlags;
 
@@ -236,8 +266,6 @@ The optional ``flags`` argument specifies flags controlling WKB export behavior 
 .. seealso:: :py:func:`asGml3`
 
 .. seealso:: :py:func:`asJson`
-
-.. versionadded:: 3.0
 %End
 
     virtual QString asWkt( int precision = 17 ) const = 0;
@@ -367,8 +395,6 @@ The vertex numbers start at 0, so a return value of 0 corresponds
 to the first vertex.
 
 Returns -1 if a corresponding vertex could not be found.
-
-.. versionadded:: 3.0
 %End
 
     virtual bool nextVertex( QgsVertexId &id, QgsPoint &vertex /Out/ ) const = 0;
@@ -385,8 +411,6 @@ Returns next vertex id and coordinates
     virtual void adjacentVertices( QgsVertexId vertex, QgsVertexId &previousVertex /Out/, QgsVertexId &nextVertex /Out/ ) const = 0;
 %Docstring
 Returns the vertices adjacent to a specified ``vertex`` within a geometry.
-
-.. versionadded:: 3.0
 %End
 
     virtual QgsCoordinateSequence coordinateSequence() const = 0;
@@ -413,11 +437,11 @@ Returns the point corresponding to a specified vertex id
 Searches for the closest segment of the geometry to a given point.
 
 :param pt: specifies the point to find closest segment to
-:param segmentPt: storage for the closest point within the geometry
-:param vertexAfter: storage for the ID of the vertex at the end of the closest segment
 :param epsilon: epsilon for segment snapping
 
 :return: - squared distance to closest segment or negative value on error
+         - segmentPt: the closest point within the geometry
+         - vertexAfter: the ID of the vertex at the end of the closest segment
          - leftOf: indicates whether the point lies on the left side of the geometry (-1 if point is to the left of the geometry, +1 if the point is to the right of the geometry, or 0 for cases where left/right could not be determined, e.g. point exactly on a line) ``False`` if point is to right of segment)
 %End
 
@@ -522,8 +546,6 @@ Returns the length of the segment of the geometry which begins at ``startVertex`
 
    QgsAbstractGeometry objects are inherently Cartesian/planar geometries, and the lengths
    returned by this method are calculated using strictly Cartesian mathematics.
-
-.. versionadded:: 3.0
 %End
 
     virtual QgsPoint centroid() const;
@@ -551,6 +573,16 @@ calculate and handles invalid geometries.
 .. versionadded:: 3.20
 %End
 
+    virtual bool boundingBoxIntersects( const QgsBox3D &box3d ) const /HoldGIL/;
+%Docstring
+Returns ``True`` if the bounding box of this geometry intersects with a ``box3d``.
+
+Since this test only considers the bounding box of the geometry, is is very fast to
+calculate and handles invalid geometries.
+
+.. versionadded:: 3.34
+%End
+
     virtual QgsAbstractGeometry *segmentize( double tolerance = M_PI / 180., SegmentationToleranceType toleranceType = MaximumAngle ) const /Factory/;
 %Docstring
 Returns a version of the geometry without curves. Caller takes ownership of
@@ -569,7 +601,7 @@ E.g. :py:class:`QgsLineString` -> :py:class:`QgsCompoundCurve`, :py:class:`QgsPo
 :return: the converted geometry. Caller takes ownership
 %End
 
-    virtual QgsAbstractGeometry *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0 ) const = 0 /Factory/;
+    virtual QgsAbstractGeometry *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0, bool removeRedundantPoints = false ) const = 0 /Factory/;
 %Docstring
 Makes a new geometry with all the points or vertices snapped to the closest point of the grid.
 Ownership is transferred to the caller.
@@ -591,8 +623,21 @@ In this case, it can be thought like rounding the x and y of all the points/vert
 :param vSpacing: Vertical spacing of the grid (y axis). 0 to disable.
 :param dSpacing: Depth spacing of the grid (z axis). 0 (default) to disable.
 :param mSpacing: Custom dimension spacing of the grid (m axis). 0 (default) to disable.
+:param removeRedundantPoints: if ``True``, then points which are redundant (e.g. they represent mid points on a straight line segment) will be skipped (since QGIS 3.38)
+%End
 
-.. versionadded:: 3.0
+    virtual QgsAbstractGeometry *simplifyByDistance( double tolerance ) const = 0 /Factory/;
+%Docstring
+Simplifies the geometry by applying the Douglas Peucker simplification by distance
+algorithm.
+
+The caller takes ownership of the returned geometry. Curved geometries will be segmentized prior to simplification.
+
+If a simplified geometry cannot be calculated ``None`` will be returned.
+
+The returned geometry may be invalid and contain self-intersecting rings.
+
+.. versionadded:: 3.38
 %End
 
     virtual bool removeDuplicateNodes( double epsilon = 4 * DBL_EPSILON, bool useZValues = false ) = 0;
@@ -613,8 +658,6 @@ a multipoint geometry with overlapping points will not be changed by this method
 
 The function will return ``True`` if nodes were removed, or ``False`` if no duplicate nodes
 were found.
-
-.. versionadded:: 3.0
 %End
 
     virtual double vertexAngle( QgsVertexId vertex ) const = 0;
@@ -658,8 +701,6 @@ Adds a z-dimension to the geometry, initialized to a preset value.
 .. seealso:: :py:func:`dropZValue`
 
 .. seealso:: :py:func:`addMValue`
-
-.. versionadded:: 2.12
 %End
 
     virtual bool addMValue( double mValue = 0 ) = 0;
@@ -673,8 +714,6 @@ Adds a measure to the geometry, initialized to a preset value.
 .. seealso:: :py:func:`dropMValue`
 
 .. seealso:: :py:func:`addZValue`
-
-.. versionadded:: 2.12
 %End
 
     virtual bool dropZValue() = 0;
@@ -686,8 +725,6 @@ Drops any z-dimensions which exist in the geometry.
 .. seealso:: :py:func:`addZValue`
 
 .. seealso:: :py:func:`dropMValue`
-
-.. versionadded:: 2.14
 %End
 
     virtual bool dropMValue() = 0;
@@ -699,8 +736,6 @@ Drops any measure values which exist in the geometry.
 .. seealso:: :py:func:`addMValue`
 
 .. seealso:: :py:func:`dropZValue`
-
-.. versionadded:: 2.14
 %End
 
     virtual void swapXy() = 0;
@@ -712,13 +747,11 @@ coordinates reversed.
 .. versionadded:: 3.2
 %End
 
-    virtual bool convertTo( QgsWkbTypes::Type type );
+    virtual bool convertTo( Qgis::WkbType type );
 %Docstring
 Converts the geometry to a specified type.
 
 :return: ``True`` if conversion was successful
-
-.. versionadded:: 2.14
 %End
 
     virtual const QgsAbstractGeometry *simplifiedTypeRef() const /HoldGIL/;
@@ -748,11 +781,10 @@ This method returns a reference only, and does not involve any geometry cloning.
 Checks validity of the geometry, and returns ``True`` if the geometry is valid.
 
 :param flags: indicates optional flags which control the type of validity checking performed
-              (corresponding to Qgis.GeometryValidityFlags).
+              (corresponding to :py:class:`Qgis`.GeometryValidityFlags).
 
 :return: - ``True`` if geometry is valid
-         - error: will be set to the validity error message
-
+         - error: the validity error message
 
 .. versionadded:: 3.8
 %End
@@ -832,11 +864,7 @@ Example
        for v in geometry.vertices():
            print(v.x(), v.y())
 
-
-
 .. seealso:: :py:func:`parts`
-
-.. versionadded:: 3.0
 %End
 
     virtual QgsAbstractGeometry *createEmptyWithSameType() const = 0 /Factory/;
@@ -845,8 +873,6 @@ Creates a new geometry with the same class and same WKB type as the original and
 To create it, the geometry is default constructed and then the WKB is changed.
 
 .. seealso:: :py:func:`clone`
-
-.. versionadded:: 3.0
 %End
 
   protected:
@@ -880,8 +906,6 @@ Returns whether the geometry has any child geometries (``False`` for point / cur
 .. note::
 
    used for vertex_iterator implementation
-
-.. versionadded:: 3.0
 %End
 
     virtual int childCount() const;
@@ -891,8 +915,6 @@ Returns number of child geometries (for geometries with child geometries) or chi
 .. note::
 
    used for vertex_iterator implementation
-
-.. versionadded:: 3.0
 %End
 
     virtual QgsAbstractGeometry *childGeometry( int index ) const;
@@ -902,8 +924,6 @@ Returns pointer to child geometry (for geometries with child geometries - i.e. g
 .. note::
 
    used for vertex_iterator implementation
-
-.. versionadded:: 3.0
 %End
 
     virtual QgsPoint childPoint( int index ) const;
@@ -913,13 +933,11 @@ Returns point at index (for geometries without child geometries - i.e. curve / p
 .. note::
 
    used for vertex_iterator implementation
-
-.. versionadded:: 3.0
 %End
 
   protected:
 
-    void setZMTypeFromSubGeometry( const QgsAbstractGeometry *subggeom, QgsWkbTypes::Type baseGeomType );
+    void setZMTypeFromSubGeometry( const QgsAbstractGeometry *subggeom, Qgis::WkbType baseGeomType );
 %Docstring
 Updates the geometry type based on whether sub geometries contain z or m values.
 %End
@@ -928,6 +946,15 @@ Updates the geometry type based on whether sub geometries contain z or m values.
 %Docstring
 Default calculator for the minimal bounding box for the geometry. Derived classes should override this method
 if a more efficient bounding box calculation is available.
+%End
+
+    virtual QgsBox3D calculateBoundingBox3D() const;
+%Docstring
+Calculates the minimal 3D bounding box for the geometry.
+
+.. seealso:: :py:func:`calculateBoundingBox`
+
+.. versionadded:: 3.34
 %End
 
     virtual void clearCache() const;
@@ -944,18 +971,14 @@ class QgsVertexIterator
 {
 %Docstring(signature="appended")
 Java-style iterator for traversal of vertices of a geometry
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgsabstractgeometry.h"
 %End
   public:
+
     QgsVertexIterator();
-%Docstring
-Constructor for QgsVertexIterator
-%End
 
     QgsVertexIterator( const QgsAbstractGeometry *geometry );
 %Docstring
@@ -999,10 +1022,8 @@ Java-style iterator for traversal of parts of a geometry
 #include "qgsabstractgeometry.h"
 %End
   public:
+
     QgsGeometryPartIterator();
-%Docstring
-Constructor for QgsGeometryPartIterator
-%End
 
     QgsGeometryPartIterator( QgsAbstractGeometry *geometry );
 %Docstring
@@ -1047,10 +1068,8 @@ Java-style iterator for const traversal of parts of a geometry
 #include "qgsabstractgeometry.h"
 %End
   public:
+
     QgsGeometryConstPartIterator();
-%Docstring
-Constructor for QgsGeometryConstPartIterator
-%End
 
     QgsGeometryConstPartIterator( const QgsAbstractGeometry *geometry );
 %Docstring
@@ -1090,5 +1109,5 @@ QFlags<QgsAbstractGeometry::WkbFlag> operator|(QgsAbstractGeometry::WkbFlag f1, 
  *                                                                      *
  * src/core/geometry/qgsabstractgeometry.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

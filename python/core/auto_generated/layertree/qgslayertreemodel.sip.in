@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layertree/qgslayertreemodel.h                               *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -25,8 +25,6 @@ Behavior of the model can be customized with flags. For example, whether to show
 whether to allow changes to the layer tree.
 
 .. seealso:: :py:class:`QgsLayerTreeView`
-
-.. versionadded:: 2.4
 %End
 
 %TypeHeaderCode
@@ -90,6 +88,7 @@ The root node is not transferred by the model.
       AllowNodeChangeVisibility,
       AllowLegendChangeState,
       ActionHierarchical,
+      UseThreadedHitTest,
     };
     typedef QFlags<QgsLayerTreeModel::Flag> Flags;
 
@@ -131,16 +130,12 @@ If ``skipInternal`` is ``True``, a node is included in the output list only if n
     static QgsLayerTreeModelLegendNode *index2legendNode( const QModelIndex &index );
 %Docstring
 Returns legend node for given index. Returns ``None`` for invalid index
-
-.. versionadded:: 2.6
 %End
 
     QModelIndex legendNode2index( QgsLayerTreeModelLegendNode *legendNode );
 %Docstring
 Returns index for a given legend node. If the legend node does not belong to the layer tree, the result is undefined.
 If the legend node is belongs to the tree but it is filtered out, invalid model index is returned.
-
-.. versionadded:: 2.6
 %End
 
     QList<QgsLayerTreeModelLegendNode *> layerLegendNodes( QgsLayerTreeLayer *nodeLayer, bool skipNodeEmbeddedInParent = false );
@@ -153,8 +148,6 @@ Returns filtered list of active legend nodes attached to a particular layer node
    Parameter skipNodeEmbeddedInParent added in QGIS 2.18
 
 .. seealso:: :py:func:`layerOriginalLegendNodes`
-
-.. versionadded:: 2.6
 %End
 
     QList<QgsLayerTreeModelLegendNode *> layerOriginalLegendNodes( QgsLayerTreeLayer *nodeLayer );
@@ -162,15 +155,11 @@ Returns filtered list of active legend nodes attached to a particular layer node
 Returns original (unfiltered) list of legend nodes attached to a particular layer node
 
 .. seealso:: :py:func:`layerLegendNodes`
-
-.. versionadded:: 2.14
 %End
 
     QgsLayerTreeModelLegendNode *legendNodeEmbeddedInParent( QgsLayerTreeLayer *nodeLayer ) const;
 %Docstring
 Returns legend node that may be embedded in parent (i.e. its icon will be used for layer's icon).
-
-.. versionadded:: 2.18
 %End
 
     QgsLayerTreeModelLegendNode *findLegendNode( const QString &layerId, const QString &ruleKey ) const;
@@ -182,8 +171,6 @@ and rule key.
 :param ruleKey: legend node rule key
 
 :return: :py:class:`QgsLayerTreeModelLegendNode` if found
-
-.. versionadded:: 2.14
 %End
 
     QgsLayerTree *rootGroup() const;
@@ -194,8 +181,6 @@ Returns pointer to the root node of the layer tree. Always a non ``None`` value.
     void setRootGroup( QgsLayerTree *newRootGroup );
 %Docstring
 Reset the model and use a new root group node
-
-.. versionadded:: 2.6
 %End
 
     void refreshLayerLegend( QgsLayerTreeLayer *nodeLayer );
@@ -238,8 +223,6 @@ The ``scale`` value indicates the scale denominator, e.g. 1000.0 for a 1:1000 ma
 Setting ``scale`` <= 0 will disable the functionality.
 
 .. seealso:: :py:func:`legendFilterByScale`
-
-.. versionadded:: 2.6
 %End
 
     double legendFilterByScale() const;
@@ -249,20 +232,20 @@ The  scale value indicates the scale denominator, e.g. 1000.0 for a 1:1000 map.
 A scale <= 0 indicates that no scale filtering is being performed.
 
 .. seealso:: :py:func:`setLegendFilterByScale`
-
-.. versionadded:: 2.6
 %End
 
-    void setLegendFilterByMap( const QgsMapSettings *settings );
+ void setLegendFilterByMap( const QgsMapSettings *settings ) /Deprecated="Since 3.32. Use setFilterSettings() instead."/;
 %Docstring
 Force only display of legend nodes which are valid for given map settings.
 Setting ``None`` or invalid map settings will disable the functionality.
 Ownership of map settings pointer does not change, a copy is made.
 
-.. versionadded:: 2.6
+.. deprecated:: 3.32
+
+   Use :py:func:`~QgsLayerTreeModel.setFilterSettings` instead.
 %End
 
-    void setLegendFilter( const QgsMapSettings *settings, bool useExtent = true, const QgsGeometry &polygon = QgsGeometry(), bool useExpressions = true );
+ void setLegendFilter( const QgsMapSettings *settings, bool useExtent = true, const QgsGeometry &polygon = QgsGeometry(), bool useExpressions = true ) /Deprecated="Since 3.32. Use setFilterSettings() instead."/;
 %Docstring
 Filter display of legend nodes for given map settings
 
@@ -271,44 +254,78 @@ Filter display of legend nodes for given map settings
 :param polygon: If not empty, this polygon will be used instead of the map extent to filter legend nodes
 :param useExpressions: Whether to use legend node filter expressions
 
-.. versionadded:: 2.14
+.. deprecated:: 3.32
+
+   Use :py:func:`~QgsLayerTreeModel.setFilterSettings` instead.
 %End
 
     const QgsMapSettings *legendFilterMapSettings() const;
 %Docstring
 Returns the current map settings used for the current legend filter (or ``None`` if none is enabled)
+%End
 
-.. versionadded:: 2.14
+    void setFilterSettings( const QgsLayerTreeFilterSettings *settings = 0 );
+%Docstring
+Sets the filter ``settings`` to use to filter legend nodes.
+
+Set to ``None`` to disable legend filter.
+
+.. seealso:: :py:func:`filterSettings`
+
+.. versionadded:: 3.32
+%End
+
+    const QgsLayerTreeFilterSettings *filterSettings() const;
+%Docstring
+Returns the filter settings to use to filter legend nodes. May be ``None``.
+
+.. seealso:: :py:func:`setFilterSettings`
+
+.. versionadded:: 3.32
 %End
 
     void setLegendMapViewData( double mapUnitsPerPixel, int dpi, double scale );
 %Docstring
 Give the layer tree model hints about the currently associated map view
 so that legend nodes that use map units can be scaled correctly
-
-.. versionadded:: 2.6
 %End
 
     void legendMapViewData( double *mapUnitsPerPixel /Out/, int *dpi /Out/, double *scale  /Out/ ) const;
 %Docstring
 Gets hints about map view - to be used in legend nodes. Arguments that are not ``None`` will receive values.
 If there are no valid map view data (from previous call to :py:func:`~QgsLayerTreeModel.setLegendMapViewData`), returned values are zeros.
-
-.. versionadded:: 2.6
 %End
 
     QMap<QString, QString> layerStyleOverrides() const;
 %Docstring
 Gets map of map layer style overrides (key: layer ID, value: style name) where a different style should be used instead of the current one
-
-.. versionadded:: 2.10
 %End
 
     void setLayerStyleOverrides( const QMap<QString, QString> &overrides );
 %Docstring
 Sets map of map layer style overrides (key: layer ID, value: style name) where a different style should be used instead of the current one
+%End
 
-.. versionadded:: 2.10
+    void addTargetScreenProperties( const QgsScreenProperties &properties );
+%Docstring
+Adds additional target screen ``properties`` to use when generating icons for Qt.DecorationRole data.
+
+This allows icons to be generated at an icon device pixel ratio and DPI which
+corresponds exactly to the view's screen properties in which this model is used.
+
+.. versionadded:: 3.32
+%End
+
+    QSet< QgsScreenProperties > targetScreenProperties() const;
+%Docstring
+Returns the target screen properties to use when generating icons.
+
+This allows icons to be generated at an icon device pixel ratio and DPI which
+corresponds exactly to the view's screen properties in which this model is used.
+
+.. seealso:: :py:func:`addTargetScreenProperties`
+
+.. versionadded:: 3.32
 %End
 
     static int scaleIconSize( int standardSize );
@@ -322,6 +339,25 @@ displays.
 .. versionadded:: 3.6
 %End
 
+    void waitForHitTestBlocking();
+%Docstring
+When a current hit test for visible legend items is in progress, calling this
+method will block until that hit test is complete.
+
+.. versionadded:: 3.32
+%End
+
+    bool hitTestInProgress() const;
+%Docstring
+Returns ``True`` if a hit test for visible legend items is currently in progress.
+
+.. seealso:: :py:func:`hitTestStarted`
+
+.. seealso:: :py:func:`hitTestCompleted`
+
+.. versionadded:: 3.32
+%End
+
   signals:
 
     void messageEmitted( const QString &message, Qgis::MessageLevel level = Qgis::MessageLevel::Info, int duration = 5 );
@@ -329,6 +365,28 @@ displays.
 Emits a message than can be displayed to the user in a GUI class
 
 .. versionadded:: 3.14
+%End
+
+    void hitTestStarted();
+%Docstring
+Emitted when a hit test for visible legend items starts.
+
+.. seealso:: :py:func:`hitTestInProgress`
+
+.. seealso:: :py:func:`hitTestCompleted`
+
+.. versionadded:: 3.32
+%End
+
+    void hitTestCompleted();
+%Docstring
+Emitted when a hit test for visible legend items completes.
+
+.. seealso:: :py:func:`hitTestInProgress`
+
+.. seealso:: :py:func:`hitTestStarted`
+
+.. versionadded:: 3.32
 %End
 
   protected slots:
@@ -342,8 +400,6 @@ Emits a message than can be displayed to the user in a GUI class
     void nodeNameChanged( QgsLayerTreeNode *node, const QString &name );
 %Docstring
 Updates model when node's name has changed
-
-.. versionadded:: 3.0
 %End
 
     void nodeCustomPropertyChanged( QgsLayerTreeNode *node, const QString &key );
@@ -354,7 +410,7 @@ Updates model when node's name has changed
 
     void layerFlagsChanged();
 %Docstring
-Emitted when layer flags have changed.
+Triggered when layer flags have changed.
 
 .. versionadded:: 3.18
 %End
@@ -386,8 +442,6 @@ emit :py:func:`~QgsLayerTreeModel.dataChanged` for layer tree node items
 %Docstring
 Updates layer data for scale dependent layers, should be called when map scale changes.
 Emits :py:func:`~QgsLayerTreeModel.dataChanged` for all scale dependent layers.
-
-.. versionadded:: 2.16
 %End
 
     static QIcon iconGroup();
@@ -424,6 +478,10 @@ Filter nodes from :py:class:`QgsMapLayerLegend` according to the current filteri
 
 
 
+
+
+
+
 };
 
 QFlags<QgsLayerTreeModel::Flag> operator|(QgsLayerTreeModel::Flag f1, QFlags<QgsLayerTreeModel::Flag> f2);
@@ -436,5 +494,5 @@ QFlags<QgsLayerTreeModel::Flag> operator|(QgsLayerTreeModel::Flag f1, QFlags<Qgs
  *                                                                      *
  * src/core/layertree/qgslayertreemodel.h                               *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

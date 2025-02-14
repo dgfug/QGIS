@@ -8,6 +8,7 @@
 
 #include <string>
 #include <vector>
+#include <cstdint>
 
 #include "mdal.h"
 
@@ -88,6 +89,7 @@ namespace MDAL
       DateTime operator+( const RelativeTimestamp &duration ) const;
       DateTime operator-( const RelativeTimestamp &duration ) const;
       bool operator==( const DateTime &other ) const;
+      bool operator!=( const DateTime &other ) const;
       bool operator<( const DateTime &other ) const;
 
       bool isValid() const;

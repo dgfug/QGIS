@@ -23,7 +23,6 @@
 
 SIP_NO_FILE
 
-
 /**
  * \ingroup gui
  * \brief Wraps a value map widget.
@@ -41,7 +40,6 @@ class GUI_EXPORT QgsValueMapWidgetWrapper : public QgsEditorWidgetWrapper
 {
     Q_OBJECT
   public:
-
     /**
      * Constructor for QgsValueMapWidgetWrapper.
      *
@@ -68,7 +66,7 @@ class GUI_EXPORT QgsValueMapWidgetWrapper : public QgsEditorWidgetWrapper
     void updateValues( const QVariant &value, const QVariantList & = QVariantList() ) override;
 
     QComboBox *mComboBox = nullptr;
-
 };
+
 
 #endif // QGSVALUEMAPWIDGETWRAPPER_H

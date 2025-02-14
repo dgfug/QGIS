@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgscoordinateformatter.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -21,8 +21,6 @@ no consideration for the validity of converting coordinates to the various displ
 is up to the caller to ensure that sensible formats are used for particular coordinates. For instance,
 ensuring that only geographic coordinates and not projected coordinates are formatted to degree
 based formats.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -72,7 +70,7 @@ Optional ``flags`` can be specified to control the output format.
 .. seealso:: :py:func:`formatX`
 %End
 
-    static QString format( const QgsPointXY &point, Format format, int precision = 12,  FormatFlags flags = FlagDegreesUseStringSuffix );
+    static QString format( const QgsPointXY &point, Format format, int precision = 12,  FormatFlags flags = FlagDegreesUseStringSuffix, Qgis::CoordinateOrder order = Qgis::CoordinateOrder::XY );
 %Docstring
 Formats a ``point`` according to the specified parameters.
 
@@ -81,12 +79,16 @@ The ``format`` argument indicates the desired display format for the coordinate.
 The ``precision`` argument gives the number of decimal places to include for coordinates.
 
 Optional ``flags`` can be specified to control the output format.
+
+Since QGIS 3.26 the optional ``order`` argument can be used to control the order of the coordinates.
 %End
 
-    static QString asPair( double x, double y, int precision = 12 );
+    static QString asPair( double x, double y, int precision = 12, Qgis::CoordinateOrder order = Qgis::CoordinateOrder::XY );
 %Docstring
 Formats coordinates as an "``x``,``y``" pair, with optional decimal ``precision`` (number
 of decimal places to include).
+
+Since QGIS 3.26 the optional ``order`` argument can be used to control the order of the coordinates.
 %End
 
     static QChar separator( );
@@ -107,5 +109,5 @@ QFlags<QgsCoordinateFormatter::FormatFlag> operator|(QgsCoordinateFormatter::For
  *                                                                      *
  * src/core/qgscoordinateformatter.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -16,12 +16,10 @@
  ***************************************************************************/
 
 #include "qgslabelinggui.h"
+#include "moc_qgslabelinggui.cpp"
 #include "qgsvectorlayer.h"
 #include "qgsmapcanvas.h"
-#include "qgsvectorlayerlabeling.h"
 #include "qgsproject.h"
-#include "qgsauxiliarystorage.h"
-#include "qgsnewauxiliarylayerdialog.h"
 #include "qgsexpressioncontextutils.h"
 #include "qgsexpressionbuilderdialog.h"
 #include "qgshelp.h"
@@ -32,8 +30,10 @@
 #include "callouts/qgscalloutwidget.h"
 #include "qgslabelobstaclesettingswidget.h"
 #include "qgslabellineanchorwidget.h"
-
-#include <mutex>
+#include "qgsprojectstylesettings.h"
+#include "qgsgui.h"
+#include "qgsmeshlayer.h"
+#include "qgsvectortilelayer.h"
 
 #include <QButtonGroup>
 #include <QMessageBox>
@@ -43,14 +43,27 @@
 QgsExpressionContext QgsLabelingGui::createExpressionContext() const
 {
   QgsExpressionContext expContext;
-  expContext << QgsExpressionContextUtils::globalScope()
-             << QgsExpressionContextUtils::projectScope( QgsProject::instance() )
-             << QgsExpressionContextUtils::atlasScope( nullptr );
-  if ( mCanvas )
-    expContext << QgsExpressionContextUtils::mapSettingsScope( mCanvas->mapSettings() );
+  if ( mMapCanvas )
+  {
+    expContext = mMapCanvas->createExpressionContext();
+  }
+  else
+  {
+    expContext << QgsExpressionContextUtils::globalScope()
+               << QgsExpressionContextUtils::projectScope( QgsProject::instance() )
+               << QgsExpressionContextUtils::atlasScope( nullptr );
+  }
 
   if ( mLayer )
     expContext << QgsExpressionContextUtils::layerScope( mLayer );
+
+  if ( mLayer && mLayer->type() == Qgis::LayerType::Mesh )
+  {
+    if ( mGeomType == Qgis::GeometryType::Point )
+      expContext << QgsExpressionContextUtils::meshExpressionScope( QgsMesh::ElementType::Vertex );
+    else if ( mGeomType == Qgis::GeometryType::Polygon )
+      expContext << QgsExpressionContextUtils::meshExpressionScope( QgsMesh::ElementType::Face );
+  }
 
   expContext << QgsExpressionContextUtils::updateSymbolScope( nullptr, new QgsExpressionContextScope() );
 
@@ -61,34 +74,6 @@ QgsExpressionContext QgsLabelingGui::createExpressionContext() const
   return expContext;
 }
 
-static bool _initCalloutWidgetFunction( const QString &name, QgsCalloutWidgetFunc f )
-{
-  QgsCalloutRegistry *registry = QgsApplication::calloutRegistry();
-
-  QgsCalloutAbstractMetadata *abstractMetadata = registry->calloutMetadata( name );
-  if ( !abstractMetadata )
-  {
-    QgsDebugMsg( QStringLiteral( "Failed to find callout entry in registry: %1" ).arg( name ) );
-    return false;
-  }
-  QgsCalloutMetadata *metadata = dynamic_cast<QgsCalloutMetadata *>( abstractMetadata );
-  if ( !metadata )
-  {
-    QgsDebugMsg( QStringLiteral( "Failed to cast callout's metadata: " ) .arg( name ) );
-    return false;
-  }
-  metadata->setWidgetFunction( f );
-  return true;
-}
-
-void QgsLabelingGui::initCalloutWidgets()
-{
-  _initCalloutWidgetFunction( QStringLiteral( "simple" ), QgsSimpleLineCalloutWidget::create );
-  _initCalloutWidgetFunction( QStringLiteral( "manhattan" ), QgsManhattanLineCalloutWidget::create );
-  _initCalloutWidgetFunction( QStringLiteral( "curved" ), QgsCurvedLineCalloutWidget::create );
-  _initCalloutWidgetFunction( QStringLiteral( "balloon" ), QgsBalloonCalloutWidget::create );
-}
-
 void QgsLabelingGui::updateCalloutWidget( QgsCallout *callout )
 {
   if ( !callout )
@@ -97,24 +82,30 @@ void QgsLabelingGui::updateCalloutWidget( QgsCallout *callout )
     return;
   }
 
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mLayer );
+  if ( !vLayer )
+  {
+    mCalloutStackedWidget->setCurrentWidget( pageDummy );
+    return;
+  }
+
   if ( mCalloutStackedWidget->currentWidget() != pageDummy )
   {
     // stop updating from the original widget
-    if ( QgsCalloutWidget *pew = qobject_cast< QgsCalloutWidget * >( mCalloutStackedWidget->currentWidget() ) )
+    if ( QgsCalloutWidget *pew = qobject_cast<QgsCalloutWidget *>( mCalloutStackedWidget->currentWidget() ) )
       disconnect( pew, &QgsCalloutWidget::changed, this, &QgsLabelingGui::updatePreview );
   }
 
   QgsCalloutRegistry *registry = QgsApplication::calloutRegistry();
   if ( QgsCalloutAbstractMetadata *am = registry->calloutMetadata( callout->type() ) )
   {
-    if ( QgsCalloutWidget *w = am->createCalloutWidget( mLayer ) )
+    if ( QgsCalloutWidget *w = am->createCalloutWidget( vLayer ) )
     {
-
-      QgsWkbTypes::GeometryType geometryType = mGeomType;
+      Qgis::GeometryType geometryType = mGeomType;
       if ( mGeometryGeneratorGroupBox->isChecked() )
-        geometryType = mGeometryGeneratorType->currentData().value<QgsWkbTypes::GeometryType>();
-      else if ( mLayer )
-        geometryType = mLayer->geometryType();
+        geometryType = mGeometryGeneratorType->currentData().value<Qgis::GeometryType>();
+      else if ( vLayer )
+        geometryType = vLayer->geometryType();
       w->setGeometryType( geometryType );
       w->setCallout( callout );
 
@@ -132,20 +123,25 @@ void QgsLabelingGui::updateCalloutWidget( QgsCallout *callout )
 
 void QgsLabelingGui::showObstacleSettings()
 {
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mLayer );
+  if ( !vLayer )
+  {
+    return;
+  }
+
   QgsExpressionContext context = createExpressionContext();
 
   QgsSymbolWidgetContext symbolContext;
   symbolContext.setExpressionContext( &context );
   symbolContext.setMapCanvas( mMapCanvas );
 
-  QgsLabelObstacleSettingsWidget *widget = new QgsLabelObstacleSettingsWidget( nullptr, mLayer );
+  QgsLabelObstacleSettingsWidget *widget = new QgsLabelObstacleSettingsWidget( nullptr, vLayer );
   widget->setDataDefinedProperties( mDataDefinedProperties );
   widget->setSettings( mObstacleSettings );
-  widget->setGeometryType( mLayer ? mLayer->geometryType() : QgsWkbTypes::UnknownGeometry );
+  widget->setGeometryType( vLayer ? vLayer->geometryType() : Qgis::GeometryType::Unknown );
   widget->setContext( symbolContext );
 
-  auto applySettings = [ = ]
-  {
+  auto applySettings = [=] {
     mObstacleSettings = widget->settings();
     const QgsPropertyCollection obstacleDataDefinedProperties = widget->dataDefinedProperties();
     widget->updateDataDefinedProperties( mDataDefinedProperties );
@@ -155,8 +151,7 @@ void QgsLabelingGui::showObstacleSettings()
   QgsPanelWidget *panel = QgsPanelWidget::findParentPanel( this );
   if ( panel && panel->dockMode() )
   {
-    connect( widget, &QgsLabelSettingsWidgetBase::changed, this, [ = ]
-    {
+    connect( widget, &QgsLabelSettingsWidgetBase::changed, this, [=] {
       applySettings();
     } );
     panel->openPanel( widget );
@@ -166,8 +161,7 @@ void QgsLabelingGui::showObstacleSettings()
     QgsLabelSettingsWidgetDialog dialog( widget, this );
 
     dialog.buttonBox()->addButton( QDialogButtonBox::Help );
-    connect( dialog.buttonBox(), &QDialogButtonBox::helpRequested, this, [ = ]
-    {
+    connect( dialog.buttonBox(), &QDialogButtonBox::helpRequested, this, [=] {
       QgsHelp::openHelp( QStringLiteral( "style_library/label_settings.html#obstacles" ) );
     } );
 
@@ -182,24 +176,30 @@ void QgsLabelingGui::showObstacleSettings()
 
 void QgsLabelingGui::showLineAnchorSettings()
 {
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mLayer );
+  if ( !vLayer )
+  {
+    return;
+  }
+
   QgsExpressionContext context = createExpressionContext();
 
   QgsSymbolWidgetContext symbolContext;
   symbolContext.setExpressionContext( &context );
   symbolContext.setMapCanvas( mMapCanvas );
 
-  QgsLabelLineAnchorWidget *widget = new QgsLabelLineAnchorWidget( nullptr, mLayer );
+  QgsLabelLineAnchorWidget *widget = new QgsLabelLineAnchorWidget( nullptr, vLayer );
   widget->setDataDefinedProperties( mDataDefinedProperties );
   widget->setSettings( mLineSettings );
-  widget->setGeometryType( mLayer ? mLayer->geometryType() : QgsWkbTypes::UnknownGeometry );
+  widget->setGeometryType( vLayer ? vLayer->geometryType() : Qgis::GeometryType::Unknown );
   widget->setContext( symbolContext );
 
-  auto applySettings = [ = ]
-  {
+  auto applySettings = [=] {
     const QgsLabelLineSettings widgetSettings = widget->settings();
     mLineSettings.setLineAnchorPercent( widgetSettings.lineAnchorPercent() );
     mLineSettings.setAnchorType( widgetSettings.anchorType() );
     mLineSettings.setAnchorClipping( widgetSettings.anchorClipping() );
+    mLineSettings.setAnchorTextPoint( widgetSettings.anchorTextPoint() );
     const QgsPropertyCollection obstacleDataDefinedProperties = widget->dataDefinedProperties();
     widget->updateDataDefinedProperties( mDataDefinedProperties );
     emit widgetChanged();
@@ -208,8 +208,7 @@ void QgsLabelingGui::showLineAnchorSettings()
   QgsPanelWidget *panel = QgsPanelWidget::findParentPanel( this );
   if ( panel && panel->dockMode() )
   {
-    connect( widget, &QgsLabelSettingsWidgetBase::changed, this, [ = ]
-    {
+    connect( widget, &QgsLabelSettingsWidgetBase::changed, this, [=] {
       applySettings();
     } );
     panel->openPanel( widget );
@@ -217,6 +216,12 @@ void QgsLabelingGui::showLineAnchorSettings()
   else
   {
     QgsLabelSettingsWidgetDialog dialog( widget, this );
+
+    dialog.buttonBox()->addButton( QDialogButtonBox::Help );
+    connect( dialog.buttonBox(), &QDialogButtonBox::helpRequested, this, [=] {
+      QgsHelp::openHelp( QStringLiteral( "style_library/label_settings.html#placement-for-line-layers" ) );
+    } );
+
     if ( dialog.exec() )
     {
       applySettings();
@@ -226,32 +231,79 @@ void QgsLabelingGui::showLineAnchorSettings()
   }
 }
 
-QgsLabelingGui::QgsLabelingGui( QgsVectorLayer *layer, QgsMapCanvas *mapCanvas, const QgsPalLayerSettings &layerSettings, QWidget *parent, QgsWkbTypes::GeometryType geomType )
+QgsLabelingGui::QgsLabelingGui( QgsVectorLayer *layer, QgsMapCanvas *mapCanvas, const QgsPalLayerSettings &layerSettings, QWidget *parent, Qgis::GeometryType geomType )
   : QgsTextFormatWidget( mapCanvas, parent, QgsTextFormatWidget::Labeling, layer )
-  , mSettings( layerSettings )
   , mMode( NoLabels )
-  , mCanvas( mapCanvas )
+  , mSettings( layerSettings )
 {
   mGeomType = geomType;
-  static std::once_flag initialized;
-  std::call_once( initialized, [ = ]( )
-  {
-    initCalloutWidgets();
-  } );
 
-  mFontMultiLineAlignComboBox->addItem( tr( "Left" ), QgsPalLayerSettings::MultiLeft );
-  mFontMultiLineAlignComboBox->addItem( tr( "Center" ), QgsPalLayerSettings::MultiCenter );
-  mFontMultiLineAlignComboBox->addItem( tr( "Right" ), QgsPalLayerSettings::MultiRight );
-  mFontMultiLineAlignComboBox->addItem( tr( "Justify" ), QgsPalLayerSettings::MultiJustify );
+  init();
 
-  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( QgsUnitTypes::AngleDegrees ), QgsUnitTypes::AngleDegrees );
-  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( QgsUnitTypes::AngleRadians ), QgsUnitTypes::AngleRadians );
-  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( QgsUnitTypes::AngleGon ), QgsUnitTypes::AngleGon );
-  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( QgsUnitTypes::AngleMinutesOfArc ), QgsUnitTypes::AngleMinutesOfArc );
-  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( QgsUnitTypes::AngleSecondsOfArc ), QgsUnitTypes::AngleSecondsOfArc );
-  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( QgsUnitTypes::AngleTurn ), QgsUnitTypes::AngleTurn );
-  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( QgsUnitTypes::AngleMilliradiansSI ), QgsUnitTypes::AngleMilliradiansSI );
-  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( QgsUnitTypes::AngleMilNATO ), QgsUnitTypes::AngleMilNATO );
+  setLayer( layer );
+}
+
+QgsLabelingGui::QgsLabelingGui( QgsMeshLayer *layer, QgsMapCanvas *mapCanvas, const QgsPalLayerSettings &settings, QWidget *parent, Qgis::GeometryType geomType )
+  : QgsTextFormatWidget( mapCanvas, parent, QgsTextFormatWidget::Labeling, layer )
+  , mMode( NoLabels )
+  , mSettings( settings )
+{
+  mGeomType = geomType;
+
+  init();
+
+  setLayer( layer );
+}
+
+QgsLabelingGui::QgsLabelingGui( QgsVectorTileLayer *layer, QgsMapCanvas *mapCanvas, const QgsPalLayerSettings &settings, QWidget *parent, Qgis::GeometryType geomType )
+  : QgsTextFormatWidget( mapCanvas, parent, QgsTextFormatWidget::Labeling, layer )
+  , mMode( NoLabels )
+  , mSettings( settings )
+{
+  mGeomType = geomType;
+
+  init();
+
+  setLayer( layer );
+}
+
+
+QgsLabelingGui::QgsLabelingGui( QgsMapCanvas *mapCanvas, QWidget *parent, QgsMapLayer *layer )
+  : QgsTextFormatWidget( mapCanvas, parent, QgsTextFormatWidget::Labeling, layer )
+  , mMode( NoLabels )
+{
+}
+
+
+QgsLabelingGui::QgsLabelingGui( QgsMapCanvas *mapCanvas, const QgsPalLayerSettings &settings, QWidget *parent )
+  : QgsTextFormatWidget( mapCanvas, parent, QgsTextFormatWidget::Labeling, nullptr )
+  , mMode( NoLabels )
+  , mSettings( settings )
+{
+  init();
+
+  setLayer( nullptr );
+}
+
+void QgsLabelingGui::init()
+{
+  QgsGui::initCalloutWidgets();
+
+  mStackedWidgetLabelWith->setSizeMode( QgsStackedWidget::SizeMode::CurrentPageOnly );
+
+  mFontMultiLineAlignComboBox->addItem( tr( "Left" ), static_cast<int>( Qgis::LabelMultiLineAlignment::Left ) );
+  mFontMultiLineAlignComboBox->addItem( tr( "Center" ), static_cast<int>( Qgis::LabelMultiLineAlignment::Center ) );
+  mFontMultiLineAlignComboBox->addItem( tr( "Right" ), static_cast<int>( Qgis::LabelMultiLineAlignment::Right ) );
+  mFontMultiLineAlignComboBox->addItem( tr( "Justify" ), static_cast<int>( Qgis::LabelMultiLineAlignment::Justify ) );
+
+  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( Qgis::AngleUnit::Degrees ), static_cast<int>( Qgis::AngleUnit::Degrees ) );
+  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( Qgis::AngleUnit::Radians ), static_cast<int>( Qgis::AngleUnit::Radians ) );
+  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( Qgis::AngleUnit::Gon ), static_cast<int>( Qgis::AngleUnit::Gon ) );
+  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( Qgis::AngleUnit::MinutesOfArc ), static_cast<int>( Qgis::AngleUnit::MinutesOfArc ) );
+  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( Qgis::AngleUnit::SecondsOfArc ), static_cast<int>( Qgis::AngleUnit::SecondsOfArc ) );
+  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( Qgis::AngleUnit::Turn ), static_cast<int>( Qgis::AngleUnit::Turn ) );
+  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( Qgis::AngleUnit::MilliradiansSI ), static_cast<int>( Qgis::AngleUnit::MilliradiansSI ) );
+  mCoordRotationUnitComboBox->addItem( QgsUnitTypes::toString( Qgis::AngleUnit::MilNATO ), static_cast<int>( Qgis::AngleUnit::MilNATO ) );
 
   // connections for groupboxes with separate activation checkboxes (that need to honor data defined setting)
   connect( mBufferDrawChkBx, &QAbstractButton::toggled, this, &QgsLabelingGui::updateUi );
@@ -275,22 +327,23 @@ QgsLabelingGui::QgsLabelingGui( QgsVectorLayer *layer, QgsMapCanvas *mapCanvas, 
 
   mFieldExpressionWidget->registerExpressionContextGenerator( this );
 
-  mMinScaleWidget->setMapCanvas( mCanvas );
+  mMinScaleWidget->setMapCanvas( mMapCanvas );
   mMinScaleWidget->setShowCurrentScaleButton( true );
-  mMaxScaleWidget->setMapCanvas( mCanvas );
+  mMaxScaleWidget->setMapCanvas( mMapCanvas );
   mMaxScaleWidget->setShowCurrentScaleButton( true );
+
+  mGeometryGeneratorExpressionButton->setSizePolicy( QSizePolicy::Minimum, QSizePolicy::Minimum );
+  mGeometryGeneratorExpressionButton->setIcon( QgsApplication::getThemeIcon( QStringLiteral( "/mIconExpression.svg" ) ) );
 
   const QStringList calloutTypes = QgsApplication::calloutRegistry()->calloutTypes();
   for ( const QString &type : calloutTypes )
   {
-    mCalloutStyleComboBox->addItem( QgsApplication::calloutRegistry()->calloutMetadata( type )->icon(),
-                                    QgsApplication::calloutRegistry()->calloutMetadata( type )->visibleName(), type );
+    mCalloutStyleComboBox->addItem( QgsApplication::calloutRegistry()->calloutMetadata( type )->icon(), QgsApplication::calloutRegistry()->calloutMetadata( type )->visibleName(), type );
   }
 
   mGeometryGeneratorWarningLabel->setStyleSheet( QStringLiteral( "color: #FFC107;" ) );
   mGeometryGeneratorWarningLabel->setTextInteractionFlags( Qt::TextBrowserInteraction );
-  connect( mGeometryGeneratorWarningLabel, &QLabel::linkActivated, this, [this]( const QString & link )
-  {
+  connect( mGeometryGeneratorWarningLabel, &QLabel::linkActivated, this, [this]( const QString &link ) {
     if ( link == QLatin1String( "#determineGeometryGeneratorType" ) )
       determineGeometryGeneratorType();
   } );
@@ -298,15 +351,13 @@ QgsLabelingGui::QgsLabelingGui( QgsVectorLayer *layer, QgsMapCanvas *mapCanvas, 
   connect( mCalloutStyleComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsLabelingGui::calloutTypeChanged );
 
   mLblNoObstacle1->installEventFilter( this );
-
-  setLayer( layer );
 }
 
 void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
 {
   mPreviewFeature = QgsFeature();
 
-  if ( ( !mapLayer || mapLayer->type() != QgsMapLayerType::VectorLayer ) && mGeomType == QgsWkbTypes::UnknownGeometry )
+  if ( ( !mapLayer || mapLayer->type() != Qgis::LayerType::Vector ) && mGeomType == Qgis::GeometryType::Unknown )
   {
     setEnabled( false );
     return;
@@ -314,17 +365,17 @@ void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
 
   setEnabled( true );
 
-  QgsVectorLayer *layer = static_cast<QgsVectorLayer *>( mapLayer );
-  mLayer = layer;
+  mLayer = mapLayer;
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mapLayer );
 
-  mTextFormatsListWidget->setLayerType( mLayer ? mLayer->geometryType() : mGeomType );
-  mBackgroundMarkerSymbolButton->setLayer( mLayer );
-  mBackgroundFillSymbolButton->setLayer( mLayer );
+  mTextFormatsListWidget->setLayerType( vLayer ? vLayer->geometryType() : mGeomType );
+  mBackgroundMarkerSymbolButton->setLayer( vLayer );
+  mBackgroundFillSymbolButton->setLayer( vLayer );
 
   // load labeling settings from layer
   updateGeometryTypeBasedWidgets();
 
-  mFieldExpressionWidget->setLayer( mLayer );
+  mFieldExpressionWidget->setLayer( mapLayer );
   QgsDistanceArea da;
   if ( mLayer )
     da.setSourceCrs( mLayer->crs(), QgsProject::instance()->transformContext() );
@@ -340,9 +391,9 @@ void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
   mGeometryGeneratorGroupBox->setChecked( mSettings.geometryGeneratorEnabled );
   if ( !mSettings.geometryGeneratorEnabled )
     mGeometryGeneratorGroupBox->setCollapsed( true );
-  mGeometryGeneratorType->setCurrentIndex( mGeometryGeneratorType->findData( mSettings.geometryGeneratorType ) );
+  mGeometryGeneratorType->setCurrentIndex( mGeometryGeneratorType->findData( QVariant::fromValue( mSettings.geometryGeneratorType ) ) );
 
-  updateWidgetForFormat( mSettings.format().isValid() ? mSettings.format() : QgsStyle::defaultStyle()->defaultTextFormat( QgsStyle::TextFormatContext::Labeling ) );
+  updateWidgetForFormat( mSettings.format().isValid() ? mSettings.format() : QgsStyle::defaultTextFormatForProject( QgsProject::instance(), QgsStyle::TextFormatContext::Labeling ) );
 
   mFieldExpressionWidget->setRow( -1 );
   mFieldExpressionWidget->setField( mSettings.fieldName );
@@ -356,21 +407,26 @@ void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
   mLineDistanceSpnBx->setValue( mSettings.dist );
   mLineDistanceUnitWidget->setUnit( mSettings.distUnits );
   mLineDistanceUnitWidget->setMapUnitScale( mSettings.distMapUnitScale );
-  mOffsetTypeComboBox->setCurrentIndex( mOffsetTypeComboBox->findData( mSettings.offsetType ) );
-  mQuadrantBtnGrp->button( static_cast<int>( mSettings.quadOffset ) )->setChecked( true );
+
+  mMaximumDistanceSpnBx->setValue( mSettings.pointSettings().maximumDistance() );
+  mMaximumDistanceUnitWidget->setUnit( mSettings.pointSettings().maximumDistanceUnit() );
+  mMaximumDistanceUnitWidget->setMapUnitScale( mSettings.pointSettings().maximumDistanceMapUnitScale() );
+
+  mOffsetTypeComboBox->setCurrentIndex( mOffsetTypeComboBox->findData( static_cast<int>( mSettings.offsetType ) ) );
+  mQuadrantBtnGrp->button( static_cast<int>( mSettings.pointSettings().quadrant() ) )->setChecked( true );
   mPointOffsetXSpinBox->setValue( mSettings.xOffset );
   mPointOffsetYSpinBox->setValue( mSettings.yOffset );
   mPointOffsetUnitWidget->setUnit( mSettings.offsetUnits );
   mPointOffsetUnitWidget->setMapUnitScale( mSettings.labelOffsetMapUnitScale );
   mPointAngleSpinBox->setValue( mSettings.angleOffset );
-  chkLineAbove->setChecked( mSettings.lineSettings().placementFlags() & QgsLabeling::LinePlacementFlag::AboveLine );
-  chkLineBelow->setChecked( mSettings.lineSettings().placementFlags() & QgsLabeling::LinePlacementFlag::BelowLine );
-  chkLineOn->setChecked( mSettings.lineSettings().placementFlags() & QgsLabeling::LinePlacementFlag::OnLine );
-  chkLineOrientationDependent->setChecked( !( mSettings.lineSettings().placementFlags() & QgsLabeling::LinePlacementFlag::MapOrientation ) );
+  chkLineAbove->setChecked( mSettings.lineSettings().placementFlags() & Qgis::LabelLinePlacementFlag::AboveLine );
+  chkLineBelow->setChecked( mSettings.lineSettings().placementFlags() & Qgis::LabelLinePlacementFlag::BelowLine );
+  chkLineOn->setChecked( mSettings.lineSettings().placementFlags() & Qgis::LabelLinePlacementFlag::OnLine );
+  chkLineOrientationDependent->setChecked( !( mSettings.lineSettings().placementFlags() & Qgis::LabelLinePlacementFlag::MapOrientation ) );
 
-  mCheckAllowLabelsOutsidePolygons->setChecked( mSettings.polygonPlacementFlags() & QgsLabeling::PolygonPlacementFlag::AllowPlacementOutsideOfPolygon );
+  mCheckAllowLabelsOutsidePolygons->setChecked( mSettings.polygonPlacementFlags() & Qgis::LabelPolygonPlacementFlag::AllowPlacementOutsideOfPolygon );
 
-  const int placementIndex = mPlacementModeComboBox->findData( mSettings.placement );
+  const int placementIndex = mPlacementModeComboBox->findData( static_cast<int>( mSettings.placement ) );
   if ( placementIndex >= 0 )
   {
     mPlacementModeComboBox->setCurrentIndex( placementIndex );
@@ -397,7 +453,11 @@ void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
   mLineSettings = mSettings.lineSettings();
 
   chkLabelPerFeaturePart->setChecked( mSettings.labelPerPart );
-  mPalShowAllLabelsForLayerChkBx->setChecked( mSettings.displayAll );
+
+  mComboOverlapHandling->setCurrentIndex( mComboOverlapHandling->findData( static_cast<int>( mSettings.placementSettings().overlapHandling() ) ) );
+  mCheckAllowDegradedPlacement->setChecked( mSettings.placementSettings().allowDegradedPlacement() );
+  mPrioritizationComboBox->setCurrentIndex( mPrioritizationComboBox->findData( QVariant::fromValue( mSettings.placementSettings().prioritization() ) ) );
+
   chkMergeLines->setChecked( mSettings.lineSettings().mergeLines() );
   mMinSizeSpinBox->setValue( mSettings.thinningSettings().minimumFeatureSize() );
   mLimitLabelChkBox->setChecked( mSettings.thinningSettings().limitNumberOfLabelsEnabled() );
@@ -421,9 +481,9 @@ void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
   mAutoWrapLengthSpinBox->setValue( mSettings.autoWrapLength );
   mAutoWrapTypeComboBox->setCurrentIndex( mSettings.useMaxLineLengthForAutoWrap ? 0 : 1 );
 
-  if ( mFontMultiLineAlignComboBox->findData( mSettings.multilineAlign ) != -1 )
+  if ( mFontMultiLineAlignComboBox->findData( static_cast<int>( mSettings.multilineAlign ) ) != -1 )
   {
-    mFontMultiLineAlignComboBox->setCurrentIndex( mFontMultiLineAlignComboBox->findData( mSettings.multilineAlign ) );
+    mFontMultiLineAlignComboBox->setCurrentIndex( mFontMultiLineAlignComboBox->findData( static_cast<int>( mSettings.multilineAlign ) ) );
   }
   else
   {
@@ -435,8 +495,8 @@ void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
   chkPreserveRotation->setChecked( mSettings.preserveRotation );
 
   mCoordRotationUnitComboBox->setCurrentIndex( 0 );
-  if ( mCoordRotationUnitComboBox->findData( static_cast< unsigned int >( mSettings.rotationUnit() ) ) >= 0 )
-    mCoordRotationUnitComboBox->setCurrentIndex( mCoordRotationUnitComboBox->findData( static_cast< unsigned int >( mSettings.rotationUnit() ) ) );
+  if ( mCoordRotationUnitComboBox->findData( static_cast<unsigned int>( mSettings.rotationUnit() ) ) >= 0 )
+    mCoordRotationUnitComboBox->setCurrentIndex( mCoordRotationUnitComboBox->findData( static_cast<unsigned int>( mSettings.rotationUnit() ) ) );
 
   mScaleBasedVisibilityChkBx->setChecked( mSettings.scaleVisibility );
   mMinScaleWidget->setScale( mSettings.minimumScale );
@@ -466,7 +526,7 @@ void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
   }
   else
   {
-    std::unique_ptr< QgsCallout > defaultCallout( QgsApplication::calloutRegistry()->defaultCallout() );
+    std::unique_ptr<QgsCallout> defaultCallout( QgsCalloutRegistry::defaultCallout() );
     whileBlocking( mCalloutStyleComboBox )->setCurrentIndex( mCalloutStyleComboBox->findData( defaultCallout->type() ) );
     whileBlocking( mCalloutsDrawCheckBox )->setChecked( false );
     updateCalloutWidget( defaultCallout.get() );
@@ -482,7 +542,6 @@ void QgsLabelingGui::setLayer( QgsMapLayer *mapLayer )
   // do this after other widgets are configured, so they can be enabled/disabled
   populateDataDefinedButtons();
 
-  enableDataDefinedAlignment( mCoordXDDBtn->isActive() && mCoordYDDBtn->isActive() );
   updateUi(); // should come after data defined button setup
 }
 
@@ -521,9 +580,9 @@ QgsPalLayerSettings QgsLabelingGui::layerSettings()
 
   lyr.dist = 0;
 
-  QgsLabeling::PolygonPlacementFlags polygonPlacementFlags = QgsLabeling::PolygonPlacementFlag::AllowPlacementInsideOfPolygon;
+  Qgis::LabelPolygonPlacementFlags polygonPlacementFlags = Qgis::LabelPolygonPlacementFlag::AllowPlacementInsideOfPolygon;
   if ( mCheckAllowLabelsOutsidePolygons->isChecked() )
-    polygonPlacementFlags |= QgsLabeling::PolygonPlacementFlag::AllowPlacementOutsideOfPolygon;
+    polygonPlacementFlags |= Qgis::LabelPolygonPlacementFlag::AllowPlacementOutsideOfPolygon;
   lyr.setPolygonPlacementFlags( polygonPlacementFlags );
 
   lyr.centroidWhole = mCentroidRadioWhole->isChecked();
@@ -532,10 +591,15 @@ QgsPalLayerSettings QgsLabelingGui::layerSettings()
   lyr.dist = mLineDistanceSpnBx->value();
   lyr.distUnits = mLineDistanceUnitWidget->unit();
   lyr.distMapUnitScale = mLineDistanceUnitWidget->getMapUnitScale();
-  lyr.offsetType = static_cast< QgsPalLayerSettings::OffsetType >( mOffsetTypeComboBox->currentData().toInt() );
+
+  lyr.pointSettings().setMaximumDistance( mMaximumDistanceSpnBx->value() );
+  lyr.pointSettings().setMaximumDistanceUnit( mMaximumDistanceUnitWidget->unit() );
+  lyr.pointSettings().setMaximumDistanceMapUnitScale( mMaximumDistanceUnitWidget->getMapUnitScale() );
+
+  lyr.offsetType = static_cast<Qgis::LabelOffsetType>( mOffsetTypeComboBox->currentData().toInt() );
   if ( mQuadrantBtnGrp )
   {
-    lyr.quadOffset = static_cast< QgsPalLayerSettings::QuadrantPosition >( mQuadrantBtnGrp->checkedId() );
+    lyr.pointSettings().setQuadrant( static_cast<Qgis::LabelQuadrantPosition>( mQuadrantBtnGrp->checkedId() ) );
   }
   lyr.xOffset = mPointOffsetXSpinBox->value();
   lyr.yOffset = mPointOffsetYSpinBox->value();
@@ -543,18 +607,18 @@ QgsPalLayerSettings QgsLabelingGui::layerSettings()
   lyr.labelOffsetMapUnitScale = mPointOffsetUnitWidget->getMapUnitScale();
   lyr.angleOffset = mPointAngleSpinBox->value();
 
-  QgsLabeling::LinePlacementFlags linePlacementFlags = QgsLabeling::LinePlacementFlags();
+  Qgis::LabelLinePlacementFlags linePlacementFlags = Qgis::LabelLinePlacementFlags();
   if ( chkLineAbove->isChecked() )
-    linePlacementFlags |= QgsLabeling::LinePlacementFlag::AboveLine;
+    linePlacementFlags |= Qgis::LabelLinePlacementFlag::AboveLine;
   if ( chkLineBelow->isChecked() )
-    linePlacementFlags |= QgsLabeling::LinePlacementFlag::BelowLine;
+    linePlacementFlags |= Qgis::LabelLinePlacementFlag::BelowLine;
   if ( chkLineOn->isChecked() )
-    linePlacementFlags |= QgsLabeling::LinePlacementFlag::OnLine;
-  if ( ! chkLineOrientationDependent->isChecked() )
-    linePlacementFlags |= QgsLabeling::LinePlacementFlag::MapOrientation;
+    linePlacementFlags |= Qgis::LabelLinePlacementFlag::OnLine;
+  if ( !chkLineOrientationDependent->isChecked() )
+    linePlacementFlags |= Qgis::LabelLinePlacementFlag::MapOrientation;
   lyr.lineSettings().setPlacementFlags( linePlacementFlags );
 
-  lyr.placement = static_cast< QgsPalLayerSettings::Placement >( mPlacementModeComboBox->currentData().toInt() );
+  lyr.placement = static_cast<Qgis::LabelPlacement>( mPlacementModeComboBox->currentData().toInt() );
 
   lyr.repeatDistance = mRepeatDistanceSpinBox->value();
   lyr.repeatDistanceUnit = mRepeatDistanceUnitWidget->unit();
@@ -572,9 +636,13 @@ QgsPalLayerSettings QgsLabelingGui::layerSettings()
   lyr.lineSettings().setLineAnchorPercent( mLineSettings.lineAnchorPercent() );
   lyr.lineSettings().setAnchorType( mLineSettings.anchorType() );
   lyr.lineSettings().setAnchorClipping( mLineSettings.anchorClipping() );
+  lyr.lineSettings().setAnchorTextPoint( mLineSettings.anchorTextPoint() );
 
   lyr.labelPerPart = chkLabelPerFeaturePart->isChecked();
-  lyr.displayAll = mPalShowAllLabelsForLayerChkBx->isChecked();
+  lyr.placementSettings().setOverlapHandling( static_cast<Qgis::LabelOverlapHandling>( mComboOverlapHandling->currentData().toInt() ) );
+  lyr.placementSettings().setAllowDegradedPlacement( mCheckAllowDegradedPlacement->isChecked() );
+  lyr.placementSettings().setPrioritization( mPrioritizationComboBox->currentData().value<Qgis::LabelPrioritization>() );
+
   lyr.lineSettings().setMergeLines( chkMergeLines->isChecked() );
 
   lyr.scaleVisibility = mScaleBasedVisibilityChkBx->isChecked();
@@ -597,11 +665,11 @@ QgsPalLayerSettings QgsLabelingGui::layerSettings()
   lyr.lineSettings().setReverseDirectionSymbol( mDirectSymbRevChkBx->isChecked() );
   if ( mDirectSymbBtnGrp )
   {
-    lyr.lineSettings().setDirectionSymbolPlacement( static_cast< QgsLabelLineSettings::DirectionSymbolPlacement >( mDirectSymbBtnGrp->checkedId() ) );
+    lyr.lineSettings().setDirectionSymbolPlacement( static_cast<QgsLabelLineSettings::DirectionSymbolPlacement>( mDirectSymbBtnGrp->checkedId() ) );
   }
   if ( mUpsidedownBtnGrp )
   {
-    lyr.upsidedownLabels = static_cast< QgsPalLayerSettings::UpsideDownLabels >( mUpsidedownBtnGrp->checkedId() );
+    lyr.upsidedownLabels = static_cast<Qgis::UpsideDownLabelHandling>( mUpsidedownBtnGrp->checkedId() );
   }
 
   lyr.maxCurvedCharAngleIn = mMaxCharAngleInDSpinBox->value();
@@ -618,14 +686,15 @@ QgsPalLayerSettings QgsLabelingGui::layerSettings()
   lyr.wrapChar = wrapCharacterEdit->text();
   lyr.autoWrapLength = mAutoWrapLengthSpinBox->value();
   lyr.useMaxLineLengthForAutoWrap = mAutoWrapTypeComboBox->currentIndex() == 0;
-  lyr.multilineAlign = static_cast< QgsPalLayerSettings::MultiLineAlign >( mFontMultiLineAlignComboBox->currentData().toInt() );
+  lyr.multilineAlign = static_cast<Qgis::LabelMultiLineAlignment>( mFontMultiLineAlignComboBox->currentData().toInt() );
   lyr.preserveRotation = chkPreserveRotation->isChecked();
-  lyr.setRotationUnit( static_cast< QgsUnitTypes::AngleUnit >( mCoordRotationUnitComboBox->currentData().toInt() ) );
+  lyr.setRotationUnit( static_cast<Qgis::AngleUnit>( mCoordRotationUnitComboBox->currentData().toInt() ) );
   lyr.geometryGenerator = mGeometryGenerator->text();
-  lyr.geometryGeneratorType = mGeometryGeneratorType->currentData().value<QgsWkbTypes::GeometryType>();
+  lyr.geometryGeneratorType = mGeometryGeneratorType->currentData().value<Qgis::GeometryType>();
   lyr.geometryGeneratorEnabled = mGeometryGeneratorGroupBox->isChecked();
 
-  lyr.layerType = mLayer ? mLayer->geometryType() : mGeomType;
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mLayer );
+  lyr.layerType = vLayer ? vLayer->geometryType() : mGeomType;
 
   lyr.zIndex = mZIndexSpinBox->value();
 
@@ -633,8 +702,8 @@ QgsPalLayerSettings QgsLabelingGui::layerSettings()
 
   // callout settings
   const QString calloutType = mCalloutStyleComboBox->currentData().toString();
-  std::unique_ptr< QgsCallout > callout;
-  if ( QgsCalloutWidget *pew = qobject_cast< QgsCalloutWidget * >( mCalloutStackedWidget->currentWidget() ) )
+  std::unique_ptr<QgsCallout> callout;
+  if ( QgsCalloutWidget *pew = qobject_cast<QgsCalloutWidget *>( mCalloutStackedWidget->currentWidget() ) )
   {
     callout.reset( pew->callout()->clone() );
   }
@@ -656,7 +725,7 @@ bool QgsLabelingGui::eventFilter( QObject *object, QEvent *event )
 {
   if ( object == mLblNoObstacle1 )
   {
-    if ( event->type() == QEvent::MouseButtonPress && qgis::down_cast< QMouseEvent * >( event )->button() == Qt::LeftButton )
+    if ( event->type() == QEvent::MouseButtonPress && qgis::down_cast<QMouseEvent *>( event )->button() == Qt::LeftButton )
     {
       // clicking the obstacle label toggles the checkbox, just like a "normal" checkbox label...
       mChkNoObstacle->setChecked( !mChkNoObstacle->isChecked() );
@@ -693,8 +762,13 @@ void QgsLabelingGui::updateUi()
   }
 }
 
-void QgsLabelingGui::setFormatFromStyle( const QString &name, QgsStyle::StyleEntity type )
+void QgsLabelingGui::setFormatFromStyle( const QString &name, QgsStyle::StyleEntity type, const QString &stylePath )
 {
+  QgsStyle *style = QgsProject::instance()->styleSettings()->styleAtPath( stylePath );
+
+  if ( !style )
+    style = QgsStyle::defaultStyle();
+
   switch ( type )
   {
     case QgsStyle::SymbolEntity:
@@ -705,16 +779,16 @@ void QgsLabelingGui::setFormatFromStyle( const QString &name, QgsStyle::StyleEnt
     case QgsStyle::LegendPatchShapeEntity:
     case QgsStyle::Symbol3DEntity:
     {
-      QgsTextFormatWidget::setFormatFromStyle( name, type );
+      QgsTextFormatWidget::setFormatFromStyle( name, type, stylePath );
       return;
     }
 
     case QgsStyle::LabelSettingsEntity:
     {
-      if ( !QgsStyle::defaultStyle()->labelSettingsNames().contains( name ) )
+      if ( !style->labelSettingsNames().contains( name ) )
         return;
 
-      QgsPalLayerSettings settings = QgsStyle::defaultStyle()->labelSettings( name );
+      QgsPalLayerSettings settings = style->labelSettings( name );
       if ( settings.fieldName.isEmpty() )
       {
         // if saved settings doesn't have a field name stored, retain the current one
@@ -730,7 +804,7 @@ void QgsLabelingGui::setFormatFromStyle( const QString &name, QgsStyle::StyleEnt
 
 void QgsLabelingGui::setContext( const QgsSymbolWidgetContext &context )
 {
-  if ( QgsCalloutWidget *cw = qobject_cast< QgsCalloutWidget * >( mCalloutStackedWidget->currentWidget() ) )
+  if ( QgsCalloutWidget *cw = qobject_cast<QgsCalloutWidget *>( mCalloutStackedWidget->currentWidget() ) )
   {
     cw->setContext( context );
   }
@@ -739,16 +813,16 @@ void QgsLabelingGui::setContext( const QgsSymbolWidgetContext &context )
 
 void QgsLabelingGui::saveFormat()
 {
-  QgsStyle *style = QgsStyle::defaultStyle();
-  if ( !style )
-    return;
-
   QgsStyleSaveDialog saveDlg( this, QgsStyle::LabelSettingsEntity );
   saveDlg.setDefaultTags( mTextFormatsListWidget->currentTagFilter() );
   if ( !saveDlg.exec() )
     return;
 
   if ( saveDlg.name().isEmpty() )
+    return;
+
+  QgsStyle *style = saveDlg.destinationStyle();
+  if ( !style )
     return;
 
   switch ( saveDlg.selectedType() )
@@ -758,10 +832,7 @@ void QgsLabelingGui::saveFormat()
       // check if there is no format with same name
       if ( style->textFormatNames().contains( saveDlg.name() ) )
       {
-        const int res = QMessageBox::warning( this, tr( "Save Text Format" ),
-                                              tr( "Format with name '%1' already exists. Overwrite?" )
-                                              .arg( saveDlg.name() ),
-                                              QMessageBox::Yes | QMessageBox::No );
+        const int res = QMessageBox::warning( this, tr( "Save Text Format" ), tr( "Format with name '%1' already exists. Overwrite?" ).arg( saveDlg.name() ), QMessageBox::Yes | QMessageBox::No );
         if ( res != QMessageBox::Yes )
         {
           return;
@@ -781,10 +852,7 @@ void QgsLabelingGui::saveFormat()
       // check if there is no settings with same name
       if ( style->labelSettingsNames().contains( saveDlg.name() ) )
       {
-        const int res = QMessageBox::warning( this, tr( "Save Label Settings" ),
-                                              tr( "Label settings with the name '%1' already exist. Overwrite?" )
-                                              .arg( saveDlg.name() ),
-                                              QMessageBox::Yes | QMessageBox::No );
+        const int res = QMessageBox::warning( this, tr( "Save Label Settings" ), tr( "Label settings with the name '%1' already exist. Overwrite?" ).arg( saveDlg.name() ), QMessageBox::Yes | QMessageBox::No );
         if ( res != QMessageBox::Yes )
         {
           return;
@@ -811,67 +879,69 @@ void QgsLabelingGui::saveFormat()
 
 void QgsLabelingGui::updateGeometryTypeBasedWidgets()
 {
-  QgsWkbTypes::GeometryType geometryType = mGeomType;
+  Qgis::GeometryType geometryType = mGeomType;
+
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mLayer );
 
   if ( mGeometryGeneratorGroupBox->isChecked() )
-    geometryType = mGeometryGeneratorType->currentData().value<QgsWkbTypes::GeometryType>();
-  else if ( mLayer )
-    geometryType = mLayer->geometryType();
+    geometryType = mGeometryGeneratorType->currentData().value<Qgis::GeometryType>();
+  else if ( vLayer )
+    geometryType = vLayer->geometryType();
 
   // show/hide options based upon geometry type
-  chkMergeLines->setVisible( geometryType == QgsWkbTypes::LineGeometry );
-  mDirectSymbolsFrame->setVisible( geometryType == QgsWkbTypes::LineGeometry );
-  mMinSizeFrame->setVisible( geometryType != QgsWkbTypes::PointGeometry );
-  mPolygonFeatureOptionsFrame->setVisible( geometryType == QgsWkbTypes::PolygonGeometry );
+  chkMergeLines->setVisible( geometryType == Qgis::GeometryType::Line );
+  mDirectSymbolsFrame->setVisible( geometryType == Qgis::GeometryType::Line );
+  mMinSizeFrame->setVisible( geometryType != Qgis::GeometryType::Point );
+  mPolygonFeatureOptionsFrame->setVisible( geometryType == Qgis::GeometryType::Polygon );
 
 
-  const QgsPalLayerSettings::Placement prevPlacement = static_cast< QgsPalLayerSettings::Placement >( mPlacementModeComboBox->currentData().toInt() );
+  const Qgis::LabelPlacement prevPlacement = static_cast<Qgis::LabelPlacement>( mPlacementModeComboBox->currentData().toInt() );
   mPlacementModeComboBox->clear();
 
   switch ( geometryType )
   {
-    case QgsWkbTypes::PointGeometry:
-      mPlacementModeComboBox->addItem( tr( "Cartographic" ), QgsPalLayerSettings::OrderedPositionsAroundPoint );
-      mPlacementModeComboBox->addItem( tr( "Around Point" ), QgsPalLayerSettings::AroundPoint );
-      mPlacementModeComboBox->addItem( tr( "Offset from Point" ), QgsPalLayerSettings::OverPoint );
+    case Qgis::GeometryType::Point:
+      mPlacementModeComboBox->addItem( tr( "Cartographic" ), static_cast<int>( Qgis::LabelPlacement::OrderedPositionsAroundPoint ) );
+      mPlacementModeComboBox->addItem( tr( "Around Point" ), static_cast<int>( Qgis::LabelPlacement::AroundPoint ) );
+      mPlacementModeComboBox->addItem( tr( "Offset from Point" ), static_cast<int>( Qgis::LabelPlacement::OverPoint ) );
       break;
 
-    case QgsWkbTypes::LineGeometry:
-      mPlacementModeComboBox->addItem( tr( "Parallel" ), QgsPalLayerSettings::Line );
-      mPlacementModeComboBox->addItem( tr( "Curved" ), QgsPalLayerSettings::Curved );
-      mPlacementModeComboBox->addItem( tr( "Horizontal" ), QgsPalLayerSettings::Horizontal );
+    case Qgis::GeometryType::Line:
+      mPlacementModeComboBox->addItem( tr( "Parallel" ), static_cast<int>( Qgis::LabelPlacement::Line ) );
+      mPlacementModeComboBox->addItem( tr( "Curved" ), static_cast<int>( Qgis::LabelPlacement::Curved ) );
+      mPlacementModeComboBox->addItem( tr( "Horizontal" ), static_cast<int>( Qgis::LabelPlacement::Horizontal ) );
       break;
 
-    case QgsWkbTypes::PolygonGeometry:
-      mPlacementModeComboBox->addItem( tr( "Offset from Centroid" ), QgsPalLayerSettings::OverPoint );
-      mPlacementModeComboBox->addItem( tr( "Around Centroid" ), QgsPalLayerSettings::AroundPoint );
-      mPlacementModeComboBox->addItem( tr( "Horizontal" ), QgsPalLayerSettings::Horizontal );
-      mPlacementModeComboBox->addItem( tr( "Free (Angled)" ), QgsPalLayerSettings::Free );
-      mPlacementModeComboBox->addItem( tr( "Using Perimeter" ), QgsPalLayerSettings::Line );
-      mPlacementModeComboBox->addItem( tr( "Using Perimeter (Curved)" ), QgsPalLayerSettings::PerimeterCurved );
-      mPlacementModeComboBox->addItem( tr( "Outside Polygons" ), QgsPalLayerSettings::OutsidePolygons );
+    case Qgis::GeometryType::Polygon:
+      mPlacementModeComboBox->addItem( tr( "Offset from Centroid" ), static_cast<int>( Qgis::LabelPlacement::OverPoint ) );
+      mPlacementModeComboBox->addItem( tr( "Around Centroid" ), static_cast<int>( Qgis::LabelPlacement::AroundPoint ) );
+      mPlacementModeComboBox->addItem( tr( "Horizontal" ), static_cast<int>( Qgis::LabelPlacement::Horizontal ) );
+      mPlacementModeComboBox->addItem( tr( "Free (Angled)" ), static_cast<int>( Qgis::LabelPlacement::Free ) );
+      mPlacementModeComboBox->addItem( tr( "Using Perimeter" ), static_cast<int>( Qgis::LabelPlacement::Line ) );
+      mPlacementModeComboBox->addItem( tr( "Using Perimeter (Curved)" ), static_cast<int>( Qgis::LabelPlacement::PerimeterCurved ) );
+      mPlacementModeComboBox->addItem( tr( "Outside Polygons" ), static_cast<int>( Qgis::LabelPlacement::OutsidePolygons ) );
       break;
 
-    case QgsWkbTypes::NullGeometry:
+    case Qgis::GeometryType::Null:
       break;
-    case QgsWkbTypes::UnknownGeometry:
+    case Qgis::GeometryType::Unknown:
       qFatal( "unknown geometry type unexpected" );
   }
 
-  if ( mPlacementModeComboBox->findData( prevPlacement ) != -1 )
+  if ( mPlacementModeComboBox->findData( static_cast<int>( prevPlacement ) ) != -1 )
   {
-    mPlacementModeComboBox->setCurrentIndex( mPlacementModeComboBox->findData( prevPlacement ) );
+    mPlacementModeComboBox->setCurrentIndex( mPlacementModeComboBox->findData( static_cast<int>( prevPlacement ) ) );
   }
 
-  if ( geometryType == QgsWkbTypes::PointGeometry || geometryType == QgsWkbTypes::PolygonGeometry )
+  if ( geometryType == Qgis::GeometryType::Point || geometryType == Qgis::GeometryType::Polygon )
   {
     // follow placement alignment is only valid for point or polygon layers
-    if ( mFontMultiLineAlignComboBox->findData( QgsPalLayerSettings::MultiFollowPlacement ) == -1 )
-      mFontMultiLineAlignComboBox->addItem( tr( "Follow Label Placement" ), QgsPalLayerSettings::MultiFollowPlacement );
+    if ( mFontMultiLineAlignComboBox->findData( static_cast<int>( Qgis::LabelMultiLineAlignment::FollowPlacement ) ) == -1 )
+      mFontMultiLineAlignComboBox->addItem( tr( "Follow Label Placement" ), static_cast<int>( Qgis::LabelMultiLineAlignment::FollowPlacement ) );
   }
   else
   {
-    const int idx = mFontMultiLineAlignComboBox->findData( QgsPalLayerSettings::MultiFollowPlacement );
+    const int idx = mFontMultiLineAlignComboBox->findData( static_cast<int>( Qgis::LabelMultiLineAlignment::FollowPlacement ) );
     if ( idx >= 0 )
       mFontMultiLineAlignComboBox->removeItem( idx );
   }
@@ -882,7 +952,8 @@ void QgsLabelingGui::updateGeometryTypeBasedWidgets()
 
 void QgsLabelingGui::showGeometryGeneratorExpressionBuilder()
 {
-  QgsExpressionBuilderDialog expressionBuilder( mLayer );
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mLayer );
+  QgsExpressionBuilderDialog expressionBuilder( vLayer );
 
   expressionBuilder.setExpressionText( mGeometryGenerator->text() );
   expressionBuilder.setExpressionContext( createExpressionContext() );
@@ -897,10 +968,12 @@ void QgsLabelingGui::validateGeometryGeneratorExpression()
 {
   bool valid = true;
 
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mLayer );
+
   if ( mGeometryGeneratorGroupBox->isChecked() )
   {
-    if ( !mPreviewFeature.isValid() && mLayer )
-      mLayer->getFeatures( QgsFeatureRequest().setLimit( 1 ) ).nextFeature( mPreviewFeature );
+    if ( !mPreviewFeature.isValid() && vLayer )
+      vLayer->getFeatures( QgsFeatureRequest().setLimit( 1 ) ).nextFeature( mPreviewFeature );
 
     QgsExpression expression( mGeometryGenerator->text() );
     QgsExpressionContext context = createExpressionContext();
@@ -917,7 +990,7 @@ void QgsLabelingGui::validateGeometryGeneratorExpression()
     {
       const QVariant result = expression.evaluate( &context );
       const QgsGeometry geometry = result.value<QgsGeometry>();
-      const QgsWkbTypes::GeometryType configuredGeometryType = mGeometryGeneratorType->currentData().value<QgsWkbTypes::GeometryType>();
+      const Qgis::GeometryType configuredGeometryType = mGeometryGeneratorType->currentData().value<Qgis::GeometryType>();
       if ( geometry.isNull() )
       {
         mGeometryGeneratorWarningLabel->setText( tr( "Result of the expression is not a geometry" ) );
@@ -925,9 +998,7 @@ void QgsLabelingGui::validateGeometryGeneratorExpression()
       }
       else if ( geometry.type() != configuredGeometryType )
       {
-        mGeometryGeneratorWarningLabel->setText( QStringLiteral( "<p>%1</p><p><a href=\"#determineGeometryGeneratorType\">%2</a></p>" ).arg(
-              tr( "Result of the expression does not match configured geometry type." ),
-              tr( "Change to %1" ).arg( QgsWkbTypes::geometryDisplayString( geometry.type() ) ) ) );
+        mGeometryGeneratorWarningLabel->setText( QStringLiteral( "<p>%1</p><p><a href=\"#determineGeometryGeneratorType\">%2</a></p>" ).arg( tr( "Result of the expression does not match configured geometry type." ), tr( "Change to %1" ).arg( QgsWkbTypes::geometryDisplayString( geometry.type() ) ) ) );
         valid = false;
       }
     }
@@ -936,8 +1007,7 @@ void QgsLabelingGui::validateGeometryGeneratorExpression()
   // The collapsible groupbox internally changes the visibility of this
   // Work around by setting the visibility deferred in the next event loop cycle.
   QTimer *timer = new QTimer();
-  connect( timer, &QTimer::timeout, this, [this, valid]()
-  {
+  connect( timer, &QTimer::timeout, this, [this, valid]() {
     mGeometryGeneratorWarningLabel->setVisible( !valid );
   } );
   connect( timer, &QTimer::timeout, timer, &QTimer::deleteLater );
@@ -946,8 +1016,9 @@ void QgsLabelingGui::validateGeometryGeneratorExpression()
 
 void QgsLabelingGui::determineGeometryGeneratorType()
 {
-  if ( !mPreviewFeature.isValid() && mLayer )
-    mLayer->getFeatures( QgsFeatureRequest().setLimit( 1 ) ).nextFeature( mPreviewFeature );
+  QgsVectorLayer *vLayer = qobject_cast<QgsVectorLayer *>( mLayer );
+  if ( !mPreviewFeature.isValid() && vLayer )
+    vLayer->getFeatures( QgsFeatureRequest().setLimit( 1 ) ).nextFeature( mPreviewFeature );
 
   QgsExpression expression( mGeometryGenerator->text() );
   QgsExpressionContext context = createExpressionContext();
@@ -956,13 +1027,13 @@ void QgsLabelingGui::determineGeometryGeneratorType()
   expression.prepare( &context );
   const QgsGeometry geometry = expression.evaluate( &context ).value<QgsGeometry>();
 
-  mGeometryGeneratorType->setCurrentIndex( mGeometryGeneratorType->findData( geometry.type() ) );
+  mGeometryGeneratorType->setCurrentIndex( mGeometryGeneratorType->findData( QVariant::fromValue( geometry.type() ) ) );
 }
 
 void QgsLabelingGui::calloutTypeChanged()
 {
   const QString newCalloutType = mCalloutStyleComboBox->currentData().toString();
-  QgsCalloutWidget *pew = qobject_cast< QgsCalloutWidget * >( mCalloutStackedWidget->currentWidget() );
+  QgsCalloutWidget *pew = qobject_cast<QgsCalloutWidget *>( mCalloutStackedWidget->currentWidget() );
   if ( pew )
   {
     if ( pew->callout() && pew->callout()->type() == newCalloutType )
@@ -977,7 +1048,7 @@ void QgsLabelingGui::calloutTypeChanged()
 
   // change callout to a new one (with different type)
   // base new callout on existing callout's properties
-  const std::unique_ptr< QgsCallout > newCallout( am->createCallout( pew && pew->callout() ? pew->callout()->properties( QgsReadWriteContext() ) : QVariantMap(), QgsReadWriteContext() ) );
+  const std::unique_ptr<QgsCallout> newCallout( am->createCallout( pew && pew->callout() ? pew->callout()->properties( QgsReadWriteContext() ) : QVariantMap(), QgsReadWriteContext() ) );
   if ( !newCallout )
     return;
 
@@ -990,8 +1061,7 @@ void QgsLabelingGui::calloutTypeChanged()
 // QgsLabelSettingsDialog
 //
 
-QgsLabelSettingsDialog::QgsLabelSettingsDialog( const QgsPalLayerSettings &settings, QgsVectorLayer *layer, QgsMapCanvas *mapCanvas, QWidget *parent,
-    QgsWkbTypes::GeometryType geomType )
+QgsLabelSettingsDialog::QgsLabelSettingsDialog( const QgsPalLayerSettings &settings, QgsVectorLayer *layer, QgsMapCanvas *mapCanvas, QWidget *parent, Qgis::GeometryType geomType )
   : QDialog( parent )
 {
   QVBoxLayout *vLayout = new QVBoxLayout();
@@ -1015,7 +1085,6 @@ void QgsLabelSettingsDialog::showHelp()
 {
   QgsHelp::openHelp( QStringLiteral( "style_library/label_settings.html" ) );
 }
-
 
 
 ///@endcond

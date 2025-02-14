@@ -16,14 +16,41 @@
 
 #include "qgsprovidersublayerdetails.h"
 #include "qgsmaplayerfactory.h"
-
+#include "qgsmimedatautils.h"
 
 
 QgsMapLayer *QgsProviderSublayerDetails::toLayer( const LayerOptions &options ) const
 {
   QgsMapLayerFactory::LayerOptions layerOptions( options.transformContext );
   layerOptions.loadDefaultStyle = options.loadDefaultStyle;
+  layerOptions.loadAllStoredStyles = options.loadAllStoredStyle;
   return QgsMapLayerFactory::createLayer( mUri, mName, mType, layerOptions, mProviderKey );
+}
+
+QgsMimeDataUtils::Uri QgsProviderSublayerDetails::toMimeUri() const
+{
+  QgsMimeDataUtils::Uri u;
+  u.layerType = QgsMapLayerFactory::typeToString( mType );
+  switch ( mType )
+  {
+    case Qgis::LayerType::Vector:
+      u.wkbType = mWkbType;
+      break;
+    case Qgis::LayerType::Raster:
+    case Qgis::LayerType::Mesh:
+    case Qgis::LayerType::VectorTile:
+    case Qgis::LayerType::PointCloud:
+    case Qgis::LayerType::Plugin:
+    case Qgis::LayerType::Group:
+    case Qgis::LayerType::Annotation:
+    case Qgis::LayerType::TiledScene:
+      break;
+  }
+
+  u.providerKey = mProviderKey;
+  u.name = mName;
+  u.uri = mUri;
+  return u;
 }
 
 bool QgsProviderSublayerDetails::operator==( const QgsProviderSublayerDetails &other ) const

@@ -46,9 +46,6 @@ class CORE_EXPORT QgsTranslationContext
 
   public:
 
-    /**
-     * Constructor
-     */
     QgsTranslationContext() = default;
 
     /**
@@ -86,7 +83,7 @@ class CORE_EXPORT QgsTranslationContext
     /**
      * Writes the Ts-file
      */
-    void writeTsFile( const QString &locale );
+    void writeTsFile( const QString &locale ) const;
 
   private:
 

@@ -27,23 +27,14 @@
 #include <cstdlib>
 
 #include "qgsapplication.h"
+
 #ifdef Q_OS_WIN
-// Open files in binary mode
 #include <fcntl.h> /*  _O_BINARY */
-#ifdef MSVC
-#undef _fmode
-int _fmode = _O_BINARY;
-#else
-// Only do this if we are not building on windows with msvc.
-// Recommended method for doing this with msvc is with a call to _set_fmode
-// which is the first thing we do in main().
-// Similarly, with MinGW set _fmode in main().
-#endif  //_MSC_VER
 #else
 #include <getopt.h>
 #endif
 
-#ifdef Q_OS_MACX
+#ifdef Q_OS_MACOS
 #include <ApplicationServices/ApplicationServices.h>
 #if MAC_OS_X_VERSION_MAX_ALLOWED < 1050
 typedef SInt32 SRefCon;
@@ -55,12 +46,11 @@ typedef SInt32 SRefCon;
 #include "qgsproviderregistry.h"
 
 #undef QgsDebugCall
-#undef QgsDebugMsg
+#undef QgsDebugError
 #undef QgsDebugMsgLevel
 #define QgsDebugCall
-#define QgsDebugMsg(str)
-#define QgsDebugMsgLevel(str, level)
-
+#define QgsDebugError( str )
+#define QgsDebugMsgLevel( str, level )
 
 
 /////////////////////////////////////////////////////////////////
@@ -78,15 +68,98 @@ static QStringList sFileList;
 
 int main( int argc, char *argv[] )
 {
-#ifdef Q_OS_WIN  // Windows
+#ifdef Q_OS_WIN // Windows
 #ifdef _MSC_VER
   _set_fmode( _O_BINARY );
-#else //MinGW
+#else  //MinGW
   _fmode = _O_BINARY;
-#endif  // _MSC_VER
-#endif  // Q_OS_WIN
+#endif // _MSC_VER
+#endif // Q_OS_WIN
 
-  QgsApplication app( argc, argv, false );
+  // a shortcut -- let's see if we are being called without any arguments, or just the usage/version argument.
+  // If so, let's skip the startup cost of a QCoreApplication/QgsApplication
+  bool hasHelpArgument = false;
+  bool hasVersionArgument = false;
+  for ( int i = 1; i < argc; ++i )
+  {
+    const QString arg( argv[i] );
+    if ( arg == QLatin1String( "--json" )
+         || arg == QLatin1String( "--verbose" )
+         || arg == QLatin1String( "--no-python" ) )
+    {
+      // ignore these arguments
+      continue;
+    }
+    if ( arg == QLatin1String( "--help" ) || arg == QLatin1String( "-h" ) )
+    {
+      hasHelpArgument = true;
+      break;
+    }
+    else if ( arg == QLatin1String( "--version" ) || arg == QLatin1String( "-v" ) )
+    {
+      hasVersionArgument = true;
+      break;
+    }
+    break;
+  }
+
+  if ( argc == 1 || hasHelpArgument )
+  {
+    QgsProcessingExec::showUsage( QString( argv[0] ) );
+    return 0;
+  }
+  else if ( hasVersionArgument )
+  {
+    QgsProcessingExec::showVersionInformation();
+    return 0;
+  }
+
+  QgsApplication app( argc, argv, false, QString(), QStringLiteral( "qgis_process" ) );
+
+  // Build a local QCoreApplication from arguments. This way, arguments are correctly parsed from their native locale
+  // It will use QString::fromLocal8Bit( argv ) under Unix and GetCommandLine() under Windows.
+  QStringList args = QCoreApplication::arguments();
+
+  QgsProcessingExec::Flags flags;
+
+  const int jsonIndex = args.indexOf( QLatin1String( "--json" ) );
+  if ( jsonIndex >= 0 )
+  {
+    flags |= QgsProcessingExec::Flag::UseJson;
+    args.removeAt( jsonIndex );
+  }
+
+  const int verboseIndex = args.indexOf( QLatin1String( "--verbose" ) );
+  Qgis::ProcessingLogLevel logLevel = Qgis::ProcessingLogLevel::DefaultLevel;
+  if ( verboseIndex >= 0 )
+  {
+    logLevel = Qgis::ProcessingLogLevel::Verbose;
+    args.removeAt( verboseIndex );
+  }
+
+  const int noPythonIndex = args.indexOf( QLatin1String( "--no-python" ) );
+  if ( noPythonIndex >= 0 )
+  {
+    flags |= QgsProcessingExec::Flag::SkipPython;
+    args.removeAt( noPythonIndex );
+  }
+
+  const int skipLoadingPluginsIndex = args.indexOf( QLatin1String( "--skip-loading-plugins" ) );
+  if ( skipLoadingPluginsIndex >= 0 )
+  {
+    flags |= QgsProcessingExec::Flag::SkipLoadingPlugins;
+    args.removeAt( skipLoadingPluginsIndex );
+  }
+
+  const QString command = args.value( 1 );
+  if ( args.size() == 1 || command == QLatin1String( "--help" ) || command == QLatin1String( "-h" ) )
+  {
+    // a shortcut -- if we are showing usage information, we don't need to initialize
+    // QgsApplication at all!
+    QgsProcessingExec::showUsage( args.at( 0 ) );
+    return 0;
+  }
+
   QString myPrefixPath;
   if ( myPrefixPath.isEmpty() )
   {
@@ -108,16 +181,12 @@ int main( int argc, char *argv[] )
 
   ( void ) QgsApplication::resolvePkgPath(); // trigger storing of application path in QgsApplication
 
-  // Build a local QCoreApplication from arguments. This way, arguments are correctly parsed from their native locale
-  // It will use QString::fromLocal8Bit( argv ) under Unix and GetCommandLine() under Windows.
-  const QStringList args = QCoreApplication::arguments();
-
   QgsProcessingExec exec;
   int res = 0;
-  QTimer::singleShot( 0, &app, [&exec, args, &res]
-  {
-    res = exec.run( args );
+  QTimer::singleShot( 0, &app, [&exec, args, logLevel, flags, &res] {
+    res = exec.run( args, logLevel, flags );
+    QgsApplication::exitQgis();
     QCoreApplication::exit( res );
   } );
-  return app.exec();
+  return QgsApplication::exec();
 }

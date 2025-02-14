@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/processing/models/qgsprocessingmodelalgorithm.h             *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -14,13 +14,14 @@ class QgsProcessingModelAlgorithm : QgsProcessingAlgorithm
 {
 %Docstring(signature="appended")
 Model based algorithm with processing.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgsprocessingmodelalgorithm.h"
 %End
+  public:
+    static const QMetaObject staticMetaObject;
+
   public:
 
     QgsProcessingModelAlgorithm( const QString &name = QString(), const QString &group = QString(), const QString &groupId = QString() );
@@ -30,6 +31,8 @@ Constructor for QgsProcessingModelAlgorithm.
 
     virtual void initAlgorithm( const QVariantMap &configuration = QVariantMap() );  //#spellok
 
+
+    virtual Qgis::ProcessingAlgorithmFlags flags() const;
 
     virtual QString name() const;
 
@@ -48,8 +51,6 @@ Constructor for QgsProcessingModelAlgorithm.
     virtual QString shortDescription() const;
 
     virtual QString helpUrl() const;
-
-    virtual Flags flags() const;
 
 
     virtual bool canExecute( QString *errorMessage /Out/ = 0 ) const;
@@ -79,7 +80,7 @@ Validates the model, returning ``True`` if all child algorithms in the model are
 
 
 :return: - ``True`` if the child is valid
-         - issues: will be set to a list of issues encountered during the validation
+         - issues: a list of issues encountered during the validation
 
 .. versionadded:: 3.14
 %End
@@ -212,7 +213,7 @@ all mandatory inputs to the algorithm have valid values.
 :param childId: ID for child to validate
 
 :return: - ``True`` if the child is valid
-         - issues: will be set to a list of issues encountered during the validation
+         - issues: a list of issues encountered during the validation
 
 .. versionadded:: 3.14
 %End
@@ -245,6 +246,15 @@ is deleted.
 .. seealso:: :py:func:`addModelParameter`
 
 .. seealso:: :py:func:`updateModelParameter`
+%End
+
+    void changeParameterName( const QString &oldName, const QString &newName );
+%Docstring
+Changes a model parameter's internal name from ``oldName`` to ``newName``.
+
+This method will automatically update all model components to relink using the new name.
+
+.. versionadded:: 3.26
 %End
 
     bool childAlgorithmsDependOnParameter( const QString &name ) const;
@@ -330,6 +340,45 @@ model :py:func:`~QgsProcessingModelAlgorithm.parameterComponents`.
 .. seealso:: :py:func:`orderedParameters`
 
 .. versionadded:: 3.14
+%End
+
+    QList< QgsProcessingModelOutput > orderedOutputs() const;
+%Docstring
+Returns an ordered list of outputs for the model.
+
+.. seealso:: :py:func:`setOutputOrder`
+
+.. versionadded:: 3.32
+%End
+
+    void setOutputOrder( const QStringList &order );
+%Docstring
+Sets the ``order`` for sorting outputs for the model.
+
+The ``order`` list should consist of "output child algorithm id:output name" formatted strings corresponding to existing
+model outputs.
+
+.. seealso:: :py:func:`orderedOutputs`
+
+.. versionadded:: 3.32
+%End
+
+    QString outputGroup() const;
+%Docstring
+Returns the destination layer tree group name for outputs created by the model.
+
+.. seealso:: :py:func:`setOutputGroup`
+
+.. versionadded:: 3.32
+%End
+
+    void setOutputGroup( const QString &group );
+%Docstring
+Sets the destination layer tree ``group`` name for outputs created by the model.
+
+.. seealso:: :py:func:`outputGroup`
+
+.. versionadded:: 3.32
 %End
 
     void updateDestinationParameters();
@@ -435,6 +484,16 @@ Sets the source file ``path`` for the model, if available.
 .. seealso:: :py:func:`sourceFilePath`
 %End
 
+    bool modelNameMatchesFilePath() const;
+%Docstring
+Returns ``True`` if the model name matches the current model :py:func:`~QgsProcessingModelAlgorithm.sourceFilePath`.
+
+Specifically, this method will return true if the complete base name of :py:func:`~QgsProcessingModelAlgorithm.sourceFilePath`
+is identical (case-insensitive) to the model name.
+
+.. versionadded:: 3.24
+%End
+
     QStringList asPythonCode( QgsProcessing::PythonOutputType outputType, int indentSize ) const;
 %Docstring
 Attempts to convert the model to executable Python code, and returns the generated lines of code.
@@ -459,8 +518,6 @@ sources to those with compatible data types for the parameter/outputs.
 {
 %Docstring(signature="appended")
 Definition of a expression context variable available during model execution.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -481,7 +538,7 @@ parameter ``source``, and ``description``.
         QString description;
     };
 
-    QMap< QString, QgsProcessingModelAlgorithm::VariableDefinition > variablesForChildAlgorithm( const QString &childId, QgsProcessingContext &context, const QVariantMap &modelParameters = QVariantMap(),
+    QMap< QString, QgsProcessingModelAlgorithm::VariableDefinition > variablesForChildAlgorithm( const QString &childId, QgsProcessingContext *context = 0, const QVariantMap &modelParameters = QVariantMap(),
         const QVariantMap &results = QVariantMap() ) const;
 %Docstring
 Returns a map of variable name to variable definition for expression context variables which are available
@@ -556,6 +613,23 @@ run through the designer.
 .. versionadded:: 3.14
 %End
 
+    const QgsProcessingParameterDefinition *modelParameterFromChildIdAndOutputName( const QString &childId, const QString &childOutputName ) const;
+%Docstring
+Given a child algorithm ID and output name, attempts to match it to a parameter definition from the overall model.
+
+.. versionadded:: 3.26
+%End
+
+    static QString safeName( const QString &name, bool capitalize = false );
+%Docstring
+Makes a name "safe", by replacing any non-alphanumeric characters with underscores.
+
+If ``capitalize`` is ``True`` then the string will be converted to a camel case string.
+
+.. versionadded:: 3.26
+%End
+
+
   protected:
 
     virtual QgsProcessingAlgorithm *createInstance() const /Factory/;
@@ -572,5 +646,5 @@ run through the designer.
  *                                                                      *
  * src/core/processing/models/qgsprocessingmodelalgorithm.h             *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

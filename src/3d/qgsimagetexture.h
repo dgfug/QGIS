@@ -35,6 +35,8 @@
  */
 class _3D_EXPORT QgsImageTexture : public Qt3DRender::QPaintedTextureImage
 {
+    Q_OBJECT
+
   public:
     //! Constructor
     QgsImageTexture( const QImage &image, Qt3DCore::QNode *parent = nullptr );
@@ -49,9 +51,7 @@ class _3D_EXPORT QgsImageTexture : public Qt3DRender::QPaintedTextureImage
     QImage getImage() const { return mImage; }
 
   private:
-
     QImage mImage;
-
 };
 
 #endif // QGSIMAGETEXTURE_H

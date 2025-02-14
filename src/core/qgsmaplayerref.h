@@ -19,6 +19,7 @@
 #define SIP_NO_FILE
 
 #include <QPointer>
+#include <QDomElement>
 
 #include "qgsmaplayer.h"
 #include "qgsdataprovider.h"
@@ -40,9 +41,9 @@ struct _LayerRef
    */
   enum MatchType
   {
-    Name = 1 << 2, //! Match layer name
-    Provider = 1 << 3, //! Match layer provider name
-    Source = 1 << 4, //! Match layer source
+    Name = 1 << 2, //!< Match layer name
+    Provider = 1 << 3, //!< Match layer provider name
+    Source = 1 << 4, //!< Match layer source
     All = Provider | Source //!< Match all
   };
 
@@ -85,10 +86,15 @@ struct _LayerRef
   }
 
   /**
+   * Equality operator is deleted to avoid confusion as there are multiple ways two _LayerRef objects can be considered equal.
+   */
+  bool operator==( const _LayerRef &other ) = delete;
+
+  /**
    * Returns TRUE if the layer reference is resolved and contains a reference to an existing
    * map layer.
    */
-  operator bool() const
+  explicit operator bool() const
   {
     return static_cast< bool >( layer.data() );
   }
@@ -160,7 +166,7 @@ struct _LayerRef
     return nullptr;
   }
 
-  bool layerMatchesWeakly( QgsMapLayer *layer, MatchType matchType = MatchType::All )
+  bool layerMatchesWeakly( QgsMapLayer *layer, MatchType matchType = MatchType::All ) const
   {
     // First match the name
     if ( matchType & MatchType::Name && ( layer->name().isEmpty() || layer->name() != name ) )
@@ -289,6 +295,38 @@ struct _LayerRef
     return nullptr;
   }
 
+  /**
+   * Reads the layer's properties from an XML \a element.
+   *
+   * \see writeXml()
+   * \since QGIS 3.30
+   */
+  bool readXml( const QDomElement &element, const QgsReadWriteContext &context )
+  {
+    Q_UNUSED( context )
+
+    layerId = element.attribute( QStringLiteral( "id" ) );
+    name = element.attribute( QStringLiteral( "name" ) );
+    source = element.attribute( QStringLiteral( "source" ) );
+    provider = element.attribute( QStringLiteral( "provider" ) );
+    return true;
+  }
+
+  /**
+   * Writes the layer's properties to a XML \a element.
+   *
+   * \see readXml()
+   * \since QGIS 3.30
+   */
+  void writeXml( QDomElement &element, const QgsReadWriteContext &context ) const
+  {
+    Q_UNUSED( context )
+
+    element.setAttribute( QStringLiteral( "id" ), layerId );
+    element.setAttribute( QStringLiteral( "name" ), name );
+    element.setAttribute( QStringLiteral( "source" ), source );
+    element.setAttribute( QStringLiteral( "provider" ), provider );
+  }
 
 };
 

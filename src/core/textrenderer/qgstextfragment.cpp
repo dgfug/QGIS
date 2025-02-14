@@ -19,15 +19,16 @@
 #include "qgsstringutils.h"
 
 QgsTextFragment::QgsTextFragment( const QString &text, const QgsTextCharacterFormat &format )
-  : mText( text )
+  : mText( text != QStringLiteral( "\ufffc" ) ? text : QString() )
+  , mIsImage( text == QStringLiteral( "\ufffc" ) )
   , mCharFormat( format )
 {}
 
 QgsTextFragment::QgsTextFragment( const QTextFragment &fragment )
-  : mText( fragment.text() )
-  , mCharFormat( QgsTextCharacterFormat( fragment.charFormat() ) )
+  : mText( fragment.text() != QStringLiteral( "\ufffc" ) ? fragment.text() : QString() )
+  , mIsImage( fragment.text() == QStringLiteral( "\ufffc" ) )
+  , mCharFormat( fragment.charFormat() )
 {
-
 }
 
 QString QgsTextFragment::text() const
@@ -45,7 +46,12 @@ void QgsTextFragment::setCharacterFormat( const QgsTextCharacterFormat &charForm
   mCharFormat = charFormat;
 }
 
-double QgsTextFragment::horizontalAdvance( const QFont &font, bool fontHasBeenUpdatedForFragment, double scaleFactor ) const
+bool QgsTextFragment::isImage() const
+{
+  return mIsImage;
+}
+
+double QgsTextFragment::horizontalAdvance( const QFont &font, const QgsRenderContext &context, bool fontHasBeenUpdatedForFragment, double scaleFactor ) const
 {
   if ( fontHasBeenUpdatedForFragment )
   {
@@ -55,7 +61,7 @@ double QgsTextFragment::horizontalAdvance( const QFont &font, bool fontHasBeenUp
   else
   {
     QFont updatedFont = font;
-    mCharFormat.updateFontForFormat( updatedFont, scaleFactor );
+    mCharFormat.updateFontForFormat( updatedFont, context, scaleFactor );
     const QFontMetricsF fm( updatedFont );
     return fm.horizontalAdvance( mText );
   }

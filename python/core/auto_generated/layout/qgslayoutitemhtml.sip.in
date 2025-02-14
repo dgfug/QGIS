@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layout/qgslayoutitemhtml.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -13,8 +13,6 @@ class QgsLayoutItemHtml: QgsLayoutMultiFrame
 {
 %Docstring(signature="appended")
 A layout multiframe subclass for HTML content.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -45,6 +43,13 @@ Ownership is transferred to the layout.
     static QgsLayoutItemHtml *create( QgsLayout *layout ) /Factory/;
 %Docstring
 Returns a new QgsLayoutItemHtml for the specified parent ``layout``.
+%End
+
+    static QgsLayoutItemHtml *createFromLabel( QgsLayoutItemLabel *label ) /Factory/;
+%Docstring
+Returns a new QgsLayoutItemHtml matching the content and rendering of a given ``label``.
+
+.. versionadded:: 3.32
 %End
 
     void setContentMode( ContentMode mode );
@@ -249,7 +254,7 @@ Reloads the html source from the url and redraws the item.
 Recalculates the frame sizes for the current viewport dimensions
 %End
 
-    virtual void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::AllProperties );
+    virtual void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::DataDefinedProperty::AllProperties );
 
 
   protected:
@@ -267,5 +272,5 @@ Recalculates the frame sizes for the current viewport dimensions
  *                                                                      *
  * src/core/layout/qgslayoutitemhtml.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

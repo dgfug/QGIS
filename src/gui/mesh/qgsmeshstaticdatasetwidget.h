@@ -26,13 +26,16 @@ SIP_NO_FILE
 class QgsMeshLayer;
 class QgsMeshDataProvider;
 
-
 /**
- * List model for dataset contained in dataset group,
+ * \ingroup gui
+ * \class QgsMeshDatasetListModel
+ *
+ * \brief List model for dataset contained in dataset group,
  * used to display by time dataset in widget
  */
-class QgsMeshDatasetListModel: public QAbstractListModel
+class QgsMeshDatasetListModel : public QAbstractListModel
 {
+    Q_OBJECT
   public:
     //! Constructor
     QgsMeshDatasetListModel( QObject *parent );
@@ -51,9 +54,12 @@ class QgsMeshDatasetListModel: public QAbstractListModel
 };
 
 /**
- * A widget for setup of the static dataset of a mesh layer.
+ * \ingroup gui
+ * \class QgsMeshStaticDatasetWidget
+ *
+ * \brief A widget for setup of the static dataset of a mesh layer.
  */
-class GUI_EXPORT QgsMeshStaticDatasetWidget  : public QWidget, private Ui::QgsMeshStaticDatasetWidget
+class GUI_EXPORT QgsMeshStaticDatasetWidget : public QWidget, private Ui::QgsMeshStaticDatasetWidget
 {
     Q_OBJECT
   public:

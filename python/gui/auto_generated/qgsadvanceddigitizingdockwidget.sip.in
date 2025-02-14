@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/qgsadvanceddigitizingdockwidget.h                            *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -25,7 +25,6 @@ by implementing filters called from :py:class:`QgsMapToolAdvancedDigitizing`.
 #include "qgsadvanceddigitizingdockwidget.h"
 %End
   public:
-
     enum CadCapacity
     {
       AbsoluteAngle,
@@ -36,23 +35,18 @@ by implementing filters called from :py:class:`QgsMapToolAdvancedDigitizing`.
     typedef QFlags<QgsAdvancedDigitizingDockWidget::CadCapacity> CadCapacities;
 
 
-    enum class AdditionalConstraint
-    {
-      NoConstraint,
-      Perpendicular,
-      Parallel
-    };
-
     enum WidgetSetMode
     {
       ReturnPressed,
+      FocusOut,
+      TextEdited
     };
 
 
     class CadConstraint
 {
 %Docstring(signature="appended")
-The CadConstraint is an abstract class for all basic constraints (angle/distance/x/y).
+The CadConstraint is a class for all basic constraints (angle/distance/x/y).
 It contains all values (locked, value, relative) and pointers to corresponding widgets.
 
 .. note::
@@ -64,7 +58,6 @@ It contains all values (locked, value, relative) and pointers to corresponding w
 #include "qgsadvanceddigitizingdockwidget.h"
 %End
       public:
-
         enum LockMode
         {
           NoLock,
@@ -100,8 +93,6 @@ Returns ``True`` if a repeating lock is set for the constraint. Repeating locks 
 automatically cleared after a new point is added.
 
 .. seealso:: :py:func:`setRepeatingLock`
-
-.. versionadded:: 2.16
 %End
 
         bool relative() const;
@@ -132,8 +123,6 @@ automatically cleared after a new point is added.
 :param repeating: set to ``True`` to set the lock to repeat automatically
 
 .. seealso:: :py:func:`isRepeatingLock`
-
-.. versionadded:: 2.16
 %End
 
         void setRelative( bool relative );
@@ -147,6 +136,13 @@ Set the value of the constraint
 
 :param value: new value for constraint
 :param updateWidget: set to ``False`` to prevent automatically updating the associated widget's value
+%End
+
+        QString displayValue() const;
+%Docstring
+Returns a localized formatted string representation of the value.
+
+.. versionadded:: 3.32
 %End
 
         void toggleLocked();
@@ -177,15 +173,46 @@ Sets the numeric precision (decimal places) to show in the associated widget.
 .. versionadded:: 3.22
 %End
 
+        Qgis::CadConstraintType cadConstraintType() const;
+%Docstring
+Returns the constraint type
+
+.. versionadded:: 3.32
+%End
+
+        void setCadConstraintType( Qgis::CadConstraintType constraintType );
+%Docstring
+Sets the constraint type to ``constraintType``
+
+.. versionadded:: 3.32
+%End
+
+        void setMapCanvas( QgsMapCanvas *mapCanvas );
+%Docstring
+Sets the map canvas to ``mapCanvas``
+
+.. versionadded:: 3.32
+%End
+
+        static QString removeSuffix( const QString &text, Qgis::CadConstraintType constraintType );
+%Docstring
+Removes unit suffix from the constraint text.
+
+.. versionadded:: 3.34
+%End
+
+
     };
 
-    explicit QgsAdvancedDigitizingDockWidget( QgsMapCanvas *canvas, QWidget *parent = 0 );
+    explicit QgsAdvancedDigitizingDockWidget( QgsMapCanvas *canvas, QWidget *parent = 0, QgsUserInputWidget *userInputWidget = 0 );
 %Docstring
 Create an advanced digitizing dock widget
 
 :param canvas: The map canvas on which the widget operates
 :param parent: The parent
+:param userInputWidget: The user input widget on which tools can add widget overlays on top of the map canvas (since QGIS 3.40)
 %End
+    ~QgsAdvancedDigitizingDockWidget();
 
     bool canvasKeyPressEventFilter( QKeyEvent *e );
 %Docstring
@@ -205,10 +232,37 @@ apply the CAD constraints. The will modify the position of the map event in map 
 
     bool alignToSegment( QgsMapMouseEvent *e, QgsAdvancedDigitizingDockWidget::CadConstraint::LockMode lockMode = QgsAdvancedDigitizingDockWidget::CadConstraint::HardLock );
 %Docstring
-align to segment for additional constraint.
-If additional constraints are used, this will determine the angle to be locked depending on the snapped segment.
+align to segment for between line constraint.
+If between line constraints are used, this will determine the angle to be locked depending on the snapped segment.
+%End
 
-.. versionadded:: 3.0
+    void processCanvasPressEvent( QgsMapMouseEvent *event );
+%Docstring
+Processes the canvas press ``event``.
+%End
+
+    void processCanvasMoveEvent( QgsMapMouseEvent *event );
+%Docstring
+Processes the canvas move ``event``.
+%End
+
+    void processCanvasReleaseEvent( QgsMapMouseEvent *event );
+%Docstring
+Processes the canvas release ``event``.
+%End
+
+    void setTool( QgsAdvancedDigitizingTool *tool );
+%Docstring
+Sets an advanced digitizing tool which will take over digitizing until the tool is close.
+
+.. versionadded:: 3.40
+%End
+
+    QgsAdvancedDigitizingTool *tool() const;
+%Docstring
+Returns the current advanced digitizing tool. Returns ``None`` if not set.
+
+.. versionadded:: 3.40
 %End
 
     void releaseLocks( bool releaseRepeatingLocks = true );
@@ -216,8 +270,6 @@ If additional constraints are used, this will determine the angle to be locked d
 unlock all constraints
 
 :param releaseRepeatingLocks: set to ``False`` to preserve the lock for any constraints set to repeating lock mode
-
-.. versionadded:: 3.0
 %End
 
     void clear();
@@ -233,7 +285,7 @@ Clear any cached previous clicks and helper lines
 determines if CAD tools are enabled or if map tools behaves "nomally"
 %End
 
-    void switchZM( );
+    void switchZM();
 %Docstring
 Determines if Z or M will be enabled.
 
@@ -256,12 +308,41 @@ Sets whether M is enabled
 
     bool constructionMode() const;
 %Docstring
-construction mode is used to draw intermediate points. These points won't be given any further (i.e. to the map tools)
+Returns whether the construction mode is activated. The construction mode is used to draw intermediate
+points that will not be part of a geometry being digitized.
 %End
 
-    AdditionalConstraint additionalConstraint() const;
+    QgsVectorLayer *constructionGuidesLayer() const;
 %Docstring
-Returns the additional constraints which are used to place
+Returns the vector layer within which construction guides are stored.
+
+.. versionadded:: 3.40
+%End
+
+    bool showConstructionGuides() const;
+%Docstring
+Returns whether the construction guides are visible.
+
+.. versionadded:: 3.40
+%End
+
+    bool snapToConstructionGuides() const;
+%Docstring
+Returns whether points should snap to construction guides.
+
+.. versionadded:: 3.40
+%End
+
+    bool recordConstructionGuides() const;
+%Docstring
+Returns whether construction guides are being recorded.
+
+.. versionadded:: 3.40
+%End
+
+    Qgis::BetweenLineConstraint betweenLineConstraint() const;
+%Docstring
+Returns the between line constraints which are used to place
 perpendicular/parallel segments to snapped segments on the canvas
 %End
     const CadConstraint *constraintAngle() const;
@@ -299,6 +380,38 @@ Returns the ``CadConstraint`` on the M coordinate
 Returns ``True`` if a constraint on a common angle is active
 %End
 
+    const CadConstraint *constraintLineExtension() const;
+%Docstring
+Returns the ``CadConstraint``
+%End
+
+    Qgis::LineExtensionSide lineExtensionSide() const;
+%Docstring
+Returns on which side of the constraint line extension point, the line was created
+%End
+
+    const CadConstraint *constraintXyVertex() const;
+%Docstring
+Returns the ``CadConstraint``
+%End
+
+    double softLockX() const;
+%Docstring
+Returns the X value of the X soft lock. The value is NaN is the constraint isn't magnetized to a line
+%End
+
+    double softLockY() const;
+%Docstring
+Returns the Y value of the Y soft lock. The value is NaN is the constraint isn't magnetized to a line
+%End
+
+    void toggleConstraintDistance();
+%Docstring
+Toggles the distance constraint.
+
+.. versionadded:: 3.40
+%End
+
     QgsPointLocator::Match mapPointMatch() const;
 %Docstring
 Returns the point locator match
@@ -306,25 +419,44 @@ Returns the point locator match
 .. versionadded:: 3.4
 %End
 
+    QList<QgsPointLocator::Match> lockedSnapVertices() const;
+%Docstring
+Returns the snap matches whose vertices have been locked
+
+.. versionadded:: 3.26
+%End
+
+    void clearLockedSnapVertices( bool force = true );
+%Docstring
+Removes all points from the locked snap vertex list
+
+:param force: Clears the list even if the constraints that use it are still locked.
+
+.. versionadded:: 3.26
+%End
+
     void clearPoints();
 %Docstring
 Removes all points from the CAD point list
-
-.. versionadded:: 3.0
 %End
 
     void addPoint( const QgsPointXY &point );
 %Docstring
 Adds point to the CAD point list
-
-.. versionadded:: 3.0
 %End
 
     void removePreviousPoint();
 %Docstring
-Remove previous point in the CAD point list
+Removes previous point in the CAD point list
 
 .. versionadded:: 3.8
+%End
+
+    void updateCurrentPoint( const QgsPoint &point );
+%Docstring
+Updates the current ``point`` in the CAD point list
+
+.. versionadded:: 3.30.2
 %End
 
     void setPoints( const QList<QgsPointXY> &points );
@@ -333,11 +465,9 @@ Configures list of current CAD points
 
 Some map tools may find it useful to override list of CAD points that is otherwise
 automatically populated when user clicks with left mouse button on map canvas.
-
-.. versionadded:: 3.0
 %End
 
-    QgsPoint currentPointV2( bool *exists  = 0 ) const;
+    QgsPoint currentPointV2( bool *exists = 0 ) const;
 %Docstring
 The last point.
 Helper for the CAD point list. The CAD point list is the list of points
@@ -353,13 +483,14 @@ Returns the last CAD point, in a map ``layer``'s coordinates.
 .. versionadded:: 3.22
 %End
 
- QgsPointXY currentPoint( bool *exists  = 0 ) const /Deprecated/;
+ QgsPointXY currentPoint( bool *exists = 0 ) const /Deprecated="Since 3.22. Use currentPointV2() instead."/;
 %Docstring
 The last point.
 Helper for the CAD point list. The CAD point list is the list of points
 currently digitized. It contains both  "normal" points and intermediate points (construction mode).
 
-.. deprecated:: QGIS 3.22.
+.. deprecated:: 3.22
+
    Use :py:func:`~QgsAdvancedDigitizingDockWidget.currentPointV2` instead.
 %End
     QgsPoint previousPointV2( bool *exists = 0 ) const;
@@ -369,13 +500,14 @@ Helper for the CAD point list. The CAD point list is the list of points
 currently digitized. It contains both  "normal" points and intermediate points (construction mode).
 %End
 
- QgsPointXY previousPoint( bool *exists = 0 ) const /Deprecated/;
+ QgsPointXY previousPoint( bool *exists = 0 ) const /Deprecated="Since 3.22. Use previousPointV2() instead."/;
 %Docstring
 The previous point.
 Helper for the CAD point list. The CAD point list is the list of points
 currently digitized. It contains both  "normal" points and intermediate points (construction mode).
 
-.. deprecated:: QGIS 3.22.
+.. deprecated:: 3.22
+
    Use :py:func:`~QgsAdvancedDigitizingDockWidget.previousPointV2` instead.
 %End
     QgsPoint penultimatePointV2( bool *exists = 0 ) const;
@@ -385,13 +517,14 @@ Helper for the CAD point list. The CAD point list is the list of points
 currently digitized. It contains both  "normal" points and intermediate points (construction mode).
 %End
 
- QgsPointXY penultimatePoint( bool *exists = 0 ) const /Deprecated/;
+ QgsPointXY penultimatePoint( bool *exists = 0 ) const /Deprecated="Since 3.22. Use penultimatePointV2() instead."/;
 %Docstring
 The penultimate point.
 Helper for the CAD point list. The CAD point list is the list of points
 currently digitized. It contains both  "normal" points and intermediate points (construction mode).
 
-.. deprecated:: QGIS 3.22.
+.. deprecated:: 3.22
+
    Use :py:func:`~QgsAdvancedDigitizingDockWidget.penultimatePointV2` instead.
 %End
     int pointsCount() const;
@@ -430,8 +563,6 @@ Disable the widget. Normally done automatically from :py:func:`QgsMapToolAdvance
     void updateCadPaintItem();
 %Docstring
 Updates canvas item that displays constraints on the ma
-
-.. versionadded:: 3.0
 %End
 
     void setX( const QString &value, WidgetSetMode mode );
@@ -524,18 +655,31 @@ Can be used to set constraints by external widgets.
 .. versionadded:: 3.8
 %End
 
-    double getLineZ( ) const;
+    double getLineZ() const;
 %Docstring
 Convenient method to get the Z value from the line edit wiget
 
 .. versionadded:: 3.22
 %End
 
-    double getLineM( ) const;
+    double getLineM() const;
 %Docstring
 Convenient method to get the M value from the line edit wiget
 
 .. versionadded:: 3.22
+%End
+
+    CadCapacities capacities() const;
+%Docstring
+Returns the capacities
+
+.. versionadded:: 3.26
+%End
+    QString formatCommonAngleSnapping( double angle );
+%Docstring
+Returns the formatted label for common angle snapping option.
+
+.. versionadded:: 3.32
 %End
 
   signals:
@@ -562,15 +706,16 @@ when a constraint is toggled.
 .. versionadded:: 3.22
 %End
 
- void pointChanged( const QgsPointXY &point ) /Deprecated/;
+ void pointChanged( const QgsPointXY &point ) /Deprecated="Since 3.22. No longer used, will be removed in QGIS 4.0. Use pointChangedV2() instead."/;
 %Docstring
 Sometimes a constraint may change the current point out of a mouse event. This happens normally
 when a constraint is toggled.
 
 :param point: The last known digitizing point. Can be used to emulate a mouse event.
 
-.. deprecated:: QGIS 3.22.
-   No longer used, will be removed in QGIS 4.0. Use pointChangedV2 instead.
+.. deprecated:: 3.22
+
+   No longer used, will be removed in QGIS 4.0. Use :py:func:`~QgsAdvancedDigitizingDockWidget.pointChangedV2` instead.
 %End
 
 
@@ -657,6 +802,18 @@ Could be used by widgets that must reflect the current advanced digitizing state
    unstable API (will likely change)
 
 .. versionadded:: 3.8
+%End
+
+    void valueBearingChanged( const QString &value );
+%Docstring
+Emitted whenever the bearing ``value`` changes.
+Could be used by widgets that must reflect the current advanced digitizing state.
+
+.. note::
+
+   unstable API (will likely change)
+
+.. versionadded:: 3.32
 %End
 
     void lockXChanged( bool locked );
@@ -799,6 +956,30 @@ Could be used by widgets that must reflect the current advanced digitizing state
    unstable API (will likely change)
 
 .. versionadded:: 3.8
+%End
+
+    void softLockLineExtensionChanged( bool locked );
+%Docstring
+Emitted whenever the soft line extension parameter is ``locked``.
+Could be used by widgets that must reflect the current advanced digitizing state.
+
+.. note::
+
+   unstable API (will likely change)
+
+.. versionadded:: 3.26
+%End
+
+    void softLockXyChanged( bool locked );
+%Docstring
+Emitted whenever the soft x/y extension parameter is ``locked``.
+Could be used by widgets that must reflect the current advanced digitizing state.
+
+.. note::
+
+   unstable API (will likely change)
+
+.. versionadded:: 3.26
 %End
 
 
@@ -964,6 +1145,13 @@ Could be used by widgets to capture the focus when a field is being edited.
 .. versionadded:: 3.8
 %End
 
+    void valueCommonAngleSnappingChanged( double angle );
+%Docstring
+Emitted whenever the snapping to common angle option changes, angle = 0 means that the functionality is disabled.
+
+.. versionadded:: 3.32
+%End
+
 
   private:
     //! event filter for line edits in the dock UI (angle/distance/x/y line edits)
@@ -978,5 +1166,5 @@ QFlags<QgsAdvancedDigitizingDockWidget::CadCapacity> operator|(QgsAdvancedDigiti
  *                                                                      *
  * src/gui/qgsadvanceddigitizingdockwidget.h                            *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

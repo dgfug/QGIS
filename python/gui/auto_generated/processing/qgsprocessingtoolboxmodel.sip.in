@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/processing/qgsprocessingtoolboxmodel.h                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -30,26 +30,29 @@ Abstract base class for nodes contained within a :py:class:`QgsProcessingToolbox
     {
       sipType = sipType_QgsProcessingToolboxModelNode;
       QgsProcessingToolboxModelNode *node = qobject_cast<QgsProcessingToolboxModelNode *>( sipCpp );
-      if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeProvider )
+      if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeType::Provider )
         sipType = sipType_QgsProcessingToolboxModelProviderNode;
-      else if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeGroup )
+      else if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeType::Group )
         sipType = sipType_QgsProcessingToolboxModelGroupNode;
-      else if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeAlgorithm )
+      else if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeType::Algorithm )
         sipType = sipType_QgsProcessingToolboxModelAlgorithmNode;
-      else if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeRecent )
+      else if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeType::Recent )
         sipType = sipType_QgsProcessingToolboxModelRecentNode;
+      else if ( node->nodeType() == QgsProcessingToolboxModelNode::NodeType::Favorite )
+        sipType = sipType_QgsProcessingToolboxModelFavoriteNode;
     }
     else
       sipType = 0;
 %End
   public:
 
-    enum NodeType
+    enum class NodeType
     {
-      NodeProvider,
-      NodeGroup,
-      NodeAlgorithm,
-      NodeRecent,
+      Provider,
+      Group,
+      Algorithm,
+      Recent,
+      Favorite,
     };
 
     ~QgsProcessingToolboxModelNode();
@@ -112,14 +115,30 @@ Processing toolbox model node corresponding to the recent algorithms group
 #include "qgsprocessingtoolboxmodel.h"
 %End
   public:
-
     QgsProcessingToolboxModelRecentNode();
-%Docstring
-Constructor for QgsProcessingToolboxModelRecentNode.
-%End
 
     virtual NodeType nodeType() const;
+};
 
+class QgsProcessingToolboxModelFavoriteNode : QgsProcessingToolboxModelNode
+{
+%Docstring(signature="appended")
+Processing toolbox model node corresponding to the favorite algorithms group
+
+.. warning::
+
+   Not part of stable API and may change in future QGIS releases.
+
+.. versionadded:: 3.40
+%End
+
+%TypeHeaderCode
+#include "qgsprocessingtoolboxmodel.h"
+%End
+  public:
+    QgsProcessingToolboxModelFavoriteNode();
+
+    virtual NodeType nodeType() const;
 };
 
 class QgsProcessingToolboxModelProviderNode : QgsProcessingToolboxModelNode
@@ -138,7 +157,6 @@ Processing toolbox model node corresponding to a Processing provider.
 #include "qgsprocessingtoolboxmodel.h"
 %End
   public:
-
     QgsProcessingToolboxModelProviderNode( QgsProcessingProvider *provider );
 %Docstring
 Constructor for QgsProcessingToolboxModelProviderNode, linked to the
@@ -175,7 +193,6 @@ Processing toolbox model node corresponding to a group of algorithms.
 #include "qgsprocessingtoolboxmodel.h"
 %End
   public:
-
     QgsProcessingToolboxModelGroupNode( const QString &id, const QString &name );
 %Docstring
 Constructor for QgsProcessingToolboxModelGroupNode.
@@ -215,7 +232,6 @@ Processing toolbox model node corresponding to an algorithm.
 #include "qgsprocessingtoolboxmodel.h"
 %End
   public:
-
     QgsProcessingToolboxModelAlgorithmNode( const QgsProcessingAlgorithm *algorithm );
 %Docstring
 Constructor for QgsProcessingToolboxModelAlgorithmNode, associated
@@ -248,19 +264,18 @@ of this model.
 %End
   public:
 
-    enum Roles
+    enum class CustomRole
     {
-      RoleNodeType,
-      RoleAlgorithmFlags,
-      RoleAlgorithmId,
-      RoleAlgorithmName,
-      RoleAlgorithmShortDescription,
-      RoleAlgorithmTags,
-      RoleProviderFlags,
+      NodeType,
+      AlgorithmFlags,
+      AlgorithmId,
+      AlgorithmName,
+      AlgorithmShortDescription,
+      AlgorithmTags,
+      ProviderFlags,
     };
 
-    QgsProcessingToolboxModel( QObject *parent /TransferThis/ = 0, QgsProcessingRegistry *registry = 0,
-                               QgsProcessingRecentAlgorithmLog *recentLog = 0 );
+    QgsProcessingToolboxModel( QObject *parent /TransferThis/ = 0, QgsProcessingRegistry *registry = 0, QgsProcessingRecentAlgorithmLog *recentLog = 0, QgsProcessingFavoriteAlgorithmManager *favoriteManager = 0 );
 %Docstring
 Constructor for QgsProcessingToolboxModel, with the given ``parent`` object.
 
@@ -271,6 +286,9 @@ by the model.
 
 If ``recentLog`` is specified then it will be used to create a "Recently used" top
 level group containing recently used algorithms.
+
+If ``favoriteManager`` is specified then it will be used to create a "Favorites" top
+level group containing favorite algorithms. Since QGIS 3.40
 %End
 
     virtual Qt::ItemFlags flags( const QModelIndex &index ) const;
@@ -358,10 +376,15 @@ Returns the index corresponding to the parent of a given node.
 Emitted whenever recent algorithms are added to the model.
 %End
 
+    void favoriteAlgorithmAdded();
+%Docstring
+Emitted whenever favorite algorithms are added to the model.
+%End
+
 };
 
 
-class QgsProcessingToolboxProxyModel: QSortFilterProxyModel
+class QgsProcessingToolboxProxyModel : QSortFilterProxyModel
 {
 %Docstring(signature="appended")
 A sort/filter proxy model for providers and algorithms shown within the Processing toolbox,
@@ -376,19 +399,17 @@ the results.
 %End
   public:
 
-    enum Filter
+    enum class Filter
     {
-      FilterToolbox,
-      FilterModeler,
-      FilterInPlace,
-      FilterShowKnownIssues,
+      Toolbox,
+      Modeler,
+      InPlace,
+      ShowKnownIssues,
     };
     typedef QFlags<QgsProcessingToolboxProxyModel::Filter> Filters;
 
 
-    explicit QgsProcessingToolboxProxyModel( QObject *parent /TransferThis/ = 0,
-        QgsProcessingRegistry *registry = 0,
-        QgsProcessingRecentAlgorithmLog *recentLog = 0 );
+    explicit QgsProcessingToolboxProxyModel( QObject *parent /TransferThis/ = 0, QgsProcessingRegistry *registry = 0, QgsProcessingRecentAlgorithmLog *recentLog = 0, QgsProcessingFavoriteAlgorithmManager *favoriteManager = 0 );
 %Docstring
 Constructor for QgsProcessingToolboxProxyModel, with the given ``parent`` object.
 
@@ -399,6 +420,9 @@ by the model.
 
 If ``recentLog`` is specified then it will be used to create a "Recently used" top
 level group containing recently used algorithms.
+
+If ``favoriteManager`` is specified then it will be used to create a "Favorites" top
+level group containing favorite algorithms. SInce QGIS 3.40
 %End
 
     QgsProcessingToolboxModel *toolboxModel();
@@ -452,6 +476,7 @@ Returns the current filter string, if set.
 
 
 };
+QFlags<QgsProcessingToolboxProxyModel::Filter> operator|(QgsProcessingToolboxProxyModel::Filter f1, QFlags<QgsProcessingToolboxProxyModel::Filter> f2);
 
 
 /************************************************************************
@@ -459,5 +484,5 @@ Returns the current filter string, if set.
  *                                                                      *
  * src/gui/processing/qgsprocessingtoolboxmodel.h                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

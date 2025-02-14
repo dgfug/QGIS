@@ -33,6 +33,7 @@ class QgsTreeWidgetItem;
 class QDomDocument;
 class QDomElement;
 class QgsWmsCapabilities;
+class QgsWmsInterpretationComboBox;
 
 /*!
  * \brief   Dialog to create connections and add layers from WMS, etc.
@@ -49,7 +50,7 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
 
   public:
     //! Constructor
-    QgsWMSSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
+    QgsWMSSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Standalone );
 
     //! Triggered when the provider's connections need to be refreshed
     void refresh() override;
@@ -128,7 +129,6 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
     //! Map mime types to supported formats
     QMap<QString, int> mMimeMap;
 
-
     // Clear layers list, crs, encodings ...
     void clear();
 
@@ -141,12 +141,7 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
     bool populateLayerList( const QgsWmsCapabilities &capabilities );
 
     //! create an item including possible parents
-    QgsTreeWidgetItem *createItem( int id,
-                                   const QStringList &names,
-                                   QMap<int, QgsTreeWidgetItem *> &items,
-                                   int &layerAndStyleCount,
-                                   const QMap<int, int> &layerParents,
-                                   const QMap<int, QStringList> &layerParentNames );
+    QgsTreeWidgetItem *createItem( int id, const QStringList &names, QMap<int, QgsTreeWidgetItem *> &items, int &layerAndStyleCount, const QMap<int, int> &layerParents, const QMap<int, QStringList> &layerParentNames );
 
     //! Returns a textual description for the authority id
     QString descriptionForAuthId( const QString &authId );
@@ -159,9 +154,6 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
 
     //! URI for selected connection
     QgsDataSourceUri mUri;
-
-    //! layer name derived from latest layer selection (updated as long it's not edited manually)
-    QString mLastLayerName;
 
     //! The widget that controls the image format radio buttons
     QButtonGroup *mImageFormatGroup = nullptr;
@@ -193,6 +185,8 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
     // save the current status of the layer true
     QMap<QTreeWidgetItem *, bool> mTreeInitialExpand = QMap<QTreeWidgetItem *, bool>();
 
+    QgsWmsInterpretationComboBox *mInterpretationCombo = nullptr;
+
   private slots:
     void lstTilesets_itemClicked( QTableWidgetItem *item );
     void mLayerUpButton_clicked();
@@ -201,5 +195,23 @@ class QgsWMSSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsWM
     void showHelp();
 };
 
+/*!
+ * \brief ComboBox to select interpretation to convert image to a single band raster
+ */
+class QgsWmsInterpretationComboBox : public QComboBox
+{
+    Q_OBJECT
+  public:
+    //! Constructor
+    QgsWmsInterpretationComboBox( QWidget *parent = nullptr );
+
+    /**
+     * Sets the interpretation from its key \a interpretationKey, default if interpretationKey is empty
+     */
+    void setInterpretation( const QString &interpretationKey );
+
+    //! Returns the key of the current selected interpretation, returns empty string if the current is default
+    QString interpretation() const;
+};
 
 #endif // QGSWMSSOURCESELECT_H

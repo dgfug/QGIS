@@ -133,7 +133,7 @@ QgsMeshVertex QgsTriangularMesh::transformVertex( const QgsMeshVertex &vertex, Q
     catch ( QgsCsException &cse )
     {
       Q_UNUSED( cse )
-      QgsDebugMsg( QStringLiteral( "Caught CRS exception %1" ).arg( cse.what() ) );
+      QgsDebugError( QStringLiteral( "Caught CRS exception %1" ).arg( cse.what() ) );
       transformedVertex = QgsMeshVertex();
     }
   }
@@ -141,7 +141,7 @@ QgsMeshVertex QgsTriangularMesh::transformVertex( const QgsMeshVertex &vertex, Q
   return transformedVertex;
 }
 
-QgsMeshVertex QgsTriangularMesh::calculateCentroid( const QgsMeshFace &nativeFace )
+QgsMeshVertex QgsTriangularMesh::calculateCentroid( const QgsMeshFace &nativeFace ) const
 {
   return QgsMeshUtils::centroid( nativeFace, mTriangularMesh.vertices );
 }
@@ -187,7 +187,7 @@ bool QgsTriangularMesh::update( QgsMesh *nativeMesh, const QgsCoordinateTransfor
   // TRANSFORM VERTICES
   mCoordinateTransform = transform;
   mTriangularMesh.vertices.resize( nativeMesh->vertices.size() );
-  mExtent.setMinimal();
+  mExtent.setNull();
   for ( int i = 0; i < nativeMesh->vertices.size(); ++i )
   {
     mTriangularMesh.vertices[i] = nativeToTriangularCoordinates( nativeMesh->vertices.at( i ) );
@@ -254,6 +254,11 @@ bool QgsTriangularMesh::update( QgsMesh *nativeMesh, const QgsCoordinateTransfor
   return true;
 }
 
+bool QgsTriangularMesh::update( QgsMesh *nativeMesh )
+{
+  return update( nativeMesh, mCoordinateTransform );
+}
+
 void QgsTriangularMesh::finalizeTriangles()
 {
   mAverageTriangleSize = 0;
@@ -287,16 +292,18 @@ QgsMeshVertex QgsTriangularMesh::triangularToNativeCoordinates( const QgsMeshVer
 QgsRectangle QgsTriangularMesh::nativeExtent()
 {
   QgsRectangle nativeExtent;
-  if ( mCoordinateTransform.isValid() )
+  if ( !mCoordinateTransform.isShortCircuited() )
   {
     try
     {
-      nativeExtent = mCoordinateTransform.transform( extent(), Qgis::TransformDirection::Reverse );
+      QgsCoordinateTransform extentTransform = mCoordinateTransform;
+      extentTransform.setBallparkTransformsAreAppropriate( true );
+      nativeExtent = extentTransform.transformBoundingBox( extent(), Qgis::TransformDirection::Reverse );
     }
     catch ( QgsCsException &cse )
     {
       Q_UNUSED( cse )
-      QgsDebugMsg( QStringLiteral( "Caught CRS exception %1" ).arg( cse.what() ) );
+      QgsDebugError( QStringLiteral( "Caught CRS exception %1" ).arg( cse.what() ) );
     }
   }
   else
@@ -309,7 +316,7 @@ QgsRectangle QgsTriangularMesh::extent() const
 {
   if ( !mIsExtentValid )
   {
-    mExtent.setMinimal();
+    mExtent.setNull();
     for ( int i = 0; i < mTriangularMesh.vertices.size(); ++i )
       if ( !mTriangularMesh.vertices.at( i ).isEmpty() )
         mExtent.include( mTriangularMesh.vertices.at( i ) );
@@ -399,7 +406,7 @@ QgsPointXY QgsTriangularMesh::transformFromLayerToTrianglesCoordinates( const Qg
     catch ( QgsCsException &cse )
     {
       Q_UNUSED( cse )
-      QgsDebugMsg( QStringLiteral( "Caught CRS exception %1" ).arg( cse.what() ) );
+      QgsDebugError( QStringLiteral( "Caught CRS exception %1" ).arg( cse.what() ) );
       mapPoint = point;
     }
   }
@@ -467,7 +474,7 @@ QList<int> QgsTriangularMesh::edgeIndexesForRectangle( const QgsRectangle &recta
 
 QVector<QVector3D> QgsTriangularMesh::vertexNormals( float vertScale ) const
 {
-  QVector<QVector3D> normales( vertices().count(), QVector3D( 0, 0, 0 ) );
+  QVector<QVector3D> normals( vertices().count(), QVector3D( 0, 0, 0 ) );
 
   for ( const auto &face : triangles() )
   {
@@ -487,10 +494,10 @@ QVector<QVector3D> QgsTriangularMesh::vertexNormals( float vertScale ) const
       QVector3D v1( float( otherVert1.x() - vert.x() ), float( otherVert1.y() - vert.y() ), vertScale * float( otherVert1.z() - vert.z() ) );
       QVector3D v2( float( otherVert2.x() - vert.x() ), float( otherVert2.y() - vert.y() ), vertScale * float( otherVert2.z() - vert.z() ) );
 
-      normales[index1] += QVector3D::crossProduct( v1, v2 );
+      normals[index1] += QVector3D::crossProduct( v1, v2 );
     }
   }
-  return normales;
+  return normals;
 }
 
 QVector<QgsTriangularMesh *> QgsTriangularMesh::simplifyMesh( double reductionFactor, int minimumTrianglesCount ) const
@@ -531,7 +538,10 @@ QVector<QgsTriangularMesh *> QgsTriangularMesh::simplifyMesh( double reductionFa
     size_t maxNumberOfIndexes = baseIndexCount / pow( reductionFactor, path + 1 );
 
     if ( indexes.size() <= int( maxNumberOfIndexes ) )
+    {
+      delete simplifiedMesh;
       break;
+    }
 
     QVector<unsigned int> returnIndexes( indexes.size() );
     //returned size could be different than goal size but not than the input indexes count
@@ -549,7 +559,8 @@ QVector<QgsTriangularMesh *> QgsTriangularMesh::simplifyMesh( double reductionFa
 
     if ( size == 0 || int( size ) >= indexes.size() )
     {
-      QgsDebugMsg( QStringLiteral( "Mesh simplification failed after %1 path" ).arg( path + 1 ) );
+      QgsDebugError( QStringLiteral( "Mesh simplification failed after %1 path" ).arg( path + 1 ) );
+      delete simplifiedMesh;
       break;
     }
 
@@ -570,7 +581,7 @@ QVector<QgsTriangularMesh *> QgsTriangularMesh::simplifyMesh( double reductionFa
     simplifiedMesh->finalizeTriangles();
     simplifiedMeshes.push_back( simplifiedMesh );
 
-    QgsDebugMsg( QStringLiteral( "Simplified mesh created with %1 triangles" ).arg( newMesh.faceCount() ) );
+    QgsDebugMsgLevel( QStringLiteral( "Simplified mesh created with %1 triangles" ).arg( newMesh.faceCount() ), 2 );
 
     simplifiedMesh->mTrianglesToNativeFaces = QVector<int>( simplifiedMesh->triangles().count(), 0 );
     for ( int i = 0; i < simplifiedMesh->mTrianglesToNativeFaces.count(); ++i )
@@ -624,7 +635,7 @@ std::unique_ptr< QgsPolygon > QgsMeshUtils::toPolygon( const QgsMeshFace &face, 
     const QgsPoint &vertex = vertices[vertexId];
     ring.append( vertex );
   }
-  std::unique_ptr< QgsPolygon > polygon = std::make_unique< QgsPolygon >();
+  auto polygon = std::make_unique< QgsPolygon >();
   polygon->setExteriorRing( new QgsLineString( ring ) );
   return polygon;
 }
@@ -679,7 +690,7 @@ bool QgsMeshUtils::isInTriangleFace( const QgsPointXY point, const QgsMeshFace &
   QVector<QgsMeshVertex> triangle( 3 );
   for ( int i = 0; i < 3; ++i )
   {
-    if ( face[i] > vertices.count() )
+    if ( face[i] >= vertices.count() )
       return false;
     triangle[i] = vertices[face[i]];
   }

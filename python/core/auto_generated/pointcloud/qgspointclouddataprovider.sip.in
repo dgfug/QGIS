@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/pointcloud/qgspointclouddataprovider.h                      *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -35,6 +35,8 @@ Responsible for reading native point cloud data and returning the indexed data.
       ReadLayerMetadata,
       WriteLayerMetadata,
       CreateRenderer,
+      ContainSubIndexes,
+      ChangeAttributeValues,
     };
 
     typedef QFlags<QgsPointCloudDataProvider::Capability> Capabilities;
@@ -49,7 +51,7 @@ Responsible for reading native point cloud data and returning the indexed data.
 
     QgsPointCloudDataProvider( const QString &uri,
                                const QgsDataProvider::ProviderOptions &providerOptions,
-                               QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() );
+                               Qgis::DataProviderReadFlags flags = Qgis::DataProviderReadFlags() );
 %Docstring
 Ctor
 %End
@@ -63,8 +65,6 @@ Returns the list of points of the point cloud according to a zoom level
 defined by ``maxError`` (in layer coordinates), an extent ``geometry`` in the 2D plane
 and a range ``extentZRange`` for z values. The function will try to limit
 the number of points returned to ``pointsLimit`` points
-
-``maxErrorPixels`` : maximum accepted error factor in pixels
 
 .. note::
 
@@ -104,7 +104,7 @@ May return empty collection until :py:func:`~QgsPointCloudDataProvider.pointClou
 %Docstring
 Triggers loading of the point cloud index
 
-\sa :py:func:`~QgsPointCloudDataProvider.index`
+.. seealso:: :py:func:`index`
 %End
 
     virtual void generateIndex( ) = 0;
@@ -113,7 +113,7 @@ Triggers generation of the point cloud index
 
 emits :py:func:`~QgsPointCloudDataProvider.indexGenerationStateChanged`
 
-\sa :py:func:`~QgsPointCloudDataProvider.index`
+.. seealso:: :py:func:`index`
 %End
 
 
@@ -121,6 +121,14 @@ emits :py:func:`~QgsPointCloudDataProvider.indexGenerationStateChanged`
 %Docstring
 Gets the current index generation state
 %End
+
+    virtual QgsPointCloudIndex index() const;
+%Docstring
+Returns the point cloud index associated with the provider.
+
+Can be None (e.g. the index is being created)
+%End
+
 
 
     bool hasValidIndex() const;
@@ -169,70 +177,23 @@ Only providers which report the CreateRenderer capability will return a 2D rende
 providers will return ``None``.
 %End
 
-    SIP_PYOBJECT metadataStatistic( const QString &attribute, QgsStatisticalSummary::Statistic statistic ) const;
+    QgsPointCloudStatistics metadataStatistics();
 %Docstring
-Returns a statistic for the specified ``attribute``, taken only from the metadata of the point cloud
-data source.
+Returns the object containing the statistics metadata extracted from the dataset
 
-This method will not perform any statistical calculations, rather it will return only precomputed attribute
-statistics which are included in the data source's metadata. Not all data sources include this information
-in the metadata, and even for sources with statistical metadata only some ``statistic`` values may be available.
-
-:raises ValueError: if no matching precalculated statistic is available for the attribute.
-%End
-%MethodCode
-    {
-      const QVariant res = sipCpp->metadataStatistic( *a0, a1 );
-      if ( !res.isValid() )
-      {
-        PyErr_SetString( PyExc_ValueError, QStringLiteral( "Statistic is not available" ).toUtf8().constData() );
-        sipIsErr = 1;
-      }
-      else
-      {
-        QVariant *v = new QVariant( res );
-        sipRes = sipConvertFromNewType( v, sipType_QVariant, Py_None );
-      }
-    }
+.. versionadded:: 3.26
 %End
 
-    virtual QVariantList metadataClasses( const QString &attribute ) const;
-%Docstring
-Returns a list of existing classes which are present for the specified ``attribute``, taken only from the
-metadata of the point cloud data source.
+    virtual bool supportsSubsetString() const;
 
-This method will not perform any classification or scan for available classes, rather it will return only
-precomputed classes which are included in the data source's metadata. Not all data sources include this information
-in the metadata.
-%End
+    virtual QString subsetStringDialect() const;
 
+    virtual QString subsetStringHelpUrl() const;
 
+    virtual QString subsetString() const;
 
-    SIP_PYOBJECT metadataClassStatistic( const QString &attribute, const QVariant &value, QgsStatisticalSummary::Statistic statistic ) const;
-%Docstring
-Returns a statistic for one class ``value`` from the specified ``attribute``, taken only from the metadata of the point cloud
-data source.
-This method will not perform any statistical calculations, rather it will return only precomputed class
-statistics which are included in the data source's metadata. Not all data sources include this information
-in the metadata, and even for sources with statistical metadata only some ``statistic`` values may be available.
+    virtual bool setSubsetString( const QString &subset, bool updateFeatureCount = false );
 
-:raises ValueError: if no matching precalculated statistic is available for the attribute.
-%End
-%MethodCode
-    {
-      const QVariant res = sipCpp->metadataClassStatistic( *a0, *a1, a2 );
-      if ( !res.isValid() )
-      {
-        PyErr_SetString( PyExc_ValueError, QStringLiteral( "Statistic is not available" ).toUtf8().constData() );
-        sipIsErr = 1;
-      }
-      else
-      {
-        QVariant *v = new QVariant( res );
-        sipRes = sipConvertFromNewType( v, sipType_QVariant, Py_None );
-      }
-    }
-%End
 
     static QMap< int, QString > lasClassificationCodes();
 %Docstring
@@ -266,10 +227,13 @@ Returns the map of LAS data format ID to translated string value.
 
   signals:
 
-    void indexGenerationStateChanged( PointCloudIndexGenerationState state );
+    void indexGenerationStateChanged( QgsPointCloudDataProvider::PointCloudIndexGenerationState state );
 %Docstring
 Emitted when point cloud generation state is changed
 %End
+
+  protected:
+
 
 };
 
@@ -278,5 +242,5 @@ Emitted when point cloud generation state is changed
  *                                                                      *
  * src/core/pointcloud/qgspointclouddataprovider.h                      *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

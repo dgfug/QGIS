@@ -73,7 +73,7 @@ void Grid::resetLevel(int level)
 {
     // We have to have at least level 1 or things break when sampling.
     m_maxLevel = (std::max)(level, 1);
-    m_gridSize = (int)std::pow(2, level);
+    m_gridSize = (int)std::pow(2, m_maxLevel);
 
     if (m_cubic)
     {
@@ -89,7 +89,7 @@ void Grid::resetLevel(int level)
     }
 }
 
-VoxelKey Grid::key(double x, double y, double z)
+VoxelKey Grid::key(double x, double y, double z) const
 {
     int xi = (int)std::floor((x - m_bounds.minx) / m_xsize);
     int yi = (int)std::floor((y - m_bounds.miny) / m_ysize);

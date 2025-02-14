@@ -16,31 +16,31 @@
 #include "qgsmapsettings.h"
 
 #include "qgsscalecalculator.h"
-#include "qgsmaprendererjob.h"
 #include "qgsmaptopixel.h"
 #include "qgslogger.h"
 
 #include "qgsmessagelog.h"
 #include "qgsmaplayer.h"
-#include "qgsmaplayerlistutils.h"
-#include "qgsproject.h"
+#include "qgsmaplayerlistutils_p.h"
 #include "qgsxmlutils.h"
 #include "qgsexception.h"
 #include "qgsgeometry.h"
-
-Q_GUI_EXPORT extern int qt_defaultDpiX();
-
+#include "qgsgrouplayer.h"
+#include "qgscoordinatetransform.h"
+#include "qgsellipsoidutils.h"
+#include "qgsunittypes.h"
+#include "qgspainting.h"
 
 QgsMapSettings::QgsMapSettings()
-  : mDpi( qt_defaultDpiX() ) // DPI that will be used by default for QImage instances
+  : mDpi( QgsPainting::qtDefaultDpiX() ) // DPI that will be used by default for QImage instances
   , mSize( QSize( 0, 0 ) )
   , mBackgroundColor( Qt::white )
   , mSelectionColor( Qt::yellow )
   , mFlags( Qgis::MapSettingsFlag::Antialiasing | Qgis::MapSettingsFlag::UseAdvancedEffects | Qgis::MapSettingsFlag::DrawLabeling | Qgis::MapSettingsFlag::DrawSelection )
   , mSegmentationTolerance( M_PI_2 / 90 )
 {
-  mScaleCalculator.setMapUnits( QgsUnitTypes::DistanceUnknownUnit );
-  mSimplifyMethod.setSimplifyHints( QgsVectorSimplifyMethod::NoSimplification );
+  mScaleCalculator.setMapUnits( Qgis::DistanceUnit::Unknown );
+  mSimplifyMethod.setSimplifyHints( Qgis::VectorRenderingSimplificationFlag::NoSimplification );
 
   updateDerived();
 }
@@ -191,7 +191,7 @@ void QgsMapSettings::updateDerived()
   mVisibleExtent.set( dxmin, dymin, dxmax, dymax );
 
   // update the scale
-  mScaleCalculator.setDpi( mDpi * mDevicePixelRatio );
+  mScaleCalculator.setDpi( mDpi );
   mScale = mScaleCalculator.calculate( mVisibleExtent, mSize.width() );
 
   bool ok = true;
@@ -285,15 +285,59 @@ void QgsMapSettings::setDpiTarget( double dpi )
   mDpiTarget = dpi;
 }
 
-QStringList QgsMapSettings::layerIds() const
+QStringList QgsMapSettings::layerIds( bool expandGroupLayers ) const
 {
-  return _qgis_listQPointerToIDs( mLayers );
+  const QList<QgsMapLayer * > mapLayers = layers( expandGroupLayers );
+  QStringList res;
+  res.reserve( mapLayers.size() );
+  for ( const QgsMapLayer *layer : mapLayers )
+    res << layer->id();
+  return res;
 }
 
-
-QList<QgsMapLayer *> QgsMapSettings::layers() const
+QList<QgsMapLayer *> QgsMapSettings::layers( bool expandGroupLayers ) const
 {
-  return _qgis_listQPointerToRaw( mLayers );
+  const QList<QgsMapLayer *> actualLayers = _qgis_listQPointerToRaw( mLayers );
+  if ( !expandGroupLayers )
+    return actualLayers;
+
+  QList< QgsMapLayer * > result;
+
+  std::function< void( const QList< QgsMapLayer * >& layers ) > expandLayers;
+  expandLayers = [&result, &expandLayers]( const QList< QgsMapLayer * > &layers )
+  {
+    for ( QgsMapLayer *layer : layers )
+    {
+      if ( QgsGroupLayer *groupLayer = qobject_cast< QgsGroupLayer * >( layer ) )
+      {
+        expandLayers( groupLayer->childLayers() );
+      }
+      else
+      {
+        result << layer;
+      }
+    }
+  };
+
+  expandLayers( actualLayers );
+  return result;
+}
+
+template<typename T>
+QVector<T> QgsMapSettings::layers() const
+{
+  const QList<QgsMapLayer *> actualLayers = _qgis_listQPointerToRaw( mLayers );
+
+  QVector<T> layers;
+  for ( QgsMapLayer *layer : actualLayers )
+  {
+    T tLayer = qobject_cast<T>( layer );
+    if ( tLayer )
+    {
+      layers << tLayer;
+    }
+  }
+  return layers;
 }
 
 void QgsMapSettings::setLayers( const QList<QgsMapLayer *> &layers )
@@ -369,7 +413,7 @@ bool QgsMapSettings::testFlag( Qgis::MapSettingsFlag flag ) const
   return mFlags.testFlag( flag );
 }
 
-QgsUnitTypes::DistanceUnit QgsMapSettings::mapUnits() const
+Qgis::DistanceUnit QgsMapSettings::mapUnits() const
 {
   return mScaleCalculator.mapUnits();
 }
@@ -466,7 +510,7 @@ QgsRectangle QgsMapSettings::computeExtentForScale( const QgsPointXY &center, do
   // Desired visible width (honouring scale)
   const double scaledWidthInInches = outputWidthInInches * scale;
 
-  if ( mapUnits() == QgsUnitTypes::DistanceDegrees )
+  if ( mapUnits() == Qgis::DistanceUnit::Degrees )
   {
     // Start with some fraction of the current extent around the center
     const double delta = mExtent.width() / 100.;
@@ -479,7 +523,7 @@ QgsRectangle QgsMapSettings::computeExtentForScale( const QgsPointXY &center, do
   else
   {
     // Conversion from inches to mapUnits  - this is safe to use, because we know here that the map units AREN'T in degrees
-    const double conversionFactor = QgsUnitTypes::fromUnitToUnitFactor( QgsUnitTypes::DistanceFeet, mapUnits() ) / 12;
+    const double conversionFactor = QgsUnitTypes::fromUnitToUnitFactor( Qgis::DistanceUnit::Feet, mapUnits() ) / 12;
 
     const double delta = 0.5 * scaledWidthInInches * conversionFactor;
     return QgsRectangle( center.x() - delta, center.y() - delta, center.x() + delta, center.y() + delta );
@@ -663,7 +707,7 @@ QgsRectangle QgsMapSettings::fullExtent() const
   // reset the map canvas extent since the extent may now be smaller
   // We can't use a constructor since QgsRectangle normalizes the rectangle upon construction
   QgsRectangle fullExtent;
-  fullExtent.setMinimal();
+  fullExtent.setNull();
 
   // iterate through the map layers and test each layers extent
   // against the current min and max values
@@ -807,6 +851,11 @@ QList<QgsMapClippingRegion> QgsMapSettings::clippingRegions() const
   return mClippingRegions;
 }
 
+void QgsMapSettings::setMaskSettings( const QgsMaskRenderSettings &settings )
+{
+  mMaskRenderSettings = settings;
+}
+
 void QgsMapSettings::addRenderedFeatureHandler( QgsRenderedFeatureHandlerInterface *handler )
 {
   mRenderedFeatureHandlers.append( handler );
@@ -826,3 +875,44 @@ void QgsMapSettings::setZRange( const QgsDoubleRange &zRange )
 {
   mZRange = zRange;
 }
+
+Qgis::RendererUsage QgsMapSettings::rendererUsage() const
+{
+  return mRendererUsage;
+}
+
+void QgsMapSettings::setRendererUsage( Qgis::RendererUsage rendererUsage )
+{
+  mRendererUsage = rendererUsage;
+}
+
+double QgsMapSettings::frameRate() const
+{
+  return mFrameRate;
+}
+
+void QgsMapSettings::setFrameRate( double rate )
+{
+  mFrameRate = rate;
+}
+
+long long QgsMapSettings::currentFrame() const
+{
+  return mCurrentFrame;
+}
+
+void QgsMapSettings::setCurrentFrame( long long frame )
+{
+  mCurrentFrame = frame;
+}
+
+const QgsElevationShadingRenderer &QgsMapSettings::elevationShadingRenderer() const
+{
+  return mShadingRenderer;
+}
+
+void QgsMapSettings::setElevationShadingRenderer( const QgsElevationShadingRenderer &elevationShadingRenderer )
+{
+  mShadingRenderer = elevationShadingRenderer;
+}
+

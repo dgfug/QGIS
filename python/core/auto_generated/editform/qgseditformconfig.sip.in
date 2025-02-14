@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/editform/qgseditformconfig.h                                *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -25,19 +25,9 @@ Contains configuration settings for an editor form.
 
   public:
 
-    enum EditorLayout
-    {
-      GeneratedLayout,
-      TabLayout,
-      UiFileLayout
-    };
-
     struct GroupData
     {
       GroupData();
-%Docstring
-Constructor for GroupData
-%End
       GroupData( const QString &name, const QList<QString> &fields );
       QString mName;
       QList<QString> mFields;
@@ -46,46 +36,25 @@ Constructor for GroupData
     struct TabData
     {
       TabData();
-%Docstring
-Constructor for TabData
-%End
       TabData( const QString &name, const QList<QString> &fields, const QList<QgsEditFormConfig::GroupData> &groups );
       QString mName;
       QList<QString> mFields;
       QList<QgsEditFormConfig::GroupData> mGroups;
     };
 
-    enum FeatureFormSuppress
-    {
-      SuppressDefault,
-      SuppressOn,
-      SuppressOff
-    };
 
-    enum PythonInitCodeSource
-    {
-      CodeSourceNone,
-      CodeSourceFile,
-      CodeSourceDialog,
-      CodeSourceEnvironment
-    };
-
-    enum DataDefinedProperty
-    {
+    enum class DataDefinedProperty
+      {
       NoProperty,
       AllProperties,
       Alias,
+      Editable,
     };
 
     QgsEditFormConfig( const QgsEditFormConfig &o );
-%Docstring
-Copy constructor
-
-.. versionadded:: 3.0
-%End
     ~QgsEditFormConfig();
 
-    bool operator==( const QgsEditFormConfig &o );
+    bool operator==( const QgsEditFormConfig &o ) const;
 
     void addTab( QgsAttributeEditorElement *data /Transfer/ );
 %Docstring
@@ -111,12 +80,12 @@ Gets the invisible root container for the drag and drop designer form (EditorLay
 .. versionadded:: 3
 %End
 
-    EditorLayout layout() const;
+    Qgis::AttributeFormLayout layout() const;
 %Docstring
 Gets the active layout style for the attribute editor for this layer
 %End
 
-    void setLayout( EditorLayout editorLayout );
+    void setLayout( Qgis::AttributeFormLayout editorLayout );
 %Docstring
 Sets the active layout style for the attribute editor for this layer
 %End
@@ -141,7 +110,7 @@ If ``ui`` is a URL, a local copy of the file will be made and will be used to cr
 Set the editor widget config for a widget which is not for a simple field.
 
 Example
--------
+-------------------------------------
 
 .. code-block:: python
 
@@ -155,8 +124,7 @@ Example
 :return: ``False`` if a field exists with the provided widgetName. In this case
          :py:class:`QgsVectorLayer`.setEditorWidgetSetup should be used.
 
-
-.. seealso:: :py:func:`QgsVectorLayer.setEditorWidgetSetup`
+.. seealso:: :py:func:`QgsVectorLayer.setEditorWidgetSetup` for field configurations.
 %End
 
     QVariantMap widgetConfig( const QString &widgetName ) const;
@@ -264,23 +232,23 @@ Make sure that you also set the appropriate function name in
 :py:func:`~QgsEditFormConfig.setInitFunction`.
 %End
 
-    PythonInitCodeSource initCodeSource() const;
+    Qgis::AttributeFormPythonInitCodeSource initCodeSource() const;
 %Docstring
 Returns Python code source for edit form initialization
 (if it shall be loaded from a file, read from the
 provided dialog editor or inherited from the environment)
 %End
 
-    void setInitCodeSource( PythonInitCodeSource initCodeSource );
+    void setInitCodeSource( Qgis::AttributeFormPythonInitCodeSource initCodeSource );
 %Docstring
 Sets if Python code shall be used for edit form initialization and its origin
 %End
 
-    FeatureFormSuppress suppress() const;
+    Qgis::AttributeFormSuppression suppress() const;
 %Docstring
 Type of feature form pop-up suppression after feature creation (overrides app setting)
 %End
-    void setSuppress( FeatureFormSuppress s );
+    void setSuppress( Qgis::AttributeFormSuppression s );
 %Docstring
 Sets type of feature form pop-up suppression after feature creation (overrides app setting)
 %End
@@ -298,12 +266,13 @@ Write XML information
 Serialize on project save
 %End
 
- QgsAttributeEditorElement *attributeEditorElementFromDomElement( QDomElement &elem, QgsAttributeEditorElement *parent, const QString &layerId = QString(), const QgsReadWriteContext &context = QgsReadWriteContext() ) /Deprecated/;
+ QgsAttributeEditorElement *attributeEditorElementFromDomElement( QDomElement &elem, QgsAttributeEditorElement *parent, const QString &layerId = QString(), const QgsReadWriteContext &context = QgsReadWriteContext() ) /Deprecated="Since 3.18. Use QgsAttributeEditorElement.create instead."/;
 %Docstring
 Deserialize drag and drop designer elements.
 
-.. deprecated:: QGIS 3.18
-   use :py:class:`QgsAttributeEditorElement`.create instead
+.. deprecated:: 3.18
+
+   Use :py:class:`QgsAttributeEditorElement`.create instead.
 %End
 
     explicit QgsEditFormConfig();
@@ -325,7 +294,6 @@ Returns data defined properties for ``fieldName``
 .. versionadded:: 3.14
 %End
 
-
     static const QgsPropertiesDefinition &propertyDefinitions();
 %Docstring
 Returns data defined property definitions.
@@ -340,5 +308,5 @@ Returns data defined property definitions.
  *                                                                      *
  * src/core/editform/qgseditformconfig.h                                *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

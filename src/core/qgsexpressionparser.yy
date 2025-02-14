@@ -108,7 +108,6 @@ void addParserLocation(YYLTYPE* yyloc, QgsExpressionNode *node)
 
 %start root
 
-
 //
 // token definitions
 //
@@ -116,7 +115,7 @@ void addParserLocation(YYLTYPE* yyloc, QgsExpressionNode *node)
 // operator tokens
 %token <b_op> OR AND EQ NE LE GE LT GT REGEXP LIKE IS PLUS MINUS MUL DIV INTDIV MOD CONCAT POW
 %token <u_op> NOT
-%token IN
+%token IN BETWEEN
 
 // literals
 %token <numberFloat> NUMBER_FLOAT
@@ -139,6 +138,7 @@ void addParserLocation(YYLTYPE* yyloc, QgsExpressionNode *node)
 //
 
 %type <node> expression
+%type <node> expression_non_logical
 %type <nodelist> exp_list
 %type <whenthen> when_then_clause
 %type <whenthenlist> when_then_clauses
@@ -157,6 +157,7 @@ void addParserLocation(YYLTYPE* yyloc, QgsExpressionNode *node)
 %left OR
 %left AND
 %right NOT
+%left BETWEEN
 %left EQ NE LE GE LT GT REGEXP LIKE IS IN
 %left PLUS MINUS
 %left MUL DIV INTDIV MOD
@@ -188,8 +189,14 @@ root: expression { parser_ctx->rootNode = $1; }
         }
    ;
 
+/* We have to separate expression from expression_non_logical to avoid */
+/* grammar ambiguities with the AND of the "BETWEEN x AND y" and the */
+/* logical binary AND */
+
 expression:
-      expression AND expression       { $$ = BINOP($2, $1, $3); }
+
+      expression_non_logical          { $$ = $1; }
+    | expression AND expression       { $$ = BINOP($2, $1, $3); }
     | expression OR expression        { $$ = BINOP($2, $1, $3); }
     | expression EQ expression        { $$ = BINOP($2, $1, $3); }
     | expression NE expression        { $$ = BINOP($2, $1, $3); }
@@ -200,28 +207,40 @@ expression:
     | expression REGEXP expression    { $$ = BINOP($2, $1, $3); }
     | expression LIKE expression      { $$ = BINOP($2, $1, $3); }
     | expression IS expression        { $$ = BINOP($2, $1, $3); }
-    | expression PLUS expression      { $$ = BINOP($2, $1, $3); }
-    | expression MINUS expression     { $$ = BINOP($2, $1, $3); }
-    | expression MUL expression       { $$ = BINOP($2, $1, $3); }
-    | expression INTDIV expression    { $$ = BINOP($2, $1, $3); }
-    | expression DIV expression       { $$ = BINOP($2, $1, $3); }
-    | expression MOD expression       { $$ = BINOP($2, $1, $3); }
-    | expression POW expression       { $$ = BINOP($2, $1, $3); }
-    | expression CONCAT expression    { $$ = BINOP($2, $1, $3); }
     | NOT expression                  { $$ = new QgsExpressionNodeUnaryOperator($1, $2); }
+    | expression IN '(' exp_list ')'     { $$ = new QgsExpressionNodeInOperator($1, $4, false);  }
+    | expression NOT IN '(' exp_list ')' { $$ = new QgsExpressionNodeInOperator($1, $5, true); }
+
+    | expression BETWEEN expression_non_logical AND expression_non_logical   { $$ = new QgsExpressionNodeBetweenOperator($1, $3, $5, false ); }
+    | expression NOT BETWEEN expression_non_logical AND expression_non_logical   { $$ = new QgsExpressionNodeBetweenOperator($1, $4, $6, true); }
+    ;
+
+
+expression_non_logical:
+
+      expression_non_logical PLUS expression_non_logical      { $$ = BINOP($2, $1, $3); }
+    | expression_non_logical MINUS expression_non_logical     { $$ = BINOP($2, $1, $3); }
+    | expression_non_logical MUL expression_non_logical       { $$ = BINOP($2, $1, $3); }
+    | expression_non_logical INTDIV expression_non_logical    { $$ = BINOP($2, $1, $3); }
+    | expression_non_logical DIV expression_non_logical       { $$ = BINOP($2, $1, $3); }
+    | expression_non_logical MOD expression_non_logical       { $$ = BINOP($2, $1, $3); }
+    | expression_non_logical POW expression_non_logical       { $$ = BINOP($2, $1, $3); }
+    | expression_non_logical CONCAT expression_non_logical    { $$ = BINOP($2, $1, $3); }
     | '(' expression ')'              { $$ = $2; }
     | NAME '(' exp_list ')'
         {
-          int fnIndex = QgsExpression::functionIndex(*$1);
+          const QString expressionFunctionName = *$1;
           delete $1;
+          const int fnIndex = QgsExpression::functionIndex(expressionFunctionName);
           if (fnIndex == -1)
           {
             QgsExpression::ParserError::ParserErrorType errorType = QgsExpression::ParserError::FunctionUnknown;
             parser_ctx->currentErrorType = errorType;
-            exp_error(&yyloc, parser_ctx, QObject::tr( "Function is not known" ).toUtf8().constData() );
+            exp_error(&yyloc, parser_ctx, QObject::tr( "Function %1 is not known" ).arg( expressionFunctionName ).toUtf8().constData() );
             delete $3;
             YYERROR;
           }
+          QgsExpressionFunction* func = QgsExpression::Functions()[fnIndex];
           QString paramError;
           if ( !QgsExpressionNodeFunction::validateParams( fnIndex, $3, paramError ) )
           {
@@ -231,7 +250,6 @@ expression:
             delete $3;
             YYERROR;
           }
-          QgsExpressionFunction* func = QgsExpression::Functions()[fnIndex];
           if ( func->params() != -1
                && !( func->params() >= $3->count()
                && func->minParams() <= $3->count() ) )
@@ -247,7 +265,7 @@ expression:
             {
                expectedMessage = QObject::tr( "Expected between %1 and %2 parameters but %3 were provided." ).arg( QString::number( func->minParams() ), QString::number( func->params() ), QString::number( $3->count() ) );
             }
-            exp_error(&yyloc, parser_ctx, QObject::tr( "%1 function is called with wrong number of arguments. %2" ).arg( QgsExpression::Functions()[fnIndex]->name(), expectedMessage ).toUtf8().constData() );
+            exp_error(&yyloc, parser_ctx, QObject::tr( "%1 function is called with wrong number of arguments. %2" ).arg( func->name(), expectedMessage ).toUtf8().constData() );
             delete $3;
             YYERROR;
           }
@@ -258,36 +276,34 @@ expression:
 
     | NAME '(' ')'
         {
-          int fnIndex = QgsExpression::functionIndex(*$1);
+          const QString expressionFunctionName = *$1;
+          const int fnIndex = QgsExpression::functionIndex(expressionFunctionName);
           delete $1;
           if (fnIndex == -1)
           {
             QgsExpression::ParserError::ParserErrorType errorType = QgsExpression::ParserError::FunctionUnknown;
             parser_ctx->currentErrorType = errorType;
-            exp_error(&yyloc, parser_ctx, QObject::tr( "Function is not known" ).toUtf8().constData() );
+            exp_error(&yyloc, parser_ctx, QObject::tr( "Function %1 is not known" ).arg( expressionFunctionName ).toUtf8().constData() );
             YYERROR;
           }
+          QgsExpressionFunction* func = QgsExpression::Functions()[fnIndex];
           // 0 parameters is expected, -1 parameters means leave it to the
           // implementation
-          if ( QgsExpression::Functions()[fnIndex]->minParams() > 0 )
+          if ( func->minParams() > 0 )
           {
-
             QgsExpression::ParserError::ParserErrorType errorType = QgsExpression::ParserError::FunctionWrongArgs;
             parser_ctx->currentErrorType = errorType;
-            exp_error(&yyloc, parser_ctx, QObject::tr( "%1 function is called with wrong number of arguments" ).arg( QgsExpression::Functions()[fnIndex]->name() ).toLocal8Bit().constData() );
+            exp_error(&yyloc, parser_ctx, QObject::tr( "%1 function is called with wrong number of arguments" ).arg( func->name() ).toLocal8Bit().constData() );
             YYERROR;
           }
           $$ = new QgsExpressionNodeFunction(fnIndex, new QgsExpressionNode::NodeList());
           addParserLocation(&@1, $$);
         }
 
-    | expression IN '(' exp_list ')'     { $$ = new QgsExpressionNodeInOperator($1, $4, false);  }
-    | expression NOT IN '(' exp_list ')' { $$ = new QgsExpressionNodeInOperator($1, $5, true); }
+    | expression_non_logical '[' expression ']' { $$ = new QgsExpressionNodeIndexOperator( $1, $3 ); }
 
-    | expression '[' expression ']' { $$ = new QgsExpressionNodeIndexOperator( $1, $3 ); }
-
-    | PLUS expression %prec UMINUS { $$ = $2; }
-    | MINUS expression %prec UMINUS { $$ = new QgsExpressionNodeUnaryOperator( QgsExpressionNodeUnaryOperator::uoMinus, $2); }
+    | PLUS expression_non_logical %prec UMINUS { $$ = $2; }
+    | MINUS expression_non_logical %prec UMINUS { $$ = new QgsExpressionNodeUnaryOperator( QgsExpressionNodeUnaryOperator::uoMinus, $2); }
 
     | CASE when_then_clauses END      { $$ = new QgsExpressionNodeCondition($2); }
     | CASE when_then_clauses ELSE expression END  { $$ = new QgsExpressionNodeCondition($2,$4); }
@@ -299,7 +315,9 @@ expression:
     // special columns (actually functions with no arguments)
     | SPECIAL_COL
         {
-          int fnIndex = QgsExpression::functionIndex(*$1);
+          const QString expressionFunctionName = *$1;
+          const int fnIndex = QgsExpression::functionIndex(*$1);
+          delete $1;
           if (fnIndex >= 0)
           {
             $$ = new QgsExpressionNodeFunction( fnIndex, nullptr );
@@ -308,10 +326,9 @@ expression:
           {
             QgsExpression::ParserError::ParserErrorType errorType = QgsExpression::ParserError::FunctionUnknown;
             parser_ctx->currentErrorType = errorType;
-            exp_error(&yyloc, parser_ctx, QObject::tr( "%1 function is not known" ).arg( *$1 ).toLocal8Bit().constData());
+            exp_error(&yyloc, parser_ctx, QObject::tr( "%1 function is not known" ).arg( expressionFunctionName ).toLocal8Bit().constData());
             YYERROR;
           }
-          delete $1;
         }
 
     // variables
@@ -332,7 +349,8 @@ expression:
     | BOOLEAN                     { $$ = new QgsExpressionNodeLiteral( QVariant($1) ); }
     | STRING                      { $$ = new QgsExpressionNodeLiteral( QVariant(*$1) ); delete $1; }
     | NULLVALUE                   { $$ = new QgsExpressionNodeLiteral( QVariant() ); }
-;
+    ;
+
 
 named_node:
     NAMED_NODE expression { $$ = new QgsExpressionNode::NamedNode( *$1, $2 ); delete $1; }
@@ -367,6 +385,7 @@ when_then_clauses:
 when_then_clause:
       WHEN expression THEN expression     { $$ = new QgsExpressionNodeCondition::WhenThen($2,$4); }
    ;
+
 
 %%
 

@@ -34,13 +34,13 @@ class GUI_EXPORT QgsCodeEditorJson : public QgsCodeEditor
     Q_OBJECT
 
   public:
-
     //! Constructor for QgsCodeEditorJson
     QgsCodeEditorJson( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
+    Qgis::ScriptLanguage language() const override;
+
   protected:
     void initializeLexer() override;
-
 };
 
 #endif // QGSCODEEDITORJSON_H

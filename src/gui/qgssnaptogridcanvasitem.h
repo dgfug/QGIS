@@ -24,10 +24,10 @@
 #include "qgscoordinatetransform.h"
 
 #ifdef SIP_RUN
-% ModuleHeaderCode
+//%ModuleHeaderCode
 // For ConvertToSubClassCode.
 #include <qgssnaptogridcanvasitem.h>
-% End
+//%End
 #endif
 
 /**
@@ -50,14 +50,19 @@ class GUI_EXPORT QgsSnapToGridCanvasItem : public QgsMapCanvasItem
 #ifdef SIP_RUN
     SIP_CONVERT_TO_SUBCLASS_CODE
     if ( dynamic_cast<QgsSnapToGridCanvasItem *>( sipCpp ) )
+    {
       sipType = sipType_QgsSnapToGridCanvasItem;
+      // We need to tweak the pointer as sip believes it is single inheritance
+      // from QgsMapCanvasItem, but the raw address of QgsSnapToGridCanvasItem (sipCpp)
+      // is actually a QObject
+      *sipCppRet = dynamic_cast<QgsSnapToGridCanvasItem *>( sipCpp );
+    }
     else
       sipType = nullptr;
     SIP_END
 #endif
 
   public:
-
     /**
      * Will automatically be added to the \a mapCanvas.
      */

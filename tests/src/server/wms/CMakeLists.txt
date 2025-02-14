@@ -33,7 +33,7 @@ set(MODULE_WMS_HDRS
   ${CMAKE_SOURCE_DIR}/src/server/services/wms/qgswmsserviceexception.h
 )
 
-QT5_WRAP_CPP(MODULE_WMS_MOC_SRCS ${MODULE_WMS_HDRS})
+qt_wrap_cpp(MODULE_WMS_MOC_SRCS ${MODULE_WMS_HDRS})
 
 #############################################################
 # Tests:
@@ -44,8 +44,9 @@ set(TESTS
   test_qgsserver_wms_restorer.cpp
   test_qgsserver_wms_exceptions.cpp
   test_qgsserver_wms_parameters.cpp
+  test_qgsserver_wms_vector_tile.cpp
 )
 
 foreach(TESTSRC ${TESTS})
-    ADD_QGIS_TEST(${TESTSRC} MODULE server LINKEDLIBRARIES qgis_server wms_static)
+  ADD_QGIS_TEST(${TESTSRC} MODULE server LINKEDLIBRARIES qgis_server wms_static)
 endforeach(TESTSRC)

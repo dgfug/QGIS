@@ -57,7 +57,7 @@ true > $ASTYLEDIFF
 # reformat
 for f in $MODIFIED; do
 	case "$f" in
-	src/plugins/grass/qtermwidget/*|external/astyle/*)
+	external/astyle/*)
 		echo $f skipped
 		continue
 		;;
@@ -66,7 +66,7 @@ for f in $MODIFIED; do
 		cmd=astyle.sh
                 ;;
 
-	*.ui|*.qgm|*.txt|*.py|*.sip|resources/context_help/*)
+	*.ui|*.qgm|*.txt|*.py|*.sip)
 		cmd="flip -ub"
 		;;
 

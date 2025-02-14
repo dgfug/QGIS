@@ -29,6 +29,8 @@
 #include "qgswfsserviceexception.h"
 #include "qgsserversettings.h"
 
+class QgsMapLayer;
+
 /**
  * \ingroup server
  * \brief WMS implementation
@@ -74,11 +76,6 @@ namespace QgsWfs
   const QString OGC_NAMESPACE = QStringLiteral( "http://www.opengis.net/ogc" );
   const QString QGS_NAMESPACE = QStringLiteral( "http://www.qgis.org/gml" );
 
-  // Define clean tagName regExp
-  const QRegExp cleanTagNameRegExp( "(?![\\w\\d\\.-])." );
-
 } // namespace QgsWfs
 
 #endif
-
-

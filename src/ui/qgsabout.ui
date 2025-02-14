@@ -223,6 +223,13 @@
             </widget>
            </item>
            <item>
+            <widget class="QPushButton" name="btnCopyToClipboard">
+             <property name="text">
+              <string>Copy to Clipboard</string>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QLabel" name="label_3">
              <property name="text">
               <string>QGIS is licensed under the GNU General Public License</string>
@@ -398,7 +405,7 @@
             <widget class="QgsWebView" name="txtTranslators" native="true">
              <property name="url" stdset="0">
               <url>
-               <string>about:blank</string>
+               <string notr="true">about:blank</string>
               </url>
              </property>
             </widget>

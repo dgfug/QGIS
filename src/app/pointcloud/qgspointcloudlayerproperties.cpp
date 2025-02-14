@@ -14,22 +14,19 @@
  ***************************************************************************/
 
 #include "qgspointcloudlayerproperties.h"
-
-#include "qgsfileutils.h"
+#include "moc_qgspointcloudlayerproperties.cpp"
 #include "qgshelp.h"
-#include "qgsmaplayerstylemanager.h"
 #include "qgsmaplayerstyleguiutils.h"
 #include "qgspointcloudlayer.h"
 #include "qgsgui.h"
-#include "qgsnative.h"
 #include "qgsapplication.h"
 #include "qgsmetadatawidget.h"
-#include "qgsmaplayerloadstyledialog.h"
-#include "qgsmaplayerconfigwidgetfactory.h"
 #include "qgsmaplayerconfigwidget.h"
+#include "qgsmaplayerstylemanager.h"
 #include "qgspointcloudattributemodel.h"
 #include "qgsdatumtransformdialog.h"
-#include "qgspointcloudlayerelevationproperties.h"
+#include "qgspointcloudquerybuilder.h"
+
 #include <QFileDialog>
 #include <QMenu>
 #include <QMessageBox>
@@ -37,18 +34,22 @@
 #include <QUrl>
 
 QgsPointCloudLayerProperties::QgsPointCloudLayerProperties( QgsPointCloudLayer *lyr, QgsMapCanvas *canvas, QgsMessageBar *, QWidget *parent, Qt::WindowFlags flags )
-  : QgsOptionsDialogBase( QStringLiteral( "PointCloudLayerProperties" ), parent, flags )
+  : QgsLayerPropertiesDialog( lyr, canvas, QStringLiteral( "PointCloudLayerProperties" ), parent, flags )
   , mLayer( lyr )
-  , mMapCanvas( canvas )
 {
   setupUi( this );
 
   connect( this, &QDialog::accepted, this, &QgsPointCloudLayerProperties::apply );
-  connect( this, &QDialog::rejected, this, &QgsPointCloudLayerProperties::onCancel );
+  connect( this, &QDialog::rejected, this, &QgsPointCloudLayerProperties::rollback );
   connect( buttonBox->button( QDialogButtonBox::Apply ), &QAbstractButton::clicked, this, &QgsPointCloudLayerProperties::apply );
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsPointCloudLayerProperties::showHelp );
+  connect( pbnQueryBuilder, &QPushButton::clicked, this, &QgsPointCloudLayerProperties::pbnQueryBuilder_clicked );
 
   connect( mCrsSelector, &QgsProjectionSelectionWidget::crsChanged, this, &QgsPointCloudLayerProperties::crsChanged );
+
+  mScaleRangeWidget->setMapCanvas( mCanvas );
+  chkUseScaleDependentRendering->setChecked( lyr->hasScaleBasedVisibility() );
+  mScaleRangeWidget->setScaleRange( lyr->minimumScale(), lyr->maximumScale() );
 
   // QgsOptionsDialogBase handles saving/restoring of geometry, splitter and current tab states,
   // switching vertical tabs between icon/text to icon-only modes (splitter collapsed to left),
@@ -62,29 +63,29 @@ QgsPointCloudLayerProperties::QgsPointCloudLayerProperties( QgsPointCloudLayer *
   metadataFrame->setContentsMargins( 0, 0, 0, 0 );
   mMetadataWidget = new QgsMetadataWidget( this, mLayer );
   mMetadataWidget->layout()->setContentsMargins( 0, 0, 0, 0 );
-  mMetadataWidget->setMapCanvas( mMapCanvas );
+  mMetadataWidget->setMapCanvas( mCanvas );
   layout->addWidget( mMetadataWidget );
   metadataFrame->setLayout( layout );
   mOptsPage_Metadata->setContentsMargins( 0, 0, 0, 0 );
 
+  setMetadataWidget( mMetadataWidget, mOptsPage_Metadata );
+
   // update based on lyr's current state
   syncToLayer();
+  connect( lyr->styleManager(), &QgsMapLayerStyleManager::currentStyleChanged, this, &QgsPointCloudLayerProperties::syncToLayer );
 
   QgsSettings settings;
   if ( !settings.contains( QStringLiteral( "/Windows/PointCloudLayerProperties/tab" ) ) )
   {
-    settings.setValue( QStringLiteral( "Windows/PointCloudLayerProperties/tab" ),
-                       mOptStackedWidget->indexOf( mOptsPage_Information ) );
+    settings.setValue( QStringLiteral( "Windows/PointCloudLayerProperties/tab" ), mOptStackedWidget->indexOf( mOptsPage_Information ) );
   }
-
-  QString title = tr( "Layer Properties - %1" ).arg( mLayer->name() );
 
   mBtnStyle = new QPushButton( tr( "Style" ) );
   QMenu *menuStyle = new QMenu( this );
-  menuStyle->addAction( tr( "Load Style…" ), this, &QgsPointCloudLayerProperties::loadStyle );
-  menuStyle->addAction( tr( "Save Style…" ), this, &QgsPointCloudLayerProperties::saveStyleAs );
+  menuStyle->addAction( tr( "Load Style…" ), this, &QgsPointCloudLayerProperties::loadStyleFromFile );
+  menuStyle->addAction( tr( "Save Style…" ), this, &QgsPointCloudLayerProperties::saveStyleToFile );
   menuStyle->addSeparator();
-  menuStyle->addAction( tr( "Save as Default" ), this, &QgsPointCloudLayerProperties::saveDefaultStyle );
+  menuStyle->addAction( tr( "Save as Default" ), this, &QgsPointCloudLayerProperties::saveStyleAsDefault );
   menuStyle->addAction( tr( "Restore Default" ), this, &QgsPointCloudLayerProperties::loadDefaultStyle );
   mBtnStyle->setMenu( menuStyle );
   connect( menuStyle, &QMenu::aboutToShow, this, &QgsPointCloudLayerProperties::aboutToShowStyleMenu );
@@ -93,19 +94,30 @@ QgsPointCloudLayerProperties::QgsPointCloudLayerProperties( QgsPointCloudLayer *
 
   mBtnMetadata = new QPushButton( tr( "Metadata" ), this );
   QMenu *menuMetadata = new QMenu( this );
-  mActionLoadMetadata = menuMetadata->addAction( tr( "Load Metadata…" ), this, &QgsPointCloudLayerProperties::loadMetadata );
-  mActionSaveMetadataAs = menuMetadata->addAction( tr( "Save Metadata…" ), this, &QgsPointCloudLayerProperties::saveMetadataAs );
+  mActionLoadMetadata = menuMetadata->addAction( tr( "Load Metadata…" ), this, &QgsPointCloudLayerProperties::loadMetadataFromFile );
+  mActionSaveMetadataAs = menuMetadata->addAction( tr( "Save Metadata…" ), this, &QgsPointCloudLayerProperties::saveMetadataToFile );
   menuMetadata->addSeparator();
-  menuMetadata->addAction( tr( "Save as Default" ), this, &QgsPointCloudLayerProperties::saveDefaultMetadata );
+  menuMetadata->addAction( tr( "Save as Default" ), this, &QgsPointCloudLayerProperties::saveMetadataAsDefault );
   menuMetadata->addAction( tr( "Restore Default" ), this, &QgsPointCloudLayerProperties::loadDefaultMetadata );
 
   mBtnMetadata->setMenu( menuMetadata );
   buttonBox->addButton( mBtnMetadata, QDialogButtonBox::ResetRole );
 
+  //Add help page references
+  mOptsPage_Information->setProperty( "helpPage", QStringLiteral( "working_with_point_clouds/point_clouds.html#information-properties" ) );
+  mOptsPage_Source->setProperty( "helpPage", QStringLiteral( "working_with_point_clouds/point_clouds.html#source-properties" ) );
+  mOptsPage_Rendering->setProperty( "helpPage", QStringLiteral( "working_with_point_clouds/point_clouds.html#rendering-properties" ) );
+  mOptsPage_Metadata->setProperty( "helpPage", QStringLiteral( "working_with_point_clouds/point_clouds.html#metadata-properties" ) );
+  mOptsPage_Statistics->setProperty( "helpPage", QStringLiteral( "working_with_point_clouds/point_clouds.html#statistics-properties" ) );
+
   mStatisticsTableView->setModel( new QgsPointCloudAttributeStatisticsModel( mLayer, mStatisticsTableView ) );
   mStatisticsTableView->verticalHeader()->hide();
 
-  if ( mLayer->dataProvider() && !mLayer->dataProvider()->metadataClasses( QStringLiteral( "Classification" ) ).isEmpty() )
+  mBackupCrs = mLayer->crs();
+
+  const QgsPointCloudStatistics stats = mLayer->statistics();
+
+  if ( !stats.classesOf( QStringLiteral( "Classification" ) ).isEmpty() )
   {
     mClassificationStatisticsTableView->setModel( new QgsPointCloudClassificationStatisticsModel( mLayer, QStringLiteral( "Classification" ), mStatisticsTableView ) );
     mClassificationStatisticsTableView->verticalHeader()->hide();
@@ -115,31 +127,14 @@ QgsPointCloudLayerProperties::QgsPointCloudLayerProperties( QgsPointCloudLayer *
     mClassificationStatsGroupBox->hide();
   }
 
-  if ( !mLayer->styleManager()->isDefault( mLayer->styleManager()->currentStyle() ) )
-    title += QStringLiteral( " (%1)" ).arg( mLayer->styleManager()->currentStyle() );
-  restoreOptionsBaseUi( title );
+  mStatisticsCalculationWarningLabel->setHidden( mLayer->statisticsCalculationState() != QgsPointCloudLayer::PointCloudStatisticsCalculationState::Calculated );
+
+  connect( mLayer, &QgsPointCloudLayer::statisticsCalculationStateChanged, this, [this]( QgsPointCloudLayer::PointCloudStatisticsCalculationState state ) {
+    mStatisticsCalculationWarningLabel->setHidden( state != QgsPointCloudLayer::PointCloudStatisticsCalculationState::Calculated );
+  } );
+
+  initialize();
 }
-
-void QgsPointCloudLayerProperties::addPropertiesPageFactory( const QgsMapLayerConfigWidgetFactory *factory )
-{
-  if ( !factory->supportsLayer( mLayer ) || !factory->supportLayerPropertiesDialog() )
-  {
-    return;
-  }
-
-  QgsMapLayerConfigWidget *page = factory->createWidget( mLayer, mMapCanvas, false, this );
-  mConfigWidgets << page;
-
-  const QString beforePage = factory->layerPropertiesPagePositionHint();
-  if ( beforePage.isEmpty() )
-    addPage( factory->title(), factory->title(), factory->icon(), page );
-  else
-    insertPage( factory->title(), factory->title(), factory->icon(), page, beforePage );
-
-  page->syncToLayer( mLayer );
-}
-
-#include "qgspointcloudrenderer.h"
 
 void QgsPointCloudLayerProperties::apply()
 {
@@ -147,24 +142,24 @@ void QgsPointCloudLayerProperties::apply()
 
   mLayer->setName( mLayerOrigNameLineEdit->text() );
 
-  for ( QgsMapLayerConfigWidget *w : mConfigWidgets )
+  mLayer->setScaleBasedVisibility( chkUseScaleDependentRendering->isChecked() );
+  mLayer->setMinimumScale( mScaleRangeWidget->minimumScale() );
+  mLayer->setMaximumScale( mScaleRangeWidget->maximumScale() );
+
+  mBackupCrs = mLayer->crs();
+
+  for ( QgsMapLayerConfigWidget *w : std::as_const( mConfigWidgets ) )
     w->apply();
 
   mLayer->triggerRepaint();
 }
 
-void QgsPointCloudLayerProperties::onCancel()
+void QgsPointCloudLayerProperties::rollback()
 {
-  if ( mOldStyle.xmlData() != mLayer->styleManager()->style( mLayer->styleManager()->currentStyle() ).xmlData() )
-  {
-    // need to reset style to previous - style applied directly to the layer (not in apply())
-    QString myMessage;
-    QDomDocument doc( QStringLiteral( "qgis" ) );
-    int errorLine, errorColumn;
-    doc.setContent( mOldStyle.xmlData(), false, &myMessage, &errorLine, &errorColumn );
-    mLayer->importNamedStyle( doc, myMessage );
-    syncToLayer();
-  }
+  if ( mBackupCrs != mLayer->crs() )
+    mLayer->setCrs( mBackupCrs );
+
+  QgsLayerPropertiesDialog::rollback();
 }
 
 void QgsPointCloudLayerProperties::syncToLayer()
@@ -181,114 +176,21 @@ void QgsPointCloudLayerProperties::syncToLayer()
   mInformationTextBrowser->document()->setDefaultStyleSheet( myStyle );
   mInformationTextBrowser->setHtml( mLayer->htmlMetadata() );
   mInformationTextBrowser->setOpenLinks( false );
-  connect( mInformationTextBrowser, &QTextBrowser::anchorClicked, this, &QgsPointCloudLayerProperties::urlClicked );
+  connect( mInformationTextBrowser, &QTextBrowser::anchorClicked, this, &QgsPointCloudLayerProperties::openUrl );
 
   mCrsSelector->setCrs( mLayer->crs() );
 
-  for ( QgsMapLayerConfigWidget *w : mConfigWidgets )
+  mSubsetGroupBox->setEnabled( true );
+  txtSubsetSQL->setText( mLayer->subsetString() );
+  txtSubsetSQL->setReadOnly( true );
+  txtSubsetSQL->setCaretWidth( 0 );
+  txtSubsetSQL->setCaretLineVisible( false );
+  pbnQueryBuilder->setEnabled( mLayer->dataProvider() && mLayer->dataProvider()->supportsSubsetString() && !mLayer->isEditable() );
+
+  for ( QgsMapLayerConfigWidget *w : std::as_const( mConfigWidgets ) )
     w->syncToLayer( mLayer );
-}
 
-
-void QgsPointCloudLayerProperties::loadDefaultStyle()
-{
-  bool defaultLoadedFlag = false;
-  const QString myMessage = mLayer->loadDefaultStyle( defaultLoadedFlag );
-  // reset if the default style was loaded OK only
-  if ( defaultLoadedFlag )
-  {
-    syncToLayer();
-  }
-  else
-  {
-    // otherwise let the user know what went wrong
-    QMessageBox::information( this,
-                              tr( "Default Style" ),
-                              myMessage
-                            );
-  }
-}
-
-void QgsPointCloudLayerProperties::saveDefaultStyle()
-{
-  apply(); // make sure the style to save is up-to-date
-
-  // a flag passed by reference
-  bool defaultSavedFlag = false;
-  // after calling this the above flag will be set true for success
-  // or false if the save operation failed
-  const QString myMessage = mLayer->saveDefaultStyle( defaultSavedFlag );
-  if ( !defaultSavedFlag )
-  {
-    // let the user know what went wrong
-    QMessageBox::information( this,
-                              tr( "Default Style" ),
-                              myMessage
-                            );
-  }
-}
-
-void QgsPointCloudLayerProperties::loadStyle()
-{
-  QgsSettings settings;
-  const QString lastUsedDir = settings.value( QStringLiteral( "style/lastStyleDir" ), QDir::homePath() ).toString();
-
-  QString fileName = QFileDialog::getOpenFileName(
-                       this,
-                       tr( "Load layer properties from style file" ),
-                       lastUsedDir,
-                       tr( "QGIS Layer Style File" ) + " (*.qml)" );
-  if ( fileName.isEmpty() )
-    return;
-
-  // ensure the user never omits the extension from the file name
-  if ( !fileName.endsWith( QLatin1String( ".qml" ), Qt::CaseInsensitive ) )
-    fileName += QLatin1String( ".qml" );
-
-  mOldStyle = mLayer->styleManager()->style( mLayer->styleManager()->currentStyle() );
-
-  bool defaultLoadedFlag = false;
-  const QString message = mLayer->loadNamedStyle( fileName, defaultLoadedFlag );
-  if ( defaultLoadedFlag )
-  {
-    settings.setValue( QStringLiteral( "style/lastStyleDir" ), QFileInfo( fileName ).absolutePath() );
-    syncToLayer();
-  }
-  else
-  {
-    QMessageBox::information( this, tr( "Load Style" ), message );
-  }
-}
-
-void QgsPointCloudLayerProperties::saveStyleAs()
-{
-  QgsSettings settings;
-  const QString lastUsedDir = settings.value( QStringLiteral( "style/lastStyleDir" ), QDir::homePath() ).toString();
-
-  QString outputFileName = QFileDialog::getSaveFileName(
-                             this,
-                             tr( "Save layer properties as style file" ),
-                             lastUsedDir,
-                             tr( "QGIS Layer Style File" ) + " (*.qml)" );
-  if ( outputFileName.isEmpty() )
-    return;
-
-  // ensure the user never omits the extension from the file name
-  outputFileName = QgsFileUtils::ensureFileNameHasExtension( outputFileName, QStringList() << QStringLiteral( "qml" ) );
-
-  apply(); // make sure the style to save is up-to-date
-
-  // then export style
-  bool defaultLoadedFlag = false;
-  QString message;
-  message = mLayer->saveNamedStyle( outputFileName, defaultLoadedFlag );
-
-  if ( defaultLoadedFlag )
-  {
-    settings.setValue( QStringLiteral( "style/lastStyleDir" ), QFileInfo( outputFileName ).absolutePath() );
-  }
-  else
-    QMessageBox::information( this, tr( "Save Style" ), message );
+  mStatisticsCalculationWarningLabel->setHidden( mLayer->statisticsCalculationState() != QgsPointCloudLayer::PointCloudStatisticsCalculationState::Calculated );
 }
 
 void QgsPointCloudLayerProperties::aboutToShowStyleMenu()
@@ -301,95 +203,6 @@ void QgsPointCloudLayerProperties::aboutToShowStyleMenu()
   QgsMapLayerStyleGuiUtils::instance()->addStyleManagerActions( m, mLayer );
 }
 
-void QgsPointCloudLayerProperties::loadMetadata()
-{
-  QgsSettings myQSettings;  // where we keep last used filter in persistent state
-  const QString myLastUsedDir = myQSettings.value( QStringLiteral( "style/lastStyleDir" ), QDir::homePath() ).toString();
-
-  const QString myFileName = QFileDialog::getOpenFileName( this, tr( "Load layer metadata from metadata file" ), myLastUsedDir,
-                             tr( "QGIS Layer Metadata File" ) + " (*.qmd)" );
-  if ( myFileName.isNull() )
-  {
-    return;
-  }
-
-  QString myMessage;
-  bool defaultLoadedFlag = false;
-  myMessage = mLayer->loadNamedMetadata( myFileName, defaultLoadedFlag );
-
-  //reset if the default style was loaded OK only
-  if ( defaultLoadedFlag )
-  {
-    mMetadataWidget->setMetadata( &mLayer->metadata() );
-  }
-  else
-  {
-    //let the user know what went wrong
-    QMessageBox::warning( this, tr( "Load Metadata" ), myMessage );
-  }
-
-  const QFileInfo myFI( myFileName );
-  const QString myPath = myFI.path();
-  myQSettings.setValue( QStringLiteral( "style/lastStyleDir" ), myPath );
-
-  activateWindow(); // set focus back to properties dialog
-}
-
-void QgsPointCloudLayerProperties::saveMetadataAs()
-{
-  QgsSettings myQSettings;  // where we keep last used filter in persistent state
-  const QString myLastUsedDir = myQSettings.value( QStringLiteral( "style/lastStyleDir" ), QDir::homePath() ).toString();
-
-  QString myOutputFileName = QFileDialog::getSaveFileName( this, tr( "Save Layer Metadata as QMD" ),
-                             myLastUsedDir, tr( "QMD File" ) + " (*.qmd)" );
-  if ( myOutputFileName.isNull() ) //dialog canceled
-  {
-    return;
-  }
-
-  mMetadataWidget->acceptMetadata();
-
-  //ensure the user never omitted the extension from the file name
-  if ( !myOutputFileName.endsWith( QgsMapLayer::extensionPropertyType( QgsMapLayer::Metadata ), Qt::CaseInsensitive ) )
-  {
-    myOutputFileName += QgsMapLayer::extensionPropertyType( QgsMapLayer::Metadata );
-  }
-
-  bool defaultLoadedFlag = false;
-  const QString message = mLayer->saveNamedMetadata( myOutputFileName, defaultLoadedFlag );
-  if ( defaultLoadedFlag )
-    myQSettings.setValue( QStringLiteral( "style/lastStyleDir" ), QFileInfo( myOutputFileName ).absolutePath() );
-  else
-    QMessageBox::information( this, tr( "Save Metadata" ), message );
-}
-
-void QgsPointCloudLayerProperties::saveDefaultMetadata()
-{
-  mMetadataWidget->acceptMetadata();
-
-  bool defaultSavedFlag = false;
-  const QString errorMsg = mLayer->saveDefaultMetadata( defaultSavedFlag );
-  if ( !defaultSavedFlag )
-  {
-    QMessageBox::warning( this, tr( "Default Metadata" ), errorMsg );
-  }
-}
-
-void QgsPointCloudLayerProperties::loadDefaultMetadata()
-{
-  bool defaultLoadedFlag = false;
-  const QString myMessage = mLayer->loadNamedMetadata( mLayer->metadataUri(), defaultLoadedFlag );
-  //reset if the default metadata was loaded OK only
-  if ( defaultLoadedFlag )
-  {
-    mMetadataWidget->setMetadata( &mLayer->metadata() );
-  }
-  else
-  {
-    QMessageBox::information( this, tr( "Default Metadata" ), myMessage );
-  }
-}
-
 void QgsPointCloudLayerProperties::showHelp()
 {
   const QVariant helpPage = mOptionsStackedWidget->currentWidget()->property( "helpPage" );
@@ -400,33 +213,25 @@ void QgsPointCloudLayerProperties::showHelp()
   }
   else
   {
-    QgsHelp::openHelp( QStringLiteral( "working_with_vector_tiles/vector_tiles_properties.html" ) );
+    QgsHelp::openHelp( QStringLiteral( "working_with_point_clouds/point_clouds.html" ) );
   }
 }
 
-void QgsPointCloudLayerProperties::urlClicked( const QUrl &url )
+void QgsPointCloudLayerProperties::pbnQueryBuilder_clicked()
 {
-  const QFileInfo file( url.toLocalFile() );
-  if ( file.exists() && !file.isDir() )
-    QgsGui::instance()->nativePlatformInterface()->openFileExplorerAndSelectFile( url.toLocalFile() );
-  else
-    QDesktopServices::openUrl( url );
+  QgsPointCloudQueryBuilder qb { mLayer };
+  qb.setSubsetString( mLayer->subsetString() );
+  if ( qb.exec() )
+  {
+    txtSubsetSQL->setText( qb.subsetString() );
+  }
 }
 
 void QgsPointCloudLayerProperties::crsChanged( const QgsCoordinateReferenceSystem &crs )
 {
-  QgsDatumTransformDialog::run( crs, QgsProject::instance()->crs(), this, mMapCanvas, tr( "Select transformation for the layer" ) );
+  QgsDatumTransformDialog::run( crs, QgsProject::instance()->crs(), this, mCanvas, tr( "Select transformation for the layer" ) );
   mLayer->setCrs( crs );
   mMetadataWidget->crsChanged();
-}
-
-void QgsPointCloudLayerProperties::optionsStackedWidget_CurrentChanged( int index )
-{
-  QgsOptionsDialogBase::optionsStackedWidget_CurrentChanged( index );
-
-  const bool isMetadataPanel = ( index == mOptStackedWidget->indexOf( mOptsPage_Metadata ) );
-  mBtnStyle->setVisible( ! isMetadataPanel );
-  mBtnMetadata->setVisible( isMetadataPanel );
 }
 
 //
@@ -437,7 +242,6 @@ QgsPointCloudAttributeStatisticsModel::QgsPointCloudAttributeStatisticsModel( Qg
   , mLayer( layer )
   , mAttributes( layer->attributes() )
 {
-
 }
 
 int QgsPointCloudAttributeStatisticsModel::columnCount( const QModelIndex & ) const
@@ -456,6 +260,7 @@ QVariant QgsPointCloudAttributeStatisticsModel::data( const QModelIndex &index, 
     return QVariant();
 
   const QgsPointCloudAttribute &attr = mAttributes.at( index.row() );
+  const QgsPointCloudStatistics stats = mLayer->statistics();
 
   switch ( role )
   {
@@ -468,17 +273,13 @@ QVariant QgsPointCloudAttributeStatisticsModel::data( const QModelIndex &index, 
           return attr.name();
 
         case Min:
-          return mLayer->dataProvider() ? mLayer->dataProvider()->metadataStatistic( attr.name(), QgsStatisticalSummary::Min ) : QVariant();
-
+          return stats.minimum( attr.name() );
         case Max:
-          return mLayer->dataProvider() ? mLayer->dataProvider()->metadataStatistic( attr.name(), QgsStatisticalSummary::Max ) : QVariant();
-
+          return stats.maximum( attr.name() );
         case Mean:
-          return mLayer->dataProvider() ? mLayer->dataProvider()->metadataStatistic( attr.name(), QgsStatisticalSummary::Mean ) : QVariant();
-
+          return stats.mean( attr.name() );
         case StDev:
-          return mLayer->dataProvider() ? mLayer->dataProvider()->metadataStatistic( attr.name(), QgsStatisticalSummary::StDev ) : QVariant();
-
+          return stats.stDev( attr.name() );
       }
       return QVariant();
     }
@@ -495,7 +296,6 @@ QVariant QgsPointCloudAttributeStatisticsModel::data( const QModelIndex &index, 
         case Mean:
         case StDev:
           return static_cast<Qt::Alignment::Int>( Qt::AlignRight | Qt::AlignVCenter );
-
       }
       return QVariant();
     }
@@ -553,8 +353,8 @@ QgsPointCloudClassificationStatisticsModel::QgsPointCloudClassificationStatistic
   , mLayer( layer )
   , mAttribute( attribute )
 {
-  mClassifications = layer->dataProvider() ? layer->dataProvider()->metadataClasses( attribute ) : QVariantList();
-  std::sort( mClassifications.begin(), mClassifications.end(), []( QVariant a, QVariant b ) -> bool { return ( qgsVariantLessThan( a, b ) ); } );
+  mClassifications = layer->statistics().classesOf( attribute );
+  std::sort( mClassifications.begin(), mClassifications.end(), []( int a, int b ) -> bool { return a < b; } );
 }
 
 int QgsPointCloudClassificationStatisticsModel::columnCount( const QModelIndex & ) const
@@ -573,6 +373,7 @@ QVariant QgsPointCloudClassificationStatisticsModel::data( const QModelIndex &in
     return QVariant();
 
   const QVariant classValue = mClassifications.at( index.row() );
+  const QgsPointCloudStatistics stats = mLayer->statistics();
 
   switch ( role )
   {
@@ -588,14 +389,13 @@ QVariant QgsPointCloudClassificationStatisticsModel::data( const QModelIndex &in
           return QgsPointCloudDataProvider::translatedLasClassificationCodes().value( classValue.toInt() );
 
         case Count:
-          return mLayer->dataProvider() ? mLayer->dataProvider()->metadataClassStatistic( mAttribute, classValue, QgsStatisticalSummary::Count ) : QVariant();
+          return stats.availableClasses( mAttribute ).value( classValue.toInt(), 0 );
 
         case Percent:
         {
-          const qint64 pointCount = mLayer->dataProvider() ? mLayer->dataProvider()->pointCount() : -1;
-          return pointCount > 0 ? mLayer->dataProvider()->metadataClassStatistic( mAttribute, classValue, QgsStatisticalSummary::Count ).toDouble() / pointCount * 100 : QVariant();
+          qint64 pointCount = stats.sampledPointsCount();
+          return ( ( double ) stats.availableClasses( mAttribute ).value( classValue.toInt(), 0 ) ) / pointCount * 100;
         }
-
       }
       return QVariant();
     }
@@ -611,7 +411,6 @@ QVariant QgsPointCloudClassificationStatisticsModel::data( const QModelIndex &in
         case Count:
         case Percent:
           return QVariant( Qt::AlignRight | Qt::AlignVCenter );
-
       }
       return QVariant();
     }
@@ -651,4 +450,3 @@ QVariant QgsPointCloudClassificationStatisticsModel::headerData( int section, Qt
   }
   return QVariant();
 }
-

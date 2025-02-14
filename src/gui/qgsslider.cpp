@@ -16,19 +16,23 @@
  ***************************************************************************/
 
 #include "qgsslider.h"
+#include "moc_qgsslider.cpp"
 #include "qgslogger.h"
+#include "qgsvariantutils.h"
 
 #include <QPaintEvent>
 #include <QPainter>
 #include <QRect>
 #include <cmath>
 
-QgsSlider::QgsSlider( QWidget *parent ) : QSlider( parent )
+QgsSlider::QgsSlider( QWidget *parent )
+  : QSlider( parent )
 {
   setMinimumSize( QSize( 100, 40 ) );
 }
 
-QgsSlider::QgsSlider( Qt::Orientation orientation, QWidget *parent ) : QSlider( orientation, parent )
+QgsSlider::QgsSlider( Qt::Orientation orientation, QWidget *parent )
+  : QSlider( orientation, parent )
 {
   setMinimumSize( QSize( 100, 40 ) );
 }
@@ -39,8 +43,7 @@ void QgsSlider::paintEvent( QPaintEvent *event )
   QPainter painter( this );
   const QRect rect = geometry();
   painter.setPen( QPen( palette().color( QPalette::WindowText ) ) );
-  painter.drawText( QRectF( 0, rect.height() * 0.5, rect.width(), rect.height() ),
-                    Qt::AlignHCenter, variantValue().toString(), nullptr );
+  painter.drawText( QRectF( 0, rect.height() * 0.5, rect.width(), rect.height() ), Qt::AlignHCenter, variantValue().toString(), nullptr );
   painter.end();
 }
 
@@ -70,27 +73,20 @@ void QgsSlider::setValue( const QVariant &value )
 
 void QgsSlider::update()
 {
-  if ( mMin.isNull() || mMax.isNull() || mStep.isNull() )
+  if ( QgsVariantUtils::isNull( mMin ) || QgsVariantUtils::isNull( mMax ) || QgsVariantUtils::isNull( mStep ) )
     return;
 
-  if ( mValue.isNull() )
+  if ( QgsVariantUtils::isNull( mValue ) )
     mValue = mMin;
 
-  if ( mMin.type() == QVariant::Int &&
-       mMax.type() == QVariant::Int &&
-       mStep.type() == QVariant::Int &&
-       mValue.type() == QVariant::Int )
+  if ( mMin.userType() == QMetaType::Type::Int && mMax.userType() == QMetaType::Type::Int && mStep.userType() == QMetaType::Type::Int && mValue.userType() == QMetaType::Type::Int )
   {
     QSlider::setMinimum( mMin.toInt() );
     QSlider::setMaximum( mMax.toInt() );
     QSlider::setSingleStep( mStep.toInt() );
     QSlider::setValue( mValue.toInt() );
   }
-
-  if ( mMin.type() == QVariant::Double &&
-       mMax.type() == QVariant::Double &&
-       mStep.type() == QVariant::Double &&
-       mValue.type() == QVariant::Double )
+  else
   {
     if ( minimum() != 0 )
       QSlider::setMinimum( 0 );
@@ -115,21 +111,15 @@ QVariant QgsSlider::variantValue() const
 
 void QgsSlider::onValueChanged( int value )
 {
-  if ( mMin.isNull() || mMax.isNull() || mStep.isNull() )
+  if ( QgsVariantUtils::isNull( mMin ) || QgsVariantUtils::isNull( mMax ) || QgsVariantUtils::isNull( mStep ) )
   {
     mValue = QVariant();
   }
-  else if ( mMin.type() == QVariant::Int &&
-            mMax.type() == QVariant::Int &&
-            mStep.type() == QVariant::Int &&
-            mValue.type() == QVariant::Int )
+  else if ( mMin.userType() == QMetaType::Type::Int && mMax.userType() == QMetaType::Type::Int && mStep.userType() == QMetaType::Type::Int && mValue.userType() == QMetaType::Type::Int )
   {
     mValue = value;
   }
-  else if ( mMin.type() == QVariant::Double &&
-            mMax.type() == QVariant::Double &&
-            mStep.type() == QVariant::Double &&
-            mValue.type() == QVariant::Double )
+  else
   {
     mValue = QVariant( mMin.toDouble() + value * mStep.toDouble() );
   }

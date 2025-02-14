@@ -13,11 +13,15 @@
  *                                                                         *
  ***************************************************************************/
 
+#ifndef QGSMEMORYPROVIDER_H
+#define QGSMEMORYPROVIDER_H
+
 #define SIP_NO_FILE
 
 #include "qgsvectordataprovider.h"
 #include "qgscoordinatereferencesystem.h"
 #include "qgsfields.h"
+#include "qgsprovidermetadata.h"
 
 ///@cond PRIVATE
 typedef QMap<QgsFeatureId, QgsFeature> QgsFeatureMap;
@@ -32,7 +36,7 @@ class QgsMemoryProvider final: public QgsVectorDataProvider
 
   public:
     explicit QgsMemoryProvider( const QString &uri, const QgsVectorDataProvider::ProviderOptions &coordinateTransformContext,
-                                QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() );
+                                Qgis::DataProviderReadFlags flags = Qgis::DataProviderReadFlags() );
 
     ~QgsMemoryProvider() override;
 
@@ -41,13 +45,6 @@ class QgsMemoryProvider final: public QgsVectorDataProvider
     //! Returns the memory provider description
     static QString providerDescription();
 
-    /**
-     * Creates a new memory provider, with provider properties embedded within the given \a uri and \a options
-     * argument.
-     */
-    static QgsMemoryProvider *createProvider( const QString &uri, const QgsVectorDataProvider::ProviderOptions &coordinateTransformContext,
-        QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() );
-
     /* Implementation of functions from QgsVectorDataProvider */
 
     QgsAbstractFeatureSource *featureSource() const override;
@@ -55,7 +52,7 @@ class QgsMemoryProvider final: public QgsVectorDataProvider
     QString dataSourceUri( bool expandAuthConfig = true ) const override;
     QString storageType() const override;
     QgsFeatureIterator getFeatures( const QgsFeatureRequest &request ) const override;
-    QgsWkbTypes::Type wkbType() const override;
+    Qgis::WkbType wkbType() const override;
     long long featureCount() const override;
     QgsFields fields() const override;
     bool addFeatures( QgsFeatureList &flist, QgsFeatureSink::Flags flags = QgsFeatureSink::Flags() ) override;
@@ -67,10 +64,12 @@ class QgsMemoryProvider final: public QgsVectorDataProvider
     bool changeGeometryValues( const QgsGeometryMap &geometry_map ) override;
     QString subsetString() const override;
     bool setSubsetString( const QString &theSQL, bool updateFeatureCount = true ) override;
-    bool supportsSubsetString() const override { return true; }
+    bool supportsSubsetString() const override;
+    QString subsetStringDialect() const override;
+    QString subsetStringHelpUrl() const override;
     bool createSpatialIndex() override;
-    QgsFeatureSource::SpatialIndexPresence hasSpatialIndex() const override;
-    QgsVectorDataProvider::Capabilities capabilities() const override;
+    Qgis::SpatialIndexPresence hasSpatialIndex() const override;
+    Qgis::VectorProviderCapabilities capabilities() const override;
     bool truncate() override;
 
     /* Implementation of functions from QgsDataProvider */
@@ -89,7 +88,7 @@ class QgsMemoryProvider final: public QgsVectorDataProvider
 
     // fields
     QgsFields mFields;
-    QgsWkbTypes::Type mWkbType;
+    Qgis::WkbType mWkbType;
     mutable QgsRectangle mExtent;
 
     // features
@@ -104,4 +103,17 @@ class QgsMemoryProvider final: public QgsVectorDataProvider
     friend class QgsMemoryFeatureSource;
 };
 
+
+class QgsMemoryProviderMetadata final: public QgsProviderMetadata
+{
+    Q_OBJECT
+
+  public:
+    QgsMemoryProviderMetadata();
+    QIcon icon() const override;
+    QgsDataProvider *createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options, Qgis::DataProviderReadFlags flags = Qgis::DataProviderReadFlags() ) override;
+    QList< Qgis::LayerType > supportedLayerTypes() const override;
+};
+
 ///@endcond
+#endif // QGSMEMORYPROVIDER_H

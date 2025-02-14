@@ -17,6 +17,7 @@ email                : hugo dot mercier at oslandia dot com
 #include "qgsvirtuallayerqueryparser.h"
 #include "qgsvirtuallayersqlitehelper.h"
 #include "qgsvirtuallayerblob.h"
+#include "qgslogger.h"
 
 #include "sqlite3.h"
 
@@ -34,7 +35,7 @@ namespace QgsVirtualLayerQueryParser
     // open an empty in-memory sqlite database and execute the query
     // sqlite will return an error for each missing table
     // this way we know the list of tables referenced by the query
-    const QgsScopedSqlite db( QStringLiteral( ":memory:" ), /*withExtension=*/ false );
+    const QgsScopedSqlite db( QStringLiteral( ":memory:" ), /*withExtension=*/false );
 
     const QString noSuchError = QStringLiteral( "no such table: " );
 
@@ -55,7 +56,14 @@ namespace QgsVirtualLayerQueryParser
 
         // create a dummy table to skip this error
         const QString createStr = QStringLiteral( "CREATE TABLE \"%1\" (id int)" ).arg( tableName.replace( QLatin1String( "\"" ), QLatin1String( "\"\"" ) ) );
-        ( void )sqlite3_exec( db.get(), createStr.toUtf8().constData(), nullptr, nullptr, nullptr );
+        const int createRes = sqlite3_exec( db.get(), createStr.toUtf8().constData(), nullptr, nullptr, &errMsg );
+        if ( createRes != SQLITE_OK )
+        {
+          err = QString::fromUtf8( errMsg );
+          sqlite3_free( errMsg );
+          QgsDebugError( QStringLiteral( "Could not create temporary table for virtual layer: %1" ).arg( err ) );
+          break;
+        }
       }
       else
       {
@@ -72,7 +80,7 @@ namespace QgsVirtualLayerQueryParser
 
     // look for special comments in SQL
     // a column name followed by /*:type*/
-    const QRegularExpression rx( "([a-zA-Z_\x80-\xFF][a-zA-Z0-9_\x80-\xFF]*)\\s*/\\*:(int|real|text|((?:multi)?(?:point|linestring|polygon)):(\\d+))\\s*\\*/", QRegularExpression::CaseInsensitiveOption );
+    const thread_local QRegularExpression rx( "([a-zA-Z_\\x80-\\xFF][a-zA-Z0-9_\\x80-\\xFF]*)\\s*/\\*:(int|real|text|((?:multi)?(?:point|linestring|polygon)):(\\d+))\\s*\\*/", QRegularExpression::CaseInsensitiveOption );
     int pos = 0;
 
     QRegularExpressionMatch match = rx.match( query, pos );
@@ -83,16 +91,16 @@ namespace QgsVirtualLayerQueryParser
       ColumnDef def;
       def.setName( column );
       if ( type == QLatin1String( "int" ) )
-        def.setScalarType( QVariant::LongLong );
+        def.setScalarType( QMetaType::Type::LongLong );
       else if ( type == QLatin1String( "real" ) )
-        def.setScalarType( QVariant::Double );
+        def.setScalarType( QMetaType::Type::Double );
       else if ( type == QLatin1String( "text" ) )
-        def.setScalarType( QVariant::String );
+        def.setScalarType( QMetaType::Type::QString );
       else
       {
         // there should be 2 more captures
         def.setGeometry( QgsWkbTypes::parseType( match.captured( 3 ) ) );
-        def.setSrid( static_cast<QgsWkbTypes::Type>( match.captured( 4 ).toLong() ) );
+        def.setSrid( match.captured( 4 ).toLong() );
       }
       defs[column] = def;
 
@@ -102,34 +110,38 @@ namespace QgsVirtualLayerQueryParser
     return defs;
   }
 
-// set the type of the column type, given its text representation
+  // set the type of the column type, given its text representation
   void setColumnDefType( const QString &columnType, ColumnDef &d )
   {
     // geometry type
-    const QRegularExpression geometryTypeRx( "\\(([0-9]+),([0-9]+)\\)" );
+    const thread_local QRegularExpression geometryTypeRx( "\\(([0-9]+),([0-9]+)\\)" );
 
     // see qgsvirtuallayersqlitemodule for possible declared types
     // the type returned by PRAGMA table_info will be either
     // the type declared by one of the virtual tables
     // or null
-    if ( columnType == QLatin1String( "int" ) )
-      d.setScalarType( QVariant::LongLong );
-    else if ( columnType == QLatin1String( "real" ) )
-      d.setScalarType( QVariant::Double );
-    else if ( columnType == QLatin1String( "text" ) )
-      d.setScalarType( QVariant::String );
-    else if ( columnType.startsWith( QLatin1String( "geometry" ) ) )
+    if ( columnType.compare( QLatin1String( "int" ), Qt::CaseInsensitive ) == 0 )
+      d.setScalarType( QMetaType::Type::LongLong );
+    else if ( columnType.compare( QLatin1String( "real" ), Qt::CaseInsensitive ) == 0 )
+      d.setScalarType( QMetaType::Type::Double );
+    else if ( columnType.compare( QLatin1String( "text" ), Qt::CaseInsensitive ) == 0 )
+      d.setScalarType( QMetaType::Type::QString );
+    else if ( columnType.startsWith( QLatin1String( "geometry" ), Qt::CaseInsensitive ) )
     {
       // parse the geometry type and srid
       // geometry(type,srid)
       const QRegularExpressionMatch match = geometryTypeRx.match( columnType );
       if ( match.hasMatch() )
       {
-        const QgsWkbTypes::Type type = static_cast<QgsWkbTypes::Type>( match.captured( 1 ).toLong() );
+        const Qgis::WkbType type = static_cast<Qgis::WkbType>( match.captured( 1 ).toLong() );
         const long srid = match.captured( 2 ).toLong();
         d.setGeometry( type );
         d.setSrid( srid );
       }
+    }
+    else
+    {
+      QgsDebugError( QStringLiteral( "Unknown column type %1" ).arg( columnType ) );
     }
   }
 
@@ -141,7 +153,7 @@ namespace QgsVirtualLayerQueryParser
     {
       const QString columnName = q.columnText( 1 );
       const QString columnType = q.columnText( 2 );
-      if ( ! columnType.startsWith( QLatin1String( "geometry" ) ) )
+      if ( !columnType.startsWith( QLatin1String( "geometry" ) ) )
         continue;
 
       d.setName( columnName );
@@ -188,7 +200,7 @@ namespace QgsVirtualLayerQueryParser
 
           setColumnDefType( columnType, d );
 
-          if ( d.scalarType() == QVariant::Invalid )
+          if ( d.scalarType() == QMetaType::Type::UnknownType )
           {
             // else no type is defined
             undefinedColumns << columnNumber;
@@ -225,17 +237,17 @@ namespace QgsVirtualLayerQueryParser
           switch ( type )
           {
             case SQLITE_INTEGER:
-              tableDef[colIdx].setScalarType( QVariant::LongLong );
+              tableDef[colIdx].setScalarType( QMetaType::Type::LongLong );
               break;
             case SQLITE_FLOAT:
-              tableDef[colIdx].setScalarType( QVariant::Double );
+              tableDef[colIdx].setScalarType( QMetaType::Type::Double );
               break;
             case SQLITE_BLOB:
             {
               // might be a geometry, parse the type
               const QByteArray ba( q.columnBlob( i ) );
-              const QPair<QgsWkbTypes::Type, long> p( spatialiteBlobGeometryType( ba.constData(), ba.size() ) );
-              if ( p.first != QgsWkbTypes::NoGeometry )
+              const QPair<Qgis::WkbType, long> p( spatialiteBlobGeometryType( ba.constData(), ba.size() ) );
+              if ( p.first != Qgis::WkbType::NoGeometry )
               {
                 tableDef[colIdx].setGeometry( p.first );
                 tableDef[colIdx].setSrid( p.second );
@@ -243,13 +255,13 @@ namespace QgsVirtualLayerQueryParser
               else
               {
                 // interpret it as a string
-                tableDef[colIdx].setScalarType( QVariant::String );
+                tableDef[colIdx].setScalarType( QMetaType::Type::QString );
               }
             }
             break;
             case SQLITE_TEXT:
             default:
-              tableDef[colIdx].setScalarType( QVariant::String );
+              tableDef[colIdx].setScalarType( QMetaType::Type::QString );
               break;
           };
         }
@@ -276,4 +288,4 @@ namespace QgsVirtualLayerQueryParser
     return td;
   }
 
-} // namespace
+} // namespace QgsVirtualLayerQueryParser

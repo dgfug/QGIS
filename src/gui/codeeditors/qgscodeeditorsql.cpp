@@ -13,9 +13,8 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "qgsapplication.h"
 #include "qgscodeeditorsql.h"
-#include "qgssymbollayerutils.h"
+#include "moc_qgscodeeditorsql.cpp"
 
 #include <QWidget>
 #include <QString>
@@ -29,16 +28,20 @@ QgsCodeEditorSQL::QgsCodeEditorSQL( QWidget *parent )
   {
     setTitle( tr( "SQL Editor" ) );
   }
-  setFoldingVisible( false );
   setAutoCompletionCaseSensitivity( false );
   QgsCodeEditorSQL::initializeLexer(); // avoid cppcheck warning by explicitly specifying namespace
+}
+
+Qgis::ScriptLanguage QgsCodeEditorSQL::language() const
+{
+  return Qgis::ScriptLanguage::Sql;
 }
 
 QgsCodeEditorSQL::~QgsCodeEditorSQL()
 {
   if ( mApis )
   {
-    mApis->cancelPreparation( );
+    mApis->cancelPreparation();
   }
 }
 
@@ -79,7 +82,6 @@ void QgsCodeEditorSQL::initializeLexer()
 
 void QgsCodeEditorSQL::setFields( const QgsFields &fields )
 {
-
   QStringList fieldNames;
 
   for ( const QgsField &field : std::as_const( fields ) )
@@ -88,7 +90,6 @@ void QgsCodeEditorSQL::setFields( const QgsFields &fields )
   }
 
   setFieldNames( fieldNames );
-
 }
 
 void QgsCodeEditorSQL::updateApis()
@@ -130,5 +131,3 @@ void QgsCodeEditorSQL::setFieldNames( const QStringList &fieldNames )
   mFieldNames = qgis::listToSet( fieldNames );
   updateApis();
 }
-
-

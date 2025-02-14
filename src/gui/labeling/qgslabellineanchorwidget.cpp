@@ -15,6 +15,7 @@
 
 
 #include "qgslabellineanchorwidget.h"
+#include "moc_qgslabellineanchorwidget.cpp"
 #include "qgsexpressioncontextutils.h"
 #include "qgsapplication.h"
 
@@ -30,14 +31,18 @@ QgsLabelLineAnchorWidget::QgsLabelLineAnchorWidget( QWidget *parent, QgsVectorLa
   mPercentPlacementComboBox->addItem( QgsApplication::getThemeIcon( QStringLiteral( "/mActionLabelAnchorEnd.svg" ) ), tr( "End of Line" ), 1.0 );
   mPercentPlacementComboBox->addItem( QgsApplication::getThemeIcon( QStringLiteral( "/mActionLabelAnchorCustom.svg" ) ), tr( "Custom…" ), -1.0 );
 
-  mClippingComboBox->addItem( tr( "Use Visible Part of Line" ), static_cast< int >( QgsLabelLineSettings::AnchorClipping::UseVisiblePartsOfLine ) );
-  mClippingComboBox->addItem( tr( "Use Entire Line" ), static_cast< int >( QgsLabelLineSettings::AnchorClipping::UseEntireLine ) );
+  mClippingComboBox->addItem( tr( "Use Visible Part of Line" ), static_cast<int>( QgsLabelLineSettings::AnchorClipping::UseVisiblePartsOfLine ) );
+  mClippingComboBox->addItem( tr( "Use Entire Line" ), static_cast<int>( QgsLabelLineSettings::AnchorClipping::UseEntireLine ) );
 
-  mAnchorTypeComboBox->addItem( tr( "Preferred Placement Hint" ), static_cast< int >( QgsLabelLineSettings::AnchorType::HintOnly ) );
-  mAnchorTypeComboBox->addItem( tr( "Strict" ), static_cast< int >( QgsLabelLineSettings::AnchorType::Strict ) );
+  mAnchorTypeComboBox->addItem( tr( "Preferred Placement Hint" ), static_cast<int>( QgsLabelLineSettings::AnchorType::HintOnly ) );
+  mAnchorTypeComboBox->addItem( tr( "Strict" ), static_cast<int>( QgsLabelLineSettings::AnchorType::Strict ) );
 
-  connect( mPercentPlacementComboBox, qOverload<int>( &QComboBox::currentIndexChanged ), this, [ = ]( int )
-  {
+  mAnchorTextPointComboBox->addItem( tr( "Automatic" ), static_cast<int>( QgsLabelLineSettings::AnchorTextPoint::FollowPlacement ) );
+  mAnchorTextPointComboBox->addItem( tr( "Start of Text" ), static_cast<int>( QgsLabelLineSettings::AnchorTextPoint::StartOfText ) );
+  mAnchorTextPointComboBox->addItem( tr( "Center of Text" ), static_cast<int>( QgsLabelLineSettings::AnchorTextPoint::CenterOfText ) );
+  mAnchorTextPointComboBox->addItem( tr( "End of Text" ), static_cast<int>( QgsLabelLineSettings::AnchorTextPoint::EndOfText ) );
+
+  connect( mPercentPlacementComboBox, qOverload<int>( &QComboBox::currentIndexChanged ), this, [=]( int ) {
     if ( !mBlockSignals )
       emit changed();
 
@@ -51,29 +56,36 @@ QgsLabelLineAnchorWidget::QgsLabelLineAnchorWidget( QWidget *parent, QgsVectorLa
       mBlockSignals = false;
     }
   } );
-  connect( mCustomPlacementSpinBox, qOverload<double>( &QDoubleSpinBox::valueChanged ), this, [ = ]( double )
-  {
+  connect( mCustomPlacementSpinBox, qOverload<double>( &QDoubleSpinBox::valueChanged ), this, [=]( double ) {
     if ( !mBlockSignals )
       emit changed();
   } );
 
-  connect( mAnchorTypeComboBox, qOverload<int>( &QComboBox::currentIndexChanged ), this, [ = ]( int )
-  {
+  connect( mAnchorTypeComboBox, qOverload<int>( &QComboBox::currentIndexChanged ), this, [=]( int ) {
     if ( !mBlockSignals )
       emit changed();
 
     updateAnchorTypeHint();
   } );
 
-  connect( mClippingComboBox, qOverload<int>( &QComboBox::currentIndexChanged ), this, [ = ]( int )
-  {
+  connect( mClippingComboBox, qOverload<int>( &QComboBox::currentIndexChanged ), this, [=]( int ) {
     if ( !mBlockSignals )
       emit changed();
   } );
 
-  registerDataDefinedButton( mLinePlacementDDBtn, QgsPalLayerSettings::LineAnchorPercent );
-  registerDataDefinedButton( mLineClippingDDBtn, QgsPalLayerSettings::LineAnchorClipping );
+  connect( mAnchorTextPointComboBox, qOverload<int>( &QComboBox::currentIndexChanged ), this, [=]( int ) {
+    if ( !mBlockSignals )
+      emit changed();
+
+    updateAnchorTextPointHint();
+  } );
+
+  registerDataDefinedButton( mLinePlacementDDBtn, QgsPalLayerSettings::Property::LineAnchorPercent );
+  registerDataDefinedButton( mLineClippingDDBtn, QgsPalLayerSettings::Property::LineAnchorClipping );
+  registerDataDefinedButton( mAnchorTextPointDDBtn, QgsPalLayerSettings::Property::LineAnchorTextPoint );
+  registerDataDefinedButton( mAnchorTypeDDBtn, QgsPalLayerSettings::Property::LineAnchorType );
   updateAnchorTypeHint();
+  updateAnchorTextPointHint();
 }
 
 void QgsLabelLineAnchorWidget::setSettings( const QgsLabelLineSettings &settings )
@@ -92,8 +104,9 @@ void QgsLabelLineAnchorWidget::setSettings( const QgsLabelLineSettings &settings
   }
   mCustomPlacementSpinBox->setEnabled( mPercentPlacementComboBox->currentData().toDouble() < 0 );
 
-  mAnchorTypeComboBox->setCurrentIndex( mAnchorTypeComboBox->findData( static_cast< int >( settings.anchorType() ) ) );
-  mClippingComboBox->setCurrentIndex( mClippingComboBox->findData( static_cast< int >( settings.anchorClipping() ) ) );
+  mAnchorTypeComboBox->setCurrentIndex( mAnchorTypeComboBox->findData( static_cast<int>( settings.anchorType() ) ) );
+  mClippingComboBox->setCurrentIndex( mClippingComboBox->findData( static_cast<int>( settings.anchorClipping() ) ) );
+  mAnchorTextPointComboBox->setCurrentIndex( mAnchorTextPointComboBox->findData( static_cast<int>( settings.anchorTextPoint() ) ) );
   mBlockSignals = false;
 }
 
@@ -110,21 +123,24 @@ QgsLabelLineSettings QgsLabelLineAnchorWidget::settings() const
     settings.setLineAnchorPercent( mCustomPlacementSpinBox->value() / 100.0 );
   }
 
-  settings.setAnchorType( static_cast< QgsLabelLineSettings::AnchorType >( mAnchorTypeComboBox->currentData().toInt() ) );
-  settings.setAnchorClipping( static_cast< QgsLabelLineSettings::AnchorClipping >( mClippingComboBox->currentData().toInt() ) );
+  settings.setAnchorType( static_cast<QgsLabelLineSettings::AnchorType>( mAnchorTypeComboBox->currentData().toInt() ) );
+  settings.setAnchorClipping( static_cast<QgsLabelLineSettings::AnchorClipping>( mClippingComboBox->currentData().toInt() ) );
+  settings.setAnchorTextPoint( static_cast<QgsLabelLineSettings::AnchorTextPoint>( mAnchorTextPointComboBox->currentData().toInt() ) );
   return settings;
 }
 
 void QgsLabelLineAnchorWidget::updateDataDefinedProperties( QgsPropertyCollection &properties )
 {
-  properties.setProperty( QgsPalLayerSettings::LineAnchorPercent, mDataDefinedProperties.property( QgsPalLayerSettings::LineAnchorPercent ) );
-  properties.setProperty( QgsPalLayerSettings::LineAnchorClipping, mDataDefinedProperties.property( QgsPalLayerSettings::LineAnchorClipping ) );
+  properties.setProperty( QgsPalLayerSettings::Property::LineAnchorPercent, mDataDefinedProperties.property( QgsPalLayerSettings::Property::LineAnchorPercent ) );
+  properties.setProperty( QgsPalLayerSettings::Property::LineAnchorClipping, mDataDefinedProperties.property( QgsPalLayerSettings::Property::LineAnchorClipping ) );
+  properties.setProperty( QgsPalLayerSettings::Property::LineAnchorType, mDataDefinedProperties.property( QgsPalLayerSettings::Property::LineAnchorType ) );
+  properties.setProperty( QgsPalLayerSettings::Property::LineAnchorTextPoint, mDataDefinedProperties.property( QgsPalLayerSettings::Property::LineAnchorTextPoint ) );
 }
 
 void QgsLabelLineAnchorWidget::updateAnchorTypeHint()
 {
   QString hint;
-  switch ( static_cast< QgsLabelLineSettings::AnchorType >( mAnchorTypeComboBox->currentData().toInt() ) )
+  switch ( static_cast<QgsLabelLineSettings::AnchorType>( mAnchorTypeComboBox->currentData().toInt() ) )
   {
     case QgsLabelLineSettings::AnchorType::Strict:
       hint = tr( "Labels are placed exactly on the label anchor only, and no other fallback placements are permitted." );
@@ -135,4 +151,25 @@ void QgsLabelLineAnchorWidget::updateAnchorTypeHint()
       break;
   }
   mAnchorTypeHintLabel->setText( hint );
+}
+
+void QgsLabelLineAnchorWidget::updateAnchorTextPointHint()
+{
+  QString hint;
+  switch ( static_cast<QgsLabelLineSettings::AnchorTextPoint>( mAnchorTextPointComboBox->currentData().toInt() ) )
+  {
+    case QgsLabelLineSettings::AnchorTextPoint::StartOfText:
+      hint = tr( "Labels are placed so that the start of their text is placed at the anchor point." );
+      break;
+    case QgsLabelLineSettings::AnchorTextPoint::CenterOfText:
+      hint = tr( "Labels are placed so that the center of their text is placed at the anchor point." );
+      break;
+    case QgsLabelLineSettings::AnchorTextPoint::EndOfText:
+      hint = tr( "Labels are placed so that the end of their text is placed at the anchor point." );
+      break;
+    case QgsLabelLineSettings::AnchorTextPoint::FollowPlacement:
+      hint = tr( "The text justification is determined based on the anchor point. Anchors close to the start of the line will use the start of the text, anchors close to the end will use the end of the text, and central values will use the center of the text." );
+      break;
+  }
+  mAnchorTextPointHintLabel->setText( hint );
 }

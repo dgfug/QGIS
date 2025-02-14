@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsmaptooladdpart.h"
+#include "moc_qgsmaptooladdpart.cpp"
 #include "qgsadvanceddigitizingdockwidget.h"
 #include "qgscurvepolygon.h"
 #include "qgsgeometry.h"
@@ -28,7 +29,7 @@
 
 
 QgsMapToolAddPart::QgsMapToolAddPart( QgsMapCanvas *canvas )
-  : QgsMapToolCapture( canvas, QgisApp::instance()->cadDockWidget(), CaptureNone )
+  : QgsMapToolCaptureLayerGeometry( canvas, QgisApp::instance()->cadDockWidget(), CaptureNone )
 {
   mToolName = tr( "Add part" );
   connect( QgisApp::instance(), &QgisApp::newProject, this, &QgsMapToolAddPart::stopCapturing );
@@ -40,23 +41,24 @@ QgsMapToolCapture::Capabilities QgsMapToolAddPart::capabilities() const
   return QgsMapToolCapture::SupportsCurves | QgsMapToolCapture::ValidateGeometries;
 }
 
-bool QgsMapToolAddPart::supportsTechnique( QgsMapToolCapture::CaptureTechnique technique ) const
+bool QgsMapToolAddPart::supportsTechnique( Qgis::CaptureTechnique technique ) const
 {
   switch ( technique )
   {
-    case QgsMapToolCapture::StraightSegments:
-    case QgsMapToolCapture::Streaming:
+    case Qgis::CaptureTechnique::StraightSegments:
+    case Qgis::CaptureTechnique::Streaming:
       return true;
 
-    case QgsMapToolCapture::CircularString:
-      return false;
+    case Qgis::CaptureTechnique::CircularString:
+    case Qgis::CaptureTechnique::Shape:
+      return mode() != QgsMapToolCapture::CapturePoint;
   }
   return false;
 }
 
 void QgsMapToolAddPart::canvasReleaseEvent( QgsMapMouseEvent *e )
 {
-  if ( checkSelection() )
+  if ( getLayerAndCheckSelection() )
   {
     QgsMapToolAdvancedDigitizing::canvasReleaseEvent( e );
   }
@@ -68,142 +70,45 @@ void QgsMapToolAddPart::canvasReleaseEvent( QgsMapMouseEvent *e )
 
 void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 {
-  //check if we operate on a vector layer
-  QgsVectorLayer *vlayer = currentVectorLayer();
-  if ( !vlayer )
-  {
-    notifyNotVectorLayer();
+  QgsVectorLayer *layer = getLayerAndCheckSelection();
+  if ( !layer )
     return;
-  }
 
-  if ( !vlayer->isEditable() )
-  {
-    notifyNotEditableLayer();
+  QgsMapToolCapture::cadCanvasReleaseEvent( e );
+}
+
+void QgsMapToolAddPart::layerPointCaptured( const QgsPoint &point )
+{
+  QgsVectorLayer *layer = getLayerAndCheckSelection();
+  if ( !layer )
     return;
-  }
+  layer->beginEditCommand( tr( "Part added" ) );
+  Qgis::GeometryOperationResult errorCode = layer->addPart( QgsPointSequence() << point );
+  finalizeEditCommand( layer, errorCode );
+}
 
-  if ( !checkSelection() )
-  {
-    stopCapturing();
+void QgsMapToolAddPart::layerLineCaptured( const QgsCurve *line )
+{
+  QgsVectorLayer *layer = getLayerAndCheckSelection();
+  if ( !layer )
     return;
-  }
+  layer->beginEditCommand( tr( "Part added" ) );
+  Qgis::GeometryOperationResult errorCode = layer->addPart( line->clone() );
+  finalizeEditCommand( layer, errorCode );
+}
 
-  Qgis::GeometryOperationResult errorCode = Qgis::GeometryOperationResult::Success;
-  switch ( mode() )
-  {
-    case CapturePoint:
-    {
-      QgsPoint layerPoint;
-      const QgsPointXY mapPoint = e->mapPoint();
+void QgsMapToolAddPart::layerPolygonCaptured( const QgsCurvePolygon *polygon )
+{
+  QgsVectorLayer *layer = getLayerAndCheckSelection();
+  if ( !layer )
+    return;
+  layer->beginEditCommand( tr( "Part added" ) );
+  Qgis::GeometryOperationResult errorCode = layer->addPart( polygon->exteriorRing()->clone() );
+  finalizeEditCommand( layer, errorCode );
+}
 
-      if ( nextPoint( QgsPoint( mapPoint ), layerPoint ) != 0 )
-      {
-        QgsDebugMsg( QStringLiteral( "nextPoint failed" ) );
-        return;
-      }
-
-      vlayer->beginEditCommand( tr( "Part added" ) );
-      errorCode = vlayer->addPart( QgsPointSequence() << layerPoint );
-    }
-    break;
-
-    case CaptureLine:
-    case CapturePolygon:
-    {
-      //add point to list and to rubber band
-      if ( e->button() == Qt::LeftButton )
-      {
-        const int error = addVertex( e->mapPoint(), e->mapPointMatch() );
-        if ( error == 2 )
-        {
-          //problem with coordinate transformation
-          emit messageEmitted( tr( "Coordinate transform error. Cannot transform the point to the layers coordinate system" ), Qgis::MessageLevel::Warning );
-          return;
-        }
-
-        startCapturing();
-        return;
-      }
-      else if ( e->button() != Qt::RightButton )
-      {
-        deleteTempRubberBand();
-
-        return;
-      }
-
-      if ( !isCapturing() )
-        return;
-
-      if ( mode() == CapturePolygon )
-      {
-        closePolygon();
-      }
-
-      //does compoundcurve contain circular strings?
-      //does provider support circular strings?
-      const bool hasCurvedSegments = captureCurve()->hasCurvedSegments();
-      const bool providerSupportsCurvedSegments = vlayer->dataProvider()->capabilities() & QgsVectorDataProvider::CircularGeometries;
-
-      QgsCurve *curveToAdd = nullptr;
-      if ( hasCurvedSegments && providerSupportsCurvedSegments )
-      {
-        curveToAdd = captureCurve()->clone();
-      }
-      else
-      {
-        curveToAdd = captureCurve()->curveToLine();
-      }
-
-      vlayer->beginEditCommand( tr( "Part added" ) );
-      if ( mode() == CapturePolygon )
-      {
-        //avoid intersections
-        QgsCurvePolygon *cp = new QgsCurvePolygon();
-        cp->setExteriorRing( curveToAdd );
-        QgsGeometry *geom = new QgsGeometry( cp );
-
-        QList<QgsVectorLayer *>  avoidIntersectionsLayers;
-        switch ( QgsProject::instance()->avoidIntersectionsMode() )
-        {
-          case QgsProject::AvoidIntersectionsMode::AvoidIntersectionsCurrentLayer:
-            avoidIntersectionsLayers.append( vlayer );
-            break;
-          case QgsProject::AvoidIntersectionsMode::AvoidIntersectionsLayers:
-            avoidIntersectionsLayers = QgsProject::instance()->avoidIntersectionsLayers();
-            break;
-          case QgsProject::AvoidIntersectionsMode::AllowIntersections:
-            break;
-        }
-        if ( !avoidIntersectionsLayers.isEmpty() )
-        {
-          geom->avoidIntersections( avoidIntersectionsLayers );
-        }
-
-        const QgsCurvePolygon *cpGeom = qgsgeometry_cast<const QgsCurvePolygon *>( geom->constGet() );
-        if ( !cpGeom )
-        {
-          stopCapturing();
-          delete geom;
-          vlayer->destroyEditCommand();
-          return;
-        }
-
-        errorCode = vlayer->addPart( cpGeom->exteriorRing()->clone() );
-        delete geom;
-      }
-      else
-      {
-        errorCode = vlayer->addPart( curveToAdd );
-      }
-      stopCapturing();
-    }
-    break;
-    default:
-      Q_ASSERT( !"invalid capture mode" );
-      errorCode = Qgis::GeometryOperationResult::AddPartSelectedGeometryNotFound;
-      break;
-  }
-
+void QgsMapToolAddPart::finalizeEditCommand( QgsVectorLayer *layer, Qgis::GeometryOperationResult errorCode )
+{
   QString errorMessage;
   switch ( errorCode )
   {
@@ -219,9 +124,9 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
         addTopologicalPoints( pointsZM() );
       }
 
-      vlayer->endEditCommand();
+      layer->endEditCommand();
 
-      vlayer->triggerRepaint();
+      layer->triggerRepaint();
 
       return;
     }
@@ -258,33 +163,40 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
     case Qgis::GeometryOperationResult::LayerNotEditable:
     case Qgis::GeometryOperationResult::NothingHappened:
     case Qgis::GeometryOperationResult::SplitCannotSplitPoint:
+    case Qgis::GeometryOperationResult::GeometryTypeHasChanged:
       // Should not reach here
       // Other OperationResults should not be returned by addPart
       errorMessage = tr( "Unexpected OperationResult: %1" ).arg( qgsEnumValueToKey( errorCode ) );
   }
 
   emit messageEmitted( errorMessage, Qgis::MessageLevel::Warning );
-  vlayer->destroyEditCommand();
+  layer->destroyEditCommand();
 }
 
 void QgsMapToolAddPart::activate()
 {
-  checkSelection();
+  getLayerAndCheckSelection();
   QgsMapToolCapture::activate();
 }
 
-bool QgsMapToolAddPart::checkSelection()
+QgsVectorLayer *QgsMapToolAddPart::getLayerAndCheckSelection()
 {
   //check if we operate on a vector layer
-  QgsVectorLayer *vlayer = currentVectorLayer();
-  if ( !vlayer )
+  QgsVectorLayer *layer = currentVectorLayer();
+  if ( !layer )
   {
     notifyNotVectorLayer();
-    return false;
+    return nullptr;
+  }
+
+  if ( !layer->isEditable() )
+  {
+    notifyNotEditableLayer();
+    return nullptr;
   }
 
   //inform user at the begin of the digitizing action that the island tool only works if exactly one feature is selected
-  const int nSelectedFeatures = vlayer->selectedFeatureCount();
+  const int nSelectedFeatures = layer->selectedFeatureCount();
   QString selectionErrorMsg;
   if ( nSelectedFeatures < 1 )
   {
@@ -298,11 +210,10 @@ bool QgsMapToolAddPart::checkSelection()
   {
     // Only one selected feature
     // For single-type layers only allow features without geometry
-    QgsFeatureIterator selectedFeatures = vlayer->getSelectedFeatures();
+    QgsFeatureIterator selectedFeatures = layer->getSelectedFeatures();
     QgsFeature selectedFeature;
     selectedFeatures.nextFeature( selectedFeature );
-    if ( QgsWkbTypes::isSingleType( vlayer->wkbType() ) &&
-         selectedFeature.geometry().constGet() )
+    if ( QgsWkbTypes::isSingleType( layer->wkbType() ) && selectedFeature.geometry().constGet() )
     {
       selectionErrorMsg = tr( "This layer does not support multipart geometries." );
     }
@@ -313,5 +224,8 @@ bool QgsMapToolAddPart::checkSelection()
     emit messageEmitted( tr( "Could not add part. %1" ).arg( selectionErrorMsg ), Qgis::MessageLevel::Warning );
   }
 
-  return selectionErrorMsg.isEmpty();
+  if ( selectionErrorMsg.isEmpty() )
+    return layer;
+  else
+    return nullptr;
 }

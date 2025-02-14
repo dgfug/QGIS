@@ -21,19 +21,14 @@ include_directories(
 )
 
 include_directories(SYSTEM
-  ${GDAL_INCLUDE_DIR}
-  ${PROJ_INCLUDE_DIR}
   ${LIBZIP_INCLUDE_DIRS}
   ${SPATIALINDEX_INCLUDE_DIR}
-  ${GEOS_INCLUDE_DIR}
-  ${EXPAT_INCLUDE_DIR}
-  ${SQLITE3_INCLUDE_DIR}
-  ${SPATIALITE_INCLUDE_DIR}
   ${QCA_INCLUDE_DIR}
   ${QTKEYCHAIN_INCLUDE_DIR}
 )
 
-QT5_WRAP_CPP(QGIS_QUICK_APP_MOC_SRCS ${QGIS_QUICK_APP_MOC_HDRS})
+qt_wrap_cpp(QGIS_QUICK_APP_MOC_SRCS ${QGIS_QUICK_APP_MOC_HDRS})
+
 set(QGIS_QUICK_APP_RCCS qml.qrc)
 set(QGIS_QUICK_APP_NAME qgis_quickapp)
 add_executable(${QGIS_QUICK_APP_NAME}
@@ -45,7 +40,13 @@ add_executable(${QGIS_QUICK_APP_NAME}
 
 target_compile_features(${QGIS_QUICK_APP_NAME} PRIVATE cxx_std_17)
 
-target_link_libraries(${QGIS_QUICK_APP_NAME} Qt5::Gui Qt5::Qml Qt5::Quick Qt5::Xml qgis_core qgis_quick)
+target_link_libraries(${QGIS_QUICK_APP_NAME}
+    ${QT_VERSION_BASE}::Gui
+    ${QT_VERSION_BASE}::Qml
+    ${QT_VERSION_BASE}::Quick
+    ${QT_VERSION_BASE}::Xml
+    qgis_core
+    qgis_quick)
 set_target_properties(${QGIS_QUICK_APP_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 target_compile_definitions(${QGIS_QUICK_APP_NAME} PRIVATE "-DQT_NO_FOREACH")
 add_dependencies(${QGIS_QUICK_APP_NAME}

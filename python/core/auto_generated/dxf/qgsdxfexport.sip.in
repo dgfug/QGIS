@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/dxf/qgsdxfexport.h                                          *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -27,7 +27,7 @@ Exports QGIS layers to the DXF format.
 
     struct DxfLayer
     {
-        DxfLayer( QgsVectorLayer *vl, int layerOutputAttributeIndex = -1 );
+        DxfLayer( QgsVectorLayer *vl, int layerOutputAttributeIndex = -1, bool buildDDBlocks = DEFAULT_DXF_DATA_DEFINED_BLOCKS, int ddBlocksMaxNumberOfClasses = -1, QString overriddenName = QString() );
 
         QgsVectorLayer *layer() const;
 %Docstring
@@ -51,18 +51,38 @@ unique value.
 .. versionadded:: 3.12
 %End
 
-    };
+        bool buildDataDefinedBlocks() const;
+%Docstring
+Flag if data defined point block symbols should be created. Default is false
 
-    enum SymbologyExport
-    {
-      NoSymbology,
-      FeatureSymbology,
-      SymbolLayerSymbology
+:return: True if data defined point block symbols should be created
+
+.. versionadded:: 3.38
+%End
+
+        int dataDefinedBlocksMaximumNumberOfClasses() const;
+%Docstring
+Returns the maximum number of data defined symbol classes for which blocks are created. Returns -1 if there is no such limitation
+
+:return:
+
+.. versionadded:: 3.38
+%End
+
+        QString overriddenName() const;
+%Docstring
+Returns the overridden layer name to be used in the exported DXF.
+
+.. versionadded:: 3.38
+%End
+
     };
 
     enum Flag
     {
       FlagNoMText,
+      FlagOnlySelectedFeatures,
+      FlagHairlineWidthExport
     };
     typedef QFlags<QgsDxfExport::Flag> Flags;
 
@@ -129,8 +149,6 @@ Set map settings and assign layer name attributes
 Sets the export flags.
 
 .. seealso:: :py:func:`flags`
-
-.. versionadded:: 3.0
 %End
 
     QgsDxfExport::Flags flags() const;
@@ -138,8 +156,6 @@ Sets the export flags.
 Returns the export flags.
 
 .. seealso:: :py:func:`setFlags`
-
-.. versionadded:: 3.0
 %End
 
     void addLayers( const QList< QgsDxfExport::DxfLayer > &layers );
@@ -153,14 +169,19 @@ Add layers to export
 
     ExportResult writeToFile( QIODevice *d, const QString &codec );  //maybe add progress dialog? other parameters (e.g. scale, dpi)?
 
+    const QString feedbackMessage() const;
+%Docstring
+Returns any feedback message produced while export to dxf file.
+
+.. versionadded:: 3.36
+%End
+
     void setSymbologyScale( double scale );
 %Docstring
 Set reference ``scale`` for output.
 The ``scale`` value indicates the scale denominator, e.g. 1000.0 for a 1:1000 map.
 
 .. seealso:: :py:func:`symbologyScale`
-
-.. versionadded:: 3.0
 %End
 
     double symbologyScale() const;
@@ -169,11 +190,9 @@ Returns the reference scale for output.
 The  scale value indicates the scale denominator, e.g. 1000.0 for a 1:1000 map.
 
 .. seealso:: :py:func:`setSymbologyScale`
-
-.. versionadded:: 3.0
 %End
 
-    QgsUnitTypes::DistanceUnit mapUnits() const;
+    Qgis::DistanceUnit mapUnits() const;
 %Docstring
 Retrieve map units
 
@@ -185,8 +204,6 @@ Retrieve map units
 Set destination CRS
 
 .. seealso:: :py:func:`destinationCrs`
-
-.. versionadded:: 3.0
 %End
 
     QgsCoordinateReferenceSystem destinationCrs() const;
@@ -194,18 +211,16 @@ Set destination CRS
 Returns the destination CRS, or an invalid CRS if no reprojection will be done.
 
 .. seealso:: :py:func:`setDestinationCrs`
-
-.. versionadded:: 3.0
 %End
 
-    void setSymbologyExport( QgsDxfExport::SymbologyExport e );
+    void setSymbologyExport( Qgis::FeatureSymbologyExport e );
 %Docstring
 Set symbology export mode
 
 :param e: the mode
 %End
 
-    QgsDxfExport::SymbologyExport symbologyExport() const;
+    Qgis::FeatureSymbologyExport symbologyExport() const;
 %Docstring
 Gets symbology export mode
 
@@ -349,8 +364,6 @@ Write a group code with a point
 .. note::
 
    available in Python bindings as writeGroupPointV2
-
-.. versionadded:: 2.15
 %End
 
     void writeGroup( const QColor &color, int exactMatch = 62, int rgbCode = 420, int transparencyCode = 440 );
@@ -412,8 +425,6 @@ Write a tuple of group code and a handle
     void writeLine( const QgsPoint &pt1, const QgsPoint &pt2, const QString &layer, const QString &lineStyleName, const QColor &color, double width = -1 );
 %Docstring
 Write line (as a polyline)
-
-.. versionadded:: 2.15
 %End
 
     void writePoint( const QString &layer, const QColor &color, const QgsPoint &pt ) /PyName=writePointV2/;
@@ -423,8 +434,6 @@ Write point
 .. note::
 
    available in Python bindings as writePointV2
-
-.. versionadded:: 2.15
 %End
 
     void writeFilledCircle( const QString &layer, const QColor &color, const QgsPoint &pt, double radius ) /PyName=writeFillCircleV2/;
@@ -434,8 +443,6 @@ Write filled circle (as hatch)
 .. note::
 
    available in Python bindings as writePointV2
-
-.. versionadded:: 2.15
 %End
 
     void writeCircle( const QString &layer, const QColor &color, const QgsPoint &pt, double radius, const QString &lineStyleName, double width ) /PyName=writeCircleV2/;
@@ -445,8 +452,6 @@ Write circle (as polyline)
 .. note::
 
    available in Python bindings as writeCircleV2
-
-.. versionadded:: 2.15
 %End
 
     void writeText( const QString &layer, const QString &text, const QgsPoint &pt, double size, double angle, const QColor &color, QgsDxfExport::HAlign hali = QgsDxfExport::HAlign::Undefined, QgsDxfExport::VAlign vali = QgsDxfExport::VAlign::Undefined ) /PyName=writeTextV2/;
@@ -456,8 +461,6 @@ Write text (TEXT)
 .. note::
 
    available in Python bindings as writeTextV2
-
-.. versionadded:: 2.15
 %End
 
     void writeMText( const QString &layer, const QString &text, const QgsPoint &pt, double width, double angle, const QColor &color );
@@ -467,11 +470,9 @@ Write mtext (MTEXT)
 .. note::
 
    available in Python bindings as writeMTextV2
-
-.. versionadded:: 2.15
 %End
 
-    static double mapUnitScaleFactor( double scale, QgsUnitTypes::RenderUnit symbolUnits, QgsUnitTypes::DistanceUnit mapUnits, double mapUnitsPerPixel = 1.0 );
+    static double mapUnitScaleFactor( double scale, Qgis::RenderUnit symbolUnits, Qgis::DistanceUnit mapUnits, double mapUnitsPerPixel = 1.0 );
 %Docstring
 Returns scale factor for conversion to map units
 
@@ -514,8 +515,9 @@ Register name of layer for feature
 :param fid: id of feature
 :param layer: dxf layer of feature
 
-.. deprecated::
-   Will be made private in QGIS 4
+.. deprecated:: 3.40
+
+   Will be made private in QGIS 4.
 %End
 
   private:
@@ -533,5 +535,5 @@ QFlags<QgsDxfExport::DxfPolylineFlag> operator|(QgsDxfExport::DxfPolylineFlag f1
  *                                                                      *
  * src/core/dxf/qgsdxfexport.h                                          *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

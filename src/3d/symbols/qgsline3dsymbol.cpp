@@ -19,25 +19,26 @@
 #include "qgsmaterialregistry.h"
 #include "qgs3dexportobject.h"
 #include "qgs3dsceneexporter.h"
+#include "qgsvectorlayer.h"
+#include "qgsvectorlayerelevationproperties.h"
 
 QgsLine3DSymbol::QgsLine3DSymbol()
-  : mMaterial( std::make_unique< QgsPhongMaterialSettings >() )
+  : mMaterialSettings( std::make_unique<QgsPhongMaterialSettings>() )
 {
-
 }
 
 QgsLine3DSymbol::~QgsLine3DSymbol() = default;
 
 QgsAbstract3DSymbol *QgsLine3DSymbol::clone() const
 {
-  std::unique_ptr< QgsLine3DSymbol > result = std::make_unique< QgsLine3DSymbol >();
+  auto result = std::make_unique<QgsLine3DSymbol>();
   result->mAltClamping = mAltClamping;
   result->mAltBinding = mAltBinding;
   result->mWidth = mWidth;
-  result->mHeight = mHeight;
+  result->mOffset = mOffset;
   result->mExtrusionHeight = mExtrusionHeight;
   result->mRenderAsSimpleLines = mRenderAsSimpleLines;
-  result->mMaterial.reset( mMaterial->clone() );
+  result->mMaterialSettings.reset( mMaterialSettings->clone() );
   copyBaseSettings( result.get() );
   return result.release();
 }
@@ -51,15 +52,15 @@ void QgsLine3DSymbol::writeXml( QDomElement &elem, const QgsReadWriteContext &co
   QDomElement elemDataProperties = doc.createElement( QStringLiteral( "data" ) );
   elemDataProperties.setAttribute( QStringLiteral( "alt-clamping" ), Qgs3DUtils::altClampingToString( mAltClamping ) );
   elemDataProperties.setAttribute( QStringLiteral( "alt-binding" ), Qgs3DUtils::altBindingToString( mAltBinding ) );
-  elemDataProperties.setAttribute( QStringLiteral( "height" ), mHeight );
+  elemDataProperties.setAttribute( QStringLiteral( "offset" ), mOffset );
   elemDataProperties.setAttribute( QStringLiteral( "extrusion-height" ), mExtrusionHeight );
   elemDataProperties.setAttribute( QStringLiteral( "simple-lines" ), mRenderAsSimpleLines ? QStringLiteral( "1" ) : QStringLiteral( "0" ) );
   elemDataProperties.setAttribute( QStringLiteral( "width" ), mWidth );
   elem.appendChild( elemDataProperties );
 
-  elem.setAttribute( QStringLiteral( "material_type" ), mMaterial->type() );
+  elem.setAttribute( QStringLiteral( "material_type" ), mMaterialSettings->type() );
   QDomElement elemMaterial = doc.createElement( QStringLiteral( "material" ) );
-  mMaterial->writeXml( elemMaterial, context );
+  mMaterialSettings->writeXml( elemMaterial, context );
   elem.appendChild( elemMaterial );
 }
 
@@ -70,35 +71,45 @@ void QgsLine3DSymbol::readXml( const QDomElement &elem, const QgsReadWriteContex
   const QDomElement elemDataProperties = elem.firstChildElement( QStringLiteral( "data" ) );
   mAltClamping = Qgs3DUtils::altClampingFromString( elemDataProperties.attribute( QStringLiteral( "alt-clamping" ) ) );
   mAltBinding = Qgs3DUtils::altBindingFromString( elemDataProperties.attribute( QStringLiteral( "alt-binding" ) ) );
-  mHeight = elemDataProperties.attribute( QStringLiteral( "height" ) ).toFloat();
+  mOffset = elemDataProperties.attribute( QStringLiteral( "offset" ) ).toFloat();
   mExtrusionHeight = elemDataProperties.attribute( QStringLiteral( "extrusion-height" ) ).toFloat();
   mWidth = elemDataProperties.attribute( QStringLiteral( "width" ) ).toFloat();
   mRenderAsSimpleLines = elemDataProperties.attribute( QStringLiteral( "simple-lines" ), QStringLiteral( "0" ) ).toInt();
 
   const QDomElement elemMaterial = elem.firstChildElement( QStringLiteral( "material" ) );
   const QString materialType = elem.attribute( QStringLiteral( "material_type" ), QStringLiteral( "phong" ) );
-  mMaterial.reset( Qgs3D::materialRegistry()->createMaterialSettings( materialType ) );
-  if ( !mMaterial )
-    mMaterial.reset( Qgs3D::materialRegistry()->createMaterialSettings( QStringLiteral( "phong" ) ) );
-  mMaterial->readXml( elemMaterial, context );
+  mMaterialSettings.reset( Qgs3D::materialRegistry()->createMaterialSettings( materialType ) );
+  if ( !mMaterialSettings )
+    mMaterialSettings.reset( Qgs3D::materialRegistry()->createMaterialSettings( QStringLiteral( "phong" ) ) );
+  mMaterialSettings->readXml( elemMaterial, context );
 }
 
-QgsAbstractMaterialSettings *QgsLine3DSymbol::material() const
+QgsAbstractMaterialSettings *QgsLine3DSymbol::materialSettings() const
 {
-  return mMaterial.get();
+  return mMaterialSettings.get();
 }
 
-void QgsLine3DSymbol::setMaterial( QgsAbstractMaterialSettings *material )
+void QgsLine3DSymbol::setMaterialSettings( QgsAbstractMaterialSettings *materialSettings )
 {
-  if ( material == mMaterial.get() )
+  if ( materialSettings == mMaterialSettings.get() )
     return;
 
-  mMaterial.reset( material );
+  mMaterialSettings.reset( materialSettings );
 }
 
-QList<QgsWkbTypes::GeometryType> QgsLine3DSymbol::compatibleGeometryTypes() const
+QList<Qgis::GeometryType> QgsLine3DSymbol::compatibleGeometryTypes() const
 {
-  return QList< QgsWkbTypes::GeometryType >() << QgsWkbTypes::LineGeometry;
+  return QList<Qgis::GeometryType>() << Qgis::GeometryType::Line;
+}
+
+void QgsLine3DSymbol::setDefaultPropertiesFromLayer( const QgsVectorLayer *layer )
+{
+  const QgsVectorLayerElevationProperties *props = qgis::down_cast<const QgsVectorLayerElevationProperties *>( const_cast<QgsVectorLayer *>( layer )->elevationProperties() );
+
+  mAltClamping = props->clamping();
+  mAltBinding = props->binding();
+  mExtrusionHeight = props->extrusionEnabled() ? static_cast<float>( props->extrusionHeight() ) : 0.0f;
+  mOffset = static_cast<float>( props->zOffset() );
 }
 
 QgsAbstract3DSymbol *QgsLine3DSymbol::create()
@@ -120,8 +131,9 @@ bool QgsLine3DSymbol::exportGeometries( Qgs3DSceneExporter *exporter, Qt3DCore::
     for ( Qt3DRender::QGeometryRenderer *r : renderers )
     {
       Qgs3DExportObject *object = exporter->processGeometryRenderer( r, objectNamePrefix );
-      if ( object == nullptr ) continue;
-      object->setupMaterial( material() );
+      if ( !object )
+        continue;
+      object->setupMaterial( materialSettings() );
       exporter->mObjects.push_back( object );
     }
     return renderers.size() != 0;

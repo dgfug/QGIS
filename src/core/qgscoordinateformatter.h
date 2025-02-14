@@ -34,7 +34,6 @@
  * ensuring that only geographic coordinates and not projected coordinates are formatted to degree
  * based formats.
  *
- * \since QGIS 3.0
  */
 
 class CORE_EXPORT QgsCoordinateFormatter
@@ -55,7 +54,7 @@ class CORE_EXPORT QgsCoordinateFormatter
     /**
      * Flags for controlling formatting of coordinates.
      */
-    enum FormatFlag
+    enum FormatFlag SIP_ENUM_BASETYPE( IntFlag )
     {
       FlagDegreesUseStringSuffix = 1 << 1, //!< Include a direction suffix (eg 'N', 'E', 'S' or 'W'), otherwise a "-" prefix is used for west and south coordinates
       FlagDegreesPadMinutesSeconds = 1 << 2, //!< Pad minute and second values with leading zeros, eg '05' instead of '5'
@@ -96,14 +95,18 @@ class CORE_EXPORT QgsCoordinateFormatter
      * The \a precision argument gives the number of decimal places to include for coordinates.
      *
      * Optional \a flags can be specified to control the output format.
+     *
+     * Since QGIS 3.26 the optional \a order argument can be used to control the order of the coordinates.
      */
-    static QString format( const QgsPointXY &point, Format format, int precision = 12,  FormatFlags flags = FlagDegreesUseStringSuffix );
+    static QString format( const QgsPointXY &point, Format format, int precision = 12,  FormatFlags flags = FlagDegreesUseStringSuffix, Qgis::CoordinateOrder order = Qgis::CoordinateOrder::XY );
 
     /**
      * Formats coordinates as an "\a x,\a y" pair, with optional decimal \a precision (number
      * of decimal places to include).
+     *
+     * Since QGIS 3.26 the optional \a order argument can be used to control the order of the coordinates.
      */
-    static QString asPair( double x, double y, int precision = 12 );
+    static QString asPair( double x, double y, int precision = 12, Qgis::CoordinateOrder order = Qgis::CoordinateOrder::XY );
 
     /**
      * Returns the character used as X/Y separator, this is a `,` on locales that do not use
@@ -124,6 +127,8 @@ class CORE_EXPORT QgsCoordinateFormatter
 
     static QString formatXAsDegrees( double val, int precision, FormatFlags flags );
     static QString formatYAsDegrees( double val, int precision, FormatFlags flags );
+
+    friend class QgsCoordinateUtils;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS( QgsCoordinateFormatter::FormatFlags )

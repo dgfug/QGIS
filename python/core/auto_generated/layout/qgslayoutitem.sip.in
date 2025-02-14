@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layout/qgslayoutitem.h                                      *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -13,8 +13,6 @@ class QgsLayoutItemRenderContext
 {
 %Docstring(signature="appended")
 Contains settings and helpers relating to a render of a :py:class:`QgsLayoutItem`.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -33,7 +31,6 @@ The ``viewScaleFactor`` gives the current view zoom (scale factor). It can be
 used to scale render graphics so that they always appear a constant size,
 regardless of the current view zoom.
 %End
-
 
 
     QgsRenderContext &renderContext();
@@ -65,8 +62,6 @@ class QgsLayoutItem : QgsLayoutObject, QGraphicsRectItem, QgsLayoutUndoObjectInt
 {
 %Docstring(signature="appended")
 Base class for graphical items within a :py:class:`QgsLayout`.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -82,6 +77,8 @@ Base class for graphical items within a :py:class:`QgsLayout`.
 #include "qgslayoutframe.h"
 #include "qgslayoutitemshape.h"
 #include "qgslayoutitempage.h"
+#include "qgslayoutitemmarker.h"
+#include "qgslayoutitemelevationprofile.h"
 %End
 %ConvertToSubClassCode
 
@@ -139,6 +136,14 @@ Base class for graphical items within a :py:class:`QgsLayout`.
         sipType = sipType_QgsLayoutFrame;
         *sipCppRet = static_cast<QgsLayoutFrame *>( sipCpp );
         break;
+      case QGraphicsItem::UserType + 117:
+        sipType = sipType_QgsLayoutItemMarker;
+        *sipCppRet = static_cast<QgsLayoutItemMarker *>( sipCpp );
+        break;
+      case QGraphicsItem::UserType + 118:
+        sipType = sipType_QgsLayoutItemElevationProfile;
+        *sipCppRet = static_cast<QgsLayoutItemElevationProfile *>( sipCpp );
+        break;
 
       // did you read that comment above? NO? Go read it now. You're about to break stuff.
 
@@ -170,8 +175,13 @@ Base class for graphical items within a :py:class:`QgsLayout`.
       UndoStrokeWidth,
       UndoBackgroundColor,
       UndoOpacity,
+      UndoMarginLeft,
+      UndoMarginTop,
+      UndoMarginBottom,
+      UndoMarginRight,
       UndoSetId,
       UndoRotation,
+      UndoExportLayerName,
       UndoShapeStyle,
       UndoShapeCornerRadius,
       UndoNodeMove,
@@ -241,6 +251,23 @@ Base class for graphical items within a :py:class:`QgsLayout`.
       UndoArrowHeadWidth,
       UndoArrowHeadFillColor,
       UndoArrowHeadStrokeColor,
+      UndoElevationProfileTolerance,
+      UndoElevationProfileChartBackground,
+      UndoElevationProfileChartBorder,
+      UndoElevationProfileDistanceMajorGridlines,
+      UndoElevationProfileDistanceMinorGridlines,
+      UndoElevationProfileDistanceFormat,
+      UndoElevationProfileDistanceFont,
+      UndoElevationProfileDistanceLabels,
+      UndoElevationProfileElevationMajorGridlines,
+      UndoElevationProfileElevationMinorGridlines,
+      UndoElevationProfileElevationFormat,
+      UndoElevationProfileElevationFont,
+      UndoElevationProfileElevationLabels,
+      UndoElevationProfileMinimumDistance,
+      UndoElevationProfileMaximumDistance,
+      UndoElevationProfileMinimumElevation,
+      UndoElevationProfileMaximumElevation,
 
       UndoCustomCommand,
     };
@@ -249,6 +276,7 @@ Base class for graphical items within a :py:class:`QgsLayout`.
     {
       FlagOverridesPaint,
       FlagProvidesClipPath,
+      FlagDisableSceneCaching,
     };
     typedef QFlags<QgsLayoutItem::Flag> Flags;
 
@@ -404,7 +432,7 @@ Sets the item's parent ``group``.
 
     virtual ExportLayerBehavior exportLayerBehavior() const;
 %Docstring
-Returns the behavior of this item during exporting to layered exports (e.g. SVG).
+Returns the behavior of this item during exporting to layered exports (e.g. SVG or geospatial PDF).
 
 .. seealso:: :py:func:`numberExportLayers`
 
@@ -413,7 +441,7 @@ Returns the behavior of this item during exporting to layered exports (e.g. SVG)
 .. versionadded:: 3.10
 %End
 
- virtual int numberExportLayers() const /Deprecated/;
+ virtual int numberExportLayers() const /Deprecated="Since 3.40. Use nextExportPart() and exportLayerBehavior() instead."/;
 %Docstring
 Returns the number of layers that this item requires for exporting during layered exports (e.g. SVG).
 Returns 0 if this item is to be placed on the same layer as the previous item,
@@ -426,7 +454,8 @@ their rendering to determine which layer should be drawn.
 
 .. seealso:: :py:func:`exportLayerDetails`
 
-.. deprecated::
+.. deprecated:: 3.40
+
    Use :py:func:`~QgsLayoutItem.nextExportPart` and :py:func:`~QgsLayoutItem.exportLayerBehavior` instead.
 %End
 
@@ -474,6 +503,8 @@ Moves to the next export part for a multi-layered export item, during a multi-la
       double opacity;
 
       QString mapTheme;
+
+      QString groupName;
     };
 
     virtual QgsLayoutItem::ExportLayerDetail exportLayerDetails() const;
@@ -842,10 +873,12 @@ Sets whether this item has a background drawn under it or not.
 .. seealso:: :py:func:`setBackgroundColor`
 %End
 
-    QColor backgroundColor() const;
+    QColor backgroundColor( bool useDataDefined = true ) const;
 %Docstring
 Returns the background color for this item. This is only used if :py:func:`~QgsLayoutItem.hasBackground`
 returns ``True``.
+
+:param useDataDefined: If true, then returns the data defined override for the background color
 
 .. seealso:: :py:func:`setBackgroundColor`
 
@@ -1043,6 +1076,13 @@ Returns the clipping path generated by this item, in layout coordinates.
 .. versionadded:: 3.16
 %End
 
+    virtual bool isRefreshing() const;
+%Docstring
+Returns ``True`` if the item is currently refreshing content in the background.
+
+.. versionadded:: 3.32
+%End
+
   public slots:
 
     virtual void refresh();
@@ -1062,7 +1102,7 @@ Forces a deferred update of any cached image the item uses.
 Triggers a redraw (update) of the item.
 %End
 
-    virtual void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::AllProperties );
+    virtual void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::DataDefinedProperty::AllProperties );
 %Docstring
 Refreshes a data defined ``property`` for the item by reevaluating the property's value
 and redrawing the item with this new value. If ``property`` is set to
@@ -1174,6 +1214,13 @@ Draws the frame around the item.
 Draws the background for the item.
 
 .. seealso:: :py:func:`framePath`
+%End
+
+    void drawRefreshingOverlay( QPainter *painter, const QStyleOptionGraphicsItem *itemStyle );
+%Docstring
+Draws a "refreshing" overlay icon on the item.
+
+.. versionadded:: 3.32
 %End
 
     virtual void setFixedSize( const QgsLayoutSize &size );
@@ -1334,5 +1381,5 @@ QFlags<QgsLayoutItem::Flag> operator|(QgsLayoutItem::Flag f1, QFlags<QgsLayoutIt
  *                                                                      *
  * src/core/layout/qgslayoutitem.h                                      *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

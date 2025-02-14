@@ -16,9 +16,11 @@
  ***************************************************************************/
 
 #include "qgsabstractrelationeditorwidget.h"
+#include "moc_qgsabstractrelationeditorwidget.cpp"
 
 #include "qgsfeatureiterator.h"
 #include "qgsexpression.h"
+#include "qgsexpressioncontextutils.h"
 #include "qgsfeature.h"
 #include "qgsfeatureselectiondlg.h"
 #include "qgsrelation.h"
@@ -43,7 +45,8 @@ void QgsAbstractRelationEditorWidget::setRelationFeature( const QgsRelation &rel
   beforeSetRelationFeature( relation, feature );
 
   mRelation = relation;
-  mFeature = feature;
+  mFeatureList.clear();
+  mFeatureList.append( feature );
 
   setObjectName( QStringLiteral( "referenced/" ) + mRelation.name() );
 
@@ -53,7 +56,6 @@ void QgsAbstractRelationEditorWidget::setRelationFeature( const QgsRelation &rel
 
 void QgsAbstractRelationEditorWidget::setRelations( const QgsRelation &relation, const QgsRelation &nmrelation )
 {
-
   beforeSetRelations( relation, nmrelation );
 
   mRelation = relation;
@@ -72,15 +74,12 @@ void QgsAbstractRelationEditorWidget::setRelations( const QgsRelation &relation,
   {
     if ( mNmRelation.isValid() )
     {
-      if ( it.value()->layers().contains( mRelation.referencedLayer() ) &&
-           it.value()->layers().contains( mRelation.referencingLayer() ) &&
-           it.value()->layers().contains( mNmRelation.referencedLayer() ) )
+      if ( it.value()->layers().contains( mRelation.referencedLayer() ) && it.value()->layers().contains( mRelation.referencingLayer() ) && it.value()->layers().contains( mNmRelation.referencedLayer() ) )
         mLayerInSameTransactionGroup = true;
     }
     else
     {
-      if ( it.value()->layers().contains( mRelation.referencedLayer() ) &&
-           it.value()->layers().contains( mRelation.referencingLayer() ) )
+      if ( it.value()->layers().contains( mRelation.referencedLayer() ) && it.value()->layers().contains( mRelation.referencingLayer() ) )
         mLayerInSameTransactionGroup = true;
     }
   }
@@ -103,12 +102,26 @@ QgsAttributeEditorContext QgsAbstractRelationEditorWidget::editorContext() const
 
 void QgsAbstractRelationEditorWidget::setFeature( const QgsFeature &feature, bool update )
 {
-  mFeature = feature;
+  mFeatureList.clear();
+  mFeatureList.append( feature );
 
   mEditorContext.setFormFeature( feature );
 
   if ( update )
     updateUi();
+}
+
+void QgsAbstractRelationEditorWidget::setMultiEditFeatureIds( const QgsFeatureIds &fids )
+{
+  mFeatureList.clear();
+
+  QgsFeatureIterator featureIterator = mRelation.referencedLayer()->getFeatures( QgsFeatureRequest().setFilterFids( fids ) );
+  QgsFeature feature;
+  while ( featureIterator.nextFeature( feature ) )
+    mFeatureList.append( feature );
+
+  if ( !mFeatureList.isEmpty() )
+    mEditorContext.setFormFeature( mFeatureList.first() );
 }
 
 void QgsAbstractRelationEditorWidget::setNmRelationId( const QVariant &nmRelationId )
@@ -159,9 +172,22 @@ void QgsAbstractRelationEditorWidget::updateTitle()
 {
 }
 
+bool QgsAbstractRelationEditorWidget::multiEditModeActive() const
+{
+  return mFeatureList.size() > 1;
+}
+
 QgsFeature QgsAbstractRelationEditorWidget::feature() const
 {
-  return mFeature;
+  if ( !mFeatureList.isEmpty() )
+    return mFeatureList.first();
+
+  return QgsFeature();
+}
+
+QList<QgsFeature> QgsAbstractRelationEditorWidget::features() const
+{
+  return mFeatureList;
 }
 
 void QgsAbstractRelationEditorWidget::toggleEditing( bool state )
@@ -187,7 +213,7 @@ void QgsAbstractRelationEditorWidget::saveEdits()
     mEditorContext.vectorLayerTools()->saveEdits( mNmRelation.referencedLayer() );
 }
 
-void QgsAbstractRelationEditorWidget::addFeature( const QgsGeometry &geometry )
+QgsFeatureIds QgsAbstractRelationEditorWidget::addFeature( const QgsGeometry &geometry )
 {
   QgsAttributeMap keyAttrs;
 
@@ -196,63 +222,107 @@ void QgsAbstractRelationEditorWidget::addFeature( const QgsGeometry &geometry )
   // Fields of the linking table
   const QgsFields fields = mRelation.referencingLayer()->fields();
 
+  QgsFeatureIds addedFeatureIds;
+
   // For generated relations insert the referenced layer field
-  if ( mRelation.type() == QgsRelation::Generated )
+  switch ( mRelation.type() )
   {
-    const QgsPolymorphicRelation polyRel = mRelation.polymorphicRelation();
-    keyAttrs.insert( fields.indexFromName( polyRel.referencedLayerField() ), polyRel.layerRepresentation( mRelation.referencedLayer() ) );
+    case Qgis::RelationshipType::Generated:
+    {
+      const QgsPolymorphicRelation polyRel = mRelation.polymorphicRelation();
+      keyAttrs.insert( fields.indexFromName( polyRel.referencedLayerField() ), polyRel.layerRepresentation( mRelation.referencedLayer() ) );
+      break;
+    }
+
+    case Qgis::RelationshipType::Normal:
+      break;
   }
 
   if ( mNmRelation.isValid() )
   {
     // only normal relations support m:n relation
-    Q_ASSERT( mNmRelation.type() == QgsRelation::Normal );
+    Q_ASSERT( mNmRelation.type() == Qgis::RelationshipType::Normal );
 
     // n:m Relation: first let the user create a new feature on the other table
     // and autocreate a new linking feature.
-    QgsFeature f;
-    if ( !vlTools->addFeature( mNmRelation.referencedLayer(), QgsAttributeMap(), geometry, &f ) )
-      return;
+    QgsFeature finalFeature;
+    if ( !vlTools->addFeature( mNmRelation.referencedLayer(), QgsAttributeMap(), geometry, &finalFeature, this, false, true ) )
+      return QgsFeatureIds();
+
+    addedFeatureIds.insert( finalFeature.id() );
 
     // Expression context for the linking table
     QgsExpressionContext context = mRelation.referencingLayer()->createExpressionContext();
 
     QgsAttributeMap linkAttributes = keyAttrs;
     const auto constFieldPairs = mRelation.fieldPairs();
-    for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
-    {
-      const int index = fields.indexOf( fieldPair.first );
-      linkAttributes.insert( index,  mFeature.attribute( fieldPair.second ) );
-    }
 
-    const auto constNmFieldPairs = mNmRelation.fieldPairs();
-    for ( const QgsRelation::FieldPair &fieldPair : constNmFieldPairs )
+    QgsVectorLayerUtils::QgsFeaturesDataList linkFeatureDataList;
+    for ( const QgsFeature &editingFeature : std::as_const( mFeatureList ) )
     {
-      const int index = fields.indexOf( fieldPair.first );
-      linkAttributes.insert( index, f.attribute( fieldPair.second ) );
-    }
-    QgsFeature linkFeature = QgsVectorLayerUtils::createFeature( mRelation.referencingLayer(), QgsGeometry(), linkAttributes, &context );
+      for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
+      {
+        const int index = fields.indexOf( fieldPair.first );
+        linkAttributes.insert( index, editingFeature.attribute( fieldPair.second ) );
+      }
 
-    mRelation.referencingLayer()->addFeature( linkFeature );
+      const auto constNmFieldPairs = mNmRelation.fieldPairs();
+      for ( const QgsRelation::FieldPair &fieldPair : constNmFieldPairs )
+      {
+        const int index = fields.indexOf( fieldPair.first );
+        linkAttributes.insert( index, finalFeature.attribute( fieldPair.second ) );
+      }
+
+      linkFeatureDataList.append( QgsVectorLayerUtils::QgsFeatureData( QgsGeometry(), linkAttributes ) );
+    }
+    QgsFeatureList linkFeatureList = QgsVectorLayerUtils::createFeatures( mRelation.referencingLayer(), linkFeatureDataList, &context );
+    mRelation.referencingLayer()->addFeatures( linkFeatureList );
   }
   else
   {
     const auto constFieldPairs = mRelation.fieldPairs();
     for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
-    {
-      keyAttrs.insert( fields.indexFromName( fieldPair.referencingField() ), mFeature.attribute( fieldPair.referencedField() ) );
-    }
+      keyAttrs.insert( fields.indexFromName( fieldPair.referencingField() ), mFeatureList.first().attribute( fieldPair.referencedField() ) );
 
-    if ( !vlTools->addFeature( mRelation.referencingLayer(), keyAttrs, geometry ) )
-      return;
+    QgsVectorLayerToolsContext context;
+    context.setParentWidget( this );
+    context.setShowModal( false );
+    context.setHideParent( true );
+    std::unique_ptr<QgsExpressionContextScope> scope( QgsExpressionContextUtils::parentFormScope( mFeatureList.first(), mEditorContext.attributeFormModeString() ) );
+    context.setAdditionalExpressionContextScope( scope.get() );
+    QgsFeature linkFeature;
+    if ( !vlTools->addFeatureV2( mRelation.referencingLayer(), keyAttrs, geometry, &linkFeature, context ) )
+      return QgsFeatureIds();
+
+    addedFeatureIds.insert( linkFeature.id() );
+
+    // In multiedit add to other features to but without dialog
+    for ( const QgsFeature &feature : std::as_const( mFeatureList ) )
+    {
+      // First feature already added
+      if ( mFeatureList.first() == feature )
+        continue;
+
+      for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
+        linkFeature.setAttribute( fields.indexFromName( fieldPair.referencingField() ), feature.attribute( fieldPair.referencedField() ) );
+
+      mRelation.referencingLayer()->addFeature( linkFeature );
+      addedFeatureIds.insert( linkFeature.id() );
+    }
   }
 
   updateUi();
+
+  emit relatedFeaturesChanged();
+
+  return addedFeatureIds;
 }
 
 void QgsAbstractRelationEditorWidget::deleteFeature( const QgsFeatureId fid )
 {
   deleteFeatures( QgsFeatureIds() << fid );
+
+  emit relatedFeaturesChanged();
 }
 
 void QgsAbstractRelationEditorWidget::deleteFeatures( const QgsFeatureIds &fids )
@@ -263,7 +333,7 @@ void QgsAbstractRelationEditorWidget::deleteFeatures( const QgsFeatureIds &fids 
   if ( mNmRelation.isValid() )
   {
     // only normal relations support m:n relation
-    Q_ASSERT( mNmRelation.type() == QgsRelation::Normal );
+    Q_ASSERT( mNmRelation.type() == Qgis::RelationshipType::Normal );
 
     layer = mNmRelation.referencedLayer();
 
@@ -275,7 +345,7 @@ void QgsAbstractRelationEditorWidget::deleteFeatures( const QgsFeatureIds &fids 
 
     QgsFeatureRequest deletedFeaturesRequest;
     deletedFeaturesRequest.setFilterFids( fids );
-    deletedFeaturesRequest.setFlags( QgsFeatureRequest::NoGeometry );
+    deletedFeaturesRequest.setFlags( Qgis::FeatureRequestFlag::NoGeometry );
     deletedFeaturesRequest.setSubsetOfAttributes( QgsAttributeList() << mNmRelation.referencedFields().first() );
 
     QgsFeatureIterator deletedFeatures = layer->getFeatures( deletedFeaturesRequest );
@@ -287,7 +357,7 @@ void QgsAbstractRelationEditorWidget::deleteFeatures( const QgsFeatureIds &fids 
     }
 
     QgsFeatureRequest linkingFeaturesRequest;
-    linkingFeaturesRequest.setFlags( QgsFeatureRequest::NoGeometry );
+    linkingFeaturesRequest.setFlags( Qgis::FeatureRequestFlag::NoGeometry );
     linkingFeaturesRequest.setNoAttributes();
 
     QString linkingFeaturesRequestExpression;
@@ -308,7 +378,7 @@ void QgsAbstractRelationEditorWidget::deleteFeatures( const QgsFeatureIds &fids 
       {
         QMessageBox messageBox( QMessageBox::Question, tr( "Really delete entry?" ), tr( "The entry on %1 is still linked to %2 features on %3. Do you want to delete it?" ).arg( mNmRelation.referencedLayer()->name(), QLocale().toString( relatedLinkingFeaturesCount ), mRelation.referencedLayer()->name() ), QMessageBox::NoButton, this );
         messageBox.addButton( QMessageBox::Cancel );
-        QAbstractButton *deleteButton = messageBox.addButton( tr( "Delete" ),  QMessageBox::AcceptRole );
+        QAbstractButton *deleteButton = messageBox.addButton( tr( "Delete" ), QMessageBox::AcceptRole );
 
         messageBox.exec();
         if ( messageBox.clickedButton() != deleteButton )
@@ -340,13 +410,11 @@ void QgsAbstractRelationEditorWidget::deleteFeatures( const QgsFeatureIds &fids 
     for ( QgsVectorLayer *chl : infoContextLayers )
     {
       childrenCount += infoContext.duplicatedFeatures( chl ).size();
-      childrenInfo += ( tr( "%1 feature(s) on layer \"%2\", " ).arg( infoContext.duplicatedFeatures( chl ).size() ).arg( chl->name() ) );
+      childrenInfo += ( tr( "%n feature(s) on layer \"%1\", ", nullptr, infoContext.duplicatedFeatures( chl ).size() ).arg( chl->name() ) );
     }
 
     // for extra safety to make sure we know that the delete can have impact on children and joins
-    const int res = QMessageBox::question( this, tr( "Delete at least %1 feature(s) on other layer(s)" ).arg( childrenCount ),
-                                           tr( "Delete %1 feature(s) on layer \"%2\", %3 as well\nand all of its other descendants.\nDelete these features?" ).arg( fids.count() ).arg( layer->name() ).arg( childrenInfo ),
-                                           QMessageBox::Yes | QMessageBox::No );
+    const int res = QMessageBox::question( this, tr( "Delete at least %n feature(s) on other layer(s)", nullptr, childrenCount ), tr( "Delete %n feature(s) on layer \"%1\", %2 as well and all of its other descendants.\nDelete these features?", nullptr, fids.count() ).arg( layer->name() ).arg( childrenInfo ), QMessageBox::Yes | QMessageBox::No );
     if ( res != QMessageBox::Yes )
       deleteFeatures = false;
   }
@@ -365,32 +433,43 @@ void QgsAbstractRelationEditorWidget::deleteFeatures( const QgsFeatureIds &fids 
         feedbackMessage += tr( "%1 on layer %2. " ).arg( context.handledFeatures( contextLayer ).size() ).arg( contextLayer->name() );
         deletedCount += context.handledFeatures( contextLayer ).size();
       }
-      mEditorContext.mainMessageBar()->pushMessage( tr( "%1 features deleted: %2" ).arg( deletedCount ).arg( feedbackMessage ), Qgis::MessageLevel::Success );
+      mEditorContext.mainMessageBar()->pushMessage( tr( "%n feature(s) deleted: %2", nullptr, deletedCount ).arg( feedbackMessage ), Qgis::MessageLevel::Success );
     }
 
     updateUi();
+
+    emit relatedFeaturesChanged();
   }
 }
 
-void QgsAbstractRelationEditorWidget::linkFeature()
+void QgsAbstractRelationEditorWidget::linkFeature( const QString &filterExpression )
 {
   QgsVectorLayer *layer = nullptr;
 
   if ( mNmRelation.isValid() )
   {
     // only normal relations support m:n relation
-    Q_ASSERT( mNmRelation.type() == QgsRelation::Normal );
+    Q_ASSERT( mNmRelation.type() == Qgis::RelationshipType::Normal );
 
     layer = mNmRelation.referencedLayer();
   }
   else
+  {
+    if ( multiEditModeActive() )
+    {
+      QgsLogger::warning( tr( "For 1:n relations is not possible to link to multiple features" ) );
+      return;
+    }
+
     layer = mRelation.referencingLayer();
+  }
 
   QgsFeatureSelectionDlg *selectionDlg = new QgsFeatureSelectionDlg( layer, mEditorContext, this );
   selectionDlg->setAttribute( Qt::WA_DeleteOnClose );
 
-  const QString displayString = QgsVectorLayerUtils::getFeatureDisplayString( mRelation.referencedLayer(), mFeature );
+  const QString displayString = QgsVectorLayerUtils::getFeatureDisplayString( mRelation.referencedLayer(), mFeatureList.first() );
   selectionDlg->setWindowTitle( tr( "Link existing child features for parent %1 \"%2\"" ).arg( mRelation.referencedLayer()->name(), displayString ) );
+  selectionDlg->setFilterExpression( filterExpression, QgsAttributeForm::ReplaceFilter );
 
   connect( selectionDlg, &QDialog::accepted, this, &QgsAbstractRelationEditorWidget::onLinkFeatureDlgAccepted );
   selectionDlg->show();
@@ -399,72 +478,88 @@ void QgsAbstractRelationEditorWidget::linkFeature()
 void QgsAbstractRelationEditorWidget::onLinkFeatureDlgAccepted()
 {
   QgsFeatureSelectionDlg *selectionDlg = qobject_cast<QgsFeatureSelectionDlg *>( sender() );
+
   if ( mNmRelation.isValid() )
   {
     // only normal relations support m:n relation
-    Q_ASSERT( mNmRelation.type() == QgsRelation::Normal );
-
-    QgsFeatureIterator it = mNmRelation.referencedLayer()->getFeatures(
-                              QgsFeatureRequest()
-                              .setFilterFids( selectionDlg->selectedFeatures() )
-                              .setSubsetOfAttributes( mNmRelation.referencedFields() ) );
-
-    QgsFeature relatedFeature;
-
-    QgsFeatureList newFeatures;
+    Q_ASSERT( mNmRelation.type() == Qgis::RelationshipType::Normal );
 
     // Fields of the linking table
     const QgsFields fields = mRelation.referencingLayer()->fields();
 
+    QgsAttributeMap linkAttributes;
+
+    switch ( mRelation.type() )
+    {
+      case Qgis::RelationshipType::Generated:
+      {
+        const QgsPolymorphicRelation polyRel = mRelation.polymorphicRelation();
+        Q_ASSERT( polyRel.isValid() );
+
+        linkAttributes.insert( fields.indexFromName( polyRel.referencedLayerField() ), polyRel.layerRepresentation( mRelation.referencedLayer() ) );
+        break;
+      }
+      case Qgis::RelationshipType::Normal:
+        break;
+    }
+
+    QgsVectorLayerUtils::QgsFeaturesDataList linkFeatureDataList;
+    QgsFeature relatedFeature;
+    QgsFeatureIterator it = mNmRelation.referencedLayer()->getFeatures(
+      QgsFeatureRequest()
+        .setFilterFids( selectionDlg->selectedFeatures() )
+        .setSubsetOfAttributes( mNmRelation.referencedFields() )
+    );
+    while ( it.nextFeature( relatedFeature ) )
+    {
+      for ( const QgsFeature &editFeature : std::as_const( mFeatureList ) )
+      {
+        {
+          const auto constFieldPairs = mRelation.fieldPairs();
+          for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
+          {
+            const int index = fields.indexOf( fieldPair.first );
+            linkAttributes.insert( index, editFeature.attribute( fieldPair.second ) );
+          }
+        }
+
+        const auto constFieldPairs = mNmRelation.fieldPairs();
+        for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
+        {
+          const int index = fields.indexOf( fieldPair.first );
+          linkAttributes.insert( index, relatedFeature.attribute( fieldPair.second ) );
+        }
+
+        linkFeatureDataList.append( QgsVectorLayerUtils::QgsFeatureData( QgsGeometry(), linkAttributes ) );
+      }
+    }
+
     // Expression context for the linking table
     QgsExpressionContext context = mRelation.referencingLayer()->createExpressionContext();
 
-    QgsAttributeMap linkAttributes;
+    QgsFeatureList linkFeaturesList = QgsVectorLayerUtils::createFeatures( mRelation.referencingLayer(), linkFeatureDataList, &context );
 
-    if ( mRelation.type() == QgsRelation::Generated )
-    {
-      const QgsPolymorphicRelation polyRel = mRelation.polymorphicRelation();
-      Q_ASSERT( polyRel.isValid() );
-
-      linkAttributes.insert( fields.indexFromName( polyRel.referencedLayerField() ),
-                             polyRel.layerRepresentation( mRelation.referencedLayer() ) );
-    }
-
-    const auto constFieldPairs = mRelation.fieldPairs();
-    for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
-    {
-      const int index = fields.indexOf( fieldPair.first );
-      linkAttributes.insert( index,  mFeature.attribute( fieldPair.second ) );
-    }
-
-    while ( it.nextFeature( relatedFeature ) )
-    {
-      const auto constFieldPairs = mNmRelation.fieldPairs();
-      for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
-      {
-        const int index = fields.indexOf( fieldPair.first );
-        linkAttributes.insert( index, relatedFeature.attribute( fieldPair.second ) );
-      }
-      const QgsFeature linkFeature = QgsVectorLayerUtils::createFeature( mRelation.referencingLayer(), QgsGeometry(), linkAttributes, &context );
-
-      newFeatures << linkFeature;
-    }
-
-    mRelation.referencingLayer()->addFeatures( newFeatures );
+    mRelation.referencingLayer()->addFeatures( linkFeaturesList );
     QgsFeatureIds ids;
-    const auto constNewFeatures = newFeatures;
+    const auto constNewFeatures = linkFeaturesList;
     for ( const QgsFeature &f : constNewFeatures )
       ids << f.id();
     mRelation.referencingLayer()->selectByIds( ids );
   }
   else
   {
+    if ( multiEditModeActive() )
+    {
+      QgsLogger::warning( tr( "For 1:n relations is not possible to link to multiple features" ) );
+      return;
+    }
+
     QMap<int, QVariant> keys;
     const auto constFieldPairs = mRelation.fieldPairs();
     for ( const QgsRelation::FieldPair &fieldPair : constFieldPairs )
     {
       const int idx = mRelation.referencingLayer()->fields().lookupField( fieldPair.referencingField() );
-      const QVariant val = mFeature.attribute( fieldPair.referencedField() );
+      const QVariant val = mFeatureList.first().attribute( fieldPair.referencedField() );
       keys.insert( idx, val );
     }
 
@@ -472,15 +567,19 @@ void QgsAbstractRelationEditorWidget::onLinkFeatureDlgAccepted()
     for ( const QgsFeatureId fid : constSelectedFeatures )
     {
       QgsVectorLayer *referencingLayer = mRelation.referencingLayer();
-      if ( mRelation.type() == QgsRelation::Generated )
+      switch ( mRelation.type() )
       {
-        const QgsPolymorphicRelation polyRel = mRelation.polymorphicRelation();
+        case Qgis::RelationshipType::Generated:
+        {
+          const QgsPolymorphicRelation polyRel = mRelation.polymorphicRelation();
 
-        Q_ASSERT( polyRel.isValid() );
+          Q_ASSERT( polyRel.isValid() );
 
-        mRelation.referencingLayer()->changeAttributeValue( fid,
-            referencingLayer->fields().indexFromName( polyRel.referencedLayerField() ),
-            polyRel.layerRepresentation( mRelation.referencedLayer() ) );
+          mRelation.referencingLayer()->changeAttributeValue( fid, referencingLayer->fields().indexFromName( polyRel.referencedLayerField() ), polyRel.layerRepresentation( mRelation.referencedLayer() ) );
+          break;
+        }
+        case Qgis::RelationshipType::Normal:
+          break;
       }
 
       QMapIterator<int, QVariant> it( keys );
@@ -493,6 +592,8 @@ void QgsAbstractRelationEditorWidget::onLinkFeatureDlgAccepted()
   }
 
   updateUi();
+
+  emit relatedFeaturesChanged();
 }
 
 void QgsAbstractRelationEditorWidget::unlinkFeature( const QgsFeatureId fid )
@@ -505,12 +606,13 @@ void QgsAbstractRelationEditorWidget::unlinkFeatures( const QgsFeatureIds &fids 
   if ( mNmRelation.isValid() )
   {
     // only normal relations support m:n relation
-    Q_ASSERT( mNmRelation.type() == QgsRelation::Normal );
+    Q_ASSERT( mNmRelation.type() == Qgis::RelationshipType::Normal );
 
     QgsFeatureIterator selectedIterator = mNmRelation.referencedLayer()->getFeatures(
-                                            QgsFeatureRequest()
-                                            .setFilterFids( fids )
-                                            .setSubsetOfAttributes( mNmRelation.referencedFields() ) );
+      QgsFeatureRequest()
+        .setFilterFids( fids )
+        .setSubsetOfAttributes( mNmRelation.referencedFields() )
+    );
 
     QgsFeature f;
 
@@ -521,13 +623,17 @@ void QgsAbstractRelationEditorWidget::unlinkFeatures( const QgsFeatureIds &fids 
       filters << '(' + mNmRelation.getRelatedFeaturesRequest( f ).filterExpression()->expression() + ')';
     }
 
-    const QString filter = QStringLiteral( "(%1) AND (%2)" ).arg(
-                             mRelation.getRelatedFeaturesRequest( mFeature ).filterExpression()->expression(),
-                             filters.join( QLatin1String( " OR " ) ) );
+    QStringList featureFilters;
+    for ( const QgsFeature &editingFeature : std::as_const( mFeatureList ) )
+    {
+      featureFilters.append( mRelation.getRelatedFeaturesRequest( editingFeature ).filterExpression()->expression() );
+    }
+
+    const QString filter = QStringLiteral( "(%1) AND (%2)" ).arg( featureFilters.join( QLatin1String( " OR " ) ), filters.join( QLatin1String( " OR " ) ) );
 
     QgsFeatureIterator linkedIterator = mRelation.referencingLayer()->getFeatures( QgsFeatureRequest()
-                                        .setNoAttributes()
-                                        .setFilterExpression( filter ) );
+                                                                                     .setNoAttributes()
+                                                                                     .setFilterExpression( filter ) );
 
     QgsFeatureIds fids;
 
@@ -548,7 +654,7 @@ void QgsAbstractRelationEditorWidget::unlinkFeatures( const QgsFeatureIds &fids 
       const int idx = mRelation.referencingLayer()->fields().lookupField( fieldPair.referencingField() );
       if ( idx < 0 )
       {
-        QgsDebugMsg( QStringLiteral( "referencing field %1 not found" ).arg( fieldPair.referencingField() ) );
+        QgsDebugError( QStringLiteral( "referencing field %1 not found" ).arg( fieldPair.referencingField() ) );
         return;
       }
       const QgsField fld = mRelation.referencingLayer()->fields().at( idx );
@@ -559,27 +665,33 @@ void QgsAbstractRelationEditorWidget::unlinkFeatures( const QgsFeatureIds &fids 
     for ( const QgsFeatureId fid : constFeatureids )
     {
       QgsVectorLayer *referencingLayer = mRelation.referencingLayer();
-      if ( mRelation.type() == QgsRelation::Generated )
+      switch ( mRelation.type() )
       {
-        const QgsPolymorphicRelation polyRel = mRelation.polymorphicRelation();
+        case Qgis::RelationshipType::Generated:
+        {
+          const QgsPolymorphicRelation polyRel = mRelation.polymorphicRelation();
 
-        Q_ASSERT( mRelation.polymorphicRelation().isValid() );
+          Q_ASSERT( mRelation.polymorphicRelation().isValid() );
 
-        mRelation.referencingLayer()->changeAttributeValue( fid,
-            referencingLayer->fields().indexFromName( polyRel.referencedLayerField() ),
-            referencingLayer->fields().field( polyRel.referencedLayerField() ).type() );
+          mRelation.referencingLayer()->changeAttributeValue( fid, referencingLayer->fields().indexFromName( polyRel.referencedLayerField() ), QgsVariantUtils::createNullVariant( referencingLayer->fields().field( polyRel.referencedLayerField() ).type() ) );
+          break;
+        }
+        case Qgis::RelationshipType::Normal:
+          break;
       }
 
       QMapIterator<int, QgsField> it( keyFields );
       while ( it.hasNext() )
       {
         it.next();
-        mRelation.referencingLayer()->changeAttributeValue( fid, it.key(), QVariant( it.value().type() ) );
+        mRelation.referencingLayer()->changeAttributeValue( fid, it.key(), QgsVariantUtils::createNullVariant( it.value().type() ) );
       }
     }
   }
 
   updateUi();
+
+  emit relatedFeaturesChanged();
 }
 
 void QgsAbstractRelationEditorWidget::updateUi()
@@ -611,6 +723,8 @@ void QgsAbstractRelationEditorWidget::afterSetRelations()
 void QgsAbstractRelationEditorWidget::duplicateFeature( const QgsFeatureId &fid )
 {
   duplicateFeatures( QgsFeatureIds() << fid );
+
+  emit relatedFeaturesChanged();
 }
 
 void QgsAbstractRelationEditorWidget::duplicateFeatures( const QgsFeatureIds &fids )
@@ -624,6 +738,8 @@ void QgsAbstractRelationEditorWidget::duplicateFeatures( const QgsFeatureIds &fi
     QgsVectorLayerUtils::QgsDuplicateFeatureContext duplicatedFeatureContext;
     QgsVectorLayerUtils::duplicateFeature( layer, f, QgsProject::instance(), duplicatedFeatureContext );
   }
+
+  emit relatedFeaturesChanged();
 }
 
 void QgsAbstractRelationEditorWidget::showEvent( QShowEvent * )

@@ -33,10 +33,9 @@ class QgsLineSymbol;
  * \class QgsMapCanvasSymbolItem
  * \brief Base class for map canvas items which are rendered using a QgsSymbol.
  */
-class APP_EXPORT QgsMapCanvasSymbolItem: public QgsMapCanvasItem
+class APP_EXPORT QgsMapCanvasSymbolItem : public QgsMapCanvasItem
 {
   public:
-
     QgsMapCanvasSymbolItem( QgsMapCanvas *canvas = nullptr );
     ~QgsMapCanvasSymbolItem() override;
 
@@ -46,13 +45,13 @@ class APP_EXPORT QgsMapCanvasSymbolItem: public QgsMapCanvasItem
      * Sets the symbol to use for rendering the item.
      * \see symbol()
      */
-    void setSymbol( std::unique_ptr< QgsSymbol > symbol );
+    void setSymbol( std::unique_ptr<QgsSymbol> symbol );
 
     /**
      * Returns the symbol used for rendering the item.
      * \see setSymbol()
      */
-    const QgsSymbol *symbol() const;
+    QgsSymbol *symbol();
 
     /**
      * Sets the feature used for rendering the symbol. The feature's attributes
@@ -85,17 +84,14 @@ class APP_EXPORT QgsMapCanvasSymbolItem: public QgsMapCanvasItem
     double opacity() const;
 
   protected:
-
     virtual void renderSymbol( QgsRenderContext &context, const QgsFeature &feature ) = 0;
 
     QgsRenderContext renderContext( QPainter *painter );
-    std::unique_ptr< QgsSymbol > mSymbol;
+    std::unique_ptr<QgsSymbol> mSymbol;
     QgsFeature mFeature;
 
   private:
-
-    std::unique_ptr< QgsDrawSourceEffect > mOpacityEffect;
-
+    std::unique_ptr<QgsDrawSourceEffect> mOpacityEffect;
 };
 
 /**
@@ -103,10 +99,9 @@ class APP_EXPORT QgsMapCanvasSymbolItem: public QgsMapCanvasItem
  * \class QgsMapCanvasMarkerSymbolItem
  * \brief An item that shows a point marker symbol centered on a map location.
  */
-class APP_EXPORT QgsMapCanvasMarkerSymbolItem: public QgsMapCanvasSymbolItem
+class APP_EXPORT QgsMapCanvasMarkerSymbolItem : public QgsMapCanvasSymbolItem
 {
   public:
-
     QgsMapCanvasMarkerSymbolItem( QgsMapCanvas *canvas = nullptr );
 
     /**
@@ -122,10 +117,13 @@ class APP_EXPORT QgsMapCanvasMarkerSymbolItem: public QgsMapCanvasSymbolItem
     void updateSize();
 
     void renderSymbol( QgsRenderContext &context, const QgsFeature &feature ) override;
+    QRectF boundingRect() const override;
+    void updatePosition() override;
 
   private:
-
+    QgsPointXY mMapLocation;
     QPointF mLocation;
+    QRectF mCanvasBounds;
 
     QgsMarkerSymbol *markerSymbol();
 };
@@ -135,10 +133,9 @@ class APP_EXPORT QgsMapCanvasMarkerSymbolItem: public QgsMapCanvasSymbolItem
  * \class QgsMapCanvasLineSymbolItem
  * \brief An item that shows a line symbol over the map.
  */
-class APP_EXPORT QgsMapCanvasLineSymbolItem: public QgsMapCanvasSymbolItem
+class APP_EXPORT QgsMapCanvasLineSymbolItem : public QgsMapCanvasSymbolItem
 {
   public:
-
     QgsMapCanvasLineSymbolItem( QgsMapCanvas *canvas = nullptr );
 
     /**
@@ -156,7 +153,6 @@ class APP_EXPORT QgsMapCanvasLineSymbolItem: public QgsMapCanvasSymbolItem
     void renderSymbol( QgsRenderContext &context, const QgsFeature &feature ) override;
 
   private:
-
     QPolygonF mLine;
 
     QgsLineSymbol *lineSymbol();

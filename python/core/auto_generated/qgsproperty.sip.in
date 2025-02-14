@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgsproperty.h                                               *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -18,8 +18,6 @@ Definition for a property.
 handles descriptive names and help text for using the property. Definitions
 can use one of the predefined standard templates to simplify definition of
 commonly used property types, such as colors and blend modes.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -178,22 +176,12 @@ a QVariant value by evaluating them against a supplied :py:class:`QgsExpressionC
 can be grouped using a :py:class:`QgsPropertyCollection` for easier bulk storage, retrieval and evaluation.
 
 :py:class:`QgsProperty` objects are implicitly shared and can be inexpensively copied.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgsproperty.h"
 %End
   public:
-
-    enum Type
-    {
-      InvalidProperty,
-      StaticProperty,
-      FieldBasedProperty,
-      ExpressionBasedProperty,
-    };
 
     static QVariantMap propertyMapToVariantMap( const QMap<QString, QgsProperty> &propertyMap );
 %Docstring
@@ -235,17 +223,12 @@ Returns a new StaticProperty created from the specified value.
 %End
 
     QgsProperty( const QgsProperty &other );
-%Docstring
-Copy constructor
-%End
 
-
-    operator bool() const;
 
     bool operator==( const QgsProperty &other ) const;
     bool operator!=( const QgsProperty &other ) const;
 
-    Type propertyType() const;
+    Qgis::PropertyType propertyType() const;
 %Docstring
 Returns the property type.
 %End
@@ -269,7 +252,7 @@ a fixed value expression ('some static value'), this method will return
 :param context: expression context
 
 :return: - ``True`` if property is a static value
-         - staticValue: will be set to evaluated static value if property is effectively a static value
+         - staticValue: evaluated static value if property is effectively a static value
 
 .. versionadded:: 3.24
 %End
@@ -371,7 +354,7 @@ Calculates the current value of the property, including any transforms which are
 :param defaultValue: default value to return if the property is not active or cannot be calculated
 
 :return: - calculated value for property
-         - ok: will be set to ``True`` if conversion was successful
+         - ok: ``True`` if conversion was successful
 
 .. seealso:: :py:func:`valueAsString`
 
@@ -392,7 +375,7 @@ Calculates the current value of the property and interprets it as a datetime.
 :param defaultDateTime: default datetime to return if the property cannot be calculated as a datetime
 
 :return: - value parsed to datetime
-         - ok: will be set to ``True`` if conversion was successful
+         - ok: ``True`` if conversion was successful
 
 .. seealso:: :py:func:`value`
 
@@ -417,7 +400,7 @@ Calculates the current value of the property and interprets it as a string.
 :param defaultString: default string to return if the property cannot be calculated as a string
 
 :return: - value parsed to string
-         - ok: will be set to ``True`` if conversion was successful
+         - ok: ``True`` if conversion was successful
 
 .. seealso:: :py:func:`value`
 
@@ -440,7 +423,7 @@ Calculates the current value of the property and interprets it as a color.
 :param defaultColor: default color to return if the property cannot be calculated as a color
 
 :return: - value parsed to color
-         - ok: will be set to ``True`` if conversion was successful
+         - ok: ``True`` if conversion was successful
 
 .. seealso:: :py:func:`value`
 
@@ -463,7 +446,7 @@ Calculates the current value of the property and interprets it as a double.
 :param defaultValue: default double to return if the property cannot be calculated as a double
 
 :return: - value parsed to double
-         - ok: will be set to ``True`` if conversion was successful
+         - ok: ``True`` if conversion was successful
 
 .. seealso:: :py:func:`value`
 
@@ -486,7 +469,7 @@ Calculates the current value of the property and interprets it as an integer.
 :param defaultValue: default integer to return if the property cannot be calculated as an integer
 
 :return: - value parsed to integer
-         - ok: will be set to ``True`` if conversion was successful
+         - ok: ``True`` if conversion was successful
 
 .. seealso:: :py:func:`value`
 
@@ -509,7 +492,7 @@ Calculates the current value of the property and interprets it as an boolean.
 :param defaultValue: default boolean to return if the property cannot be calculated as an boolean
 
 :return: - value parsed to boolean
-         - ok: will be set to ``True`` if conversion was successful
+         - ok: ``True`` if conversion was successful
 
 .. seealso:: :py:func:`value`
 
@@ -574,27 +557,27 @@ be called in non-performance critical code.
     QString definitionString;
     switch ( sipCpp->propertyType() )
     {
-      case QgsProperty::StaticProperty:
+      case Qgis::PropertyType::Static:
         typeString = QStringLiteral( "static" );
         definitionString = sipCpp->staticValue().toString();
         break;
 
-      case QgsProperty::FieldBasedProperty:
+      case Qgis::PropertyType::Field:
         typeString = QStringLiteral( "field" );
         definitionString = sipCpp->field();
         break;
 
-      case QgsProperty::ExpressionBasedProperty:
+      case Qgis::PropertyType::Expression:
         typeString = QStringLiteral( "expression" );
         definitionString = sipCpp->expressionString();
         break;
 
-      case QgsProperty::InvalidProperty:
+      case Qgis::PropertyType::Invalid:
         typeString = QStringLiteral( "invalid" );
         break;
     }
 
-    QString str = QStringLiteral( "<QgsProperty: %1%2%3>" ).arg( !sipCpp->isActive() && sipCpp->propertyType() != QgsProperty::InvalidProperty ? QStringLiteral( "INACTIVE " ) : QString(),
+    QString str = QStringLiteral( "<QgsProperty: %1%2%3>" ).arg( !sipCpp->isActive() && sipCpp->propertyType() != Qgis::PropertyType::Invalid ? QStringLiteral( "INACTIVE " ) : QString(),
                   typeString,
                   definitionString.isEmpty() ? QString() : QStringLiteral( " (%1)" ).arg( definitionString ) );
     sipRes = PyUnicode_FromString( str.toUtf8().constData() );
@@ -608,5 +591,5 @@ be called in non-performance critical code.
  *                                                                      *
  * src/core/qgsproperty.h                                               *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

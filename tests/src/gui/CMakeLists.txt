@@ -24,6 +24,8 @@ endif()
 #ADD_QGIS_TEST(histogramtest testqgsrasterhistogram.cpp)
 
 set(TESTS
+  testqgsadvanceddigitizingdockwidget.cpp
+  testqgsadvanceddigitizingtoolsregistry.cpp
   testqgsannotationitemguiregistry.cpp
   testqgsmaptoolzoom.cpp
   testqgsmaptooledit.cpp
@@ -32,6 +34,7 @@ set(TESTS
   testqgsdoublespinbox.cpp
   testqgsdualview.cpp
   testqgsattributeform.cpp
+  testqgsattributesformproperties.cpp
   testqgsdatetimeedit.cpp
   testqgsdockwidget.cpp
   testqgsfieldexpressionwidget.cpp
@@ -44,6 +47,7 @@ set(TESTS
   testqgsmessagebar.cpp
   testprojectionissues.cpp
   testqgsgui.cpp
+  testqgsgdalguiutils.cpp
   testprocessinggui.cpp
   testqgsprocessingmodel.cpp
   testqgsrubberband.cpp
@@ -58,7 +62,9 @@ set(TESTS
   testqgslayoutgui.cpp
   testqgslayoutview.cpp
   testqgsvaluemapwidgetwrapper.cpp
+  testqgsvaluemapconfigdlg.cpp
   testqgsvaluerelationwidgetwrapper.cpp
+  testqgsrelationeditorwidget.cpp
   testqgsrelationreferencewidget.cpp
   testqgsfeaturelistcombobox.cpp
   testqgstexteditwrapper.cpp
@@ -71,15 +77,18 @@ set(TESTS
   testqgsexternalresourcewidgetwrapper.cpp
   testqgsquerybuilder.cpp
   testqgsqueryresultwidget.cpp
+  testqgscompoundcolorwidget.cpp
+  testqgsmaskingwidget.cpp
+  testqgssvgselectorwidget.cpp
+  testqgslabelingwidget.cpp
 )
 
 foreach(TESTSRC ${TESTS})
   add_qgis_test( ${TESTSRC} MODULE gui LINKEDLIBRARIES qgis_gui qgis_analysis)
 endforeach(TESTSRC)
 
-add_qgis_test(testqgsrasterlayersaveasdialog.cpp MODULE gui LINKEDLIBRARIES qgis_gui qgis_analysis provider_postgres_gui_a)
-add_qgis_test(testqgslistwidget.cpp MODULE gui LINKEDLIBRARIES qgis_gui qgis_analysis LABELS "POSTGRES")
-
+add_qgis_test(testqgsrasterlayersaveasdialog.cpp MODULE gui LINKEDLIBRARIES qgis_gui qgis_analysis)
+add_qgis_test(testqgslistwidget.cpp MODULE gui LINKEDLIBRARIES qgis_gui qgis_analysis)
 
 if (ENABLE_PGTEST)
   SET_TESTS_PROPERTIES(
@@ -88,5 +97,6 @@ if (ENABLE_PGTEST)
     test_gui_texteditwrapper
     test_gui_newdatabasetablewidget
     test_gui_queryresultwidget
+    test_gui_listwidget
     PROPERTIES LABELS "POSTGRES")
 endif()

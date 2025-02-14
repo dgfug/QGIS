@@ -32,7 +32,8 @@
 
 //qgis includes
 #include "qgis_sip.h"
-#include "qgsunittypes.h"
+#include "qgis.h"
+#include "qgsconfig.h"
 #include "qgsrectangle.h"
 #include "qgssqliteutils.h"
 
@@ -47,13 +48,8 @@ class QgsProjOperation;
 struct PJconsts;
 typedef struct PJconsts PJ;
 
-#if PROJ_VERSION_MAJOR>=8
 struct pj_ctx;
 typedef struct pj_ctx PJ_CONTEXT;
-#else
-struct projCtx_t;
-typedef struct projCtx_t PJ_CONTEXT;
-#endif
 #endif
 
 // forward declaration for sqlite3
@@ -211,8 +207,10 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
 {
     Q_GADGET
 
-    Q_PROPERTY( QgsUnitTypes::DistanceUnit mapUnits READ mapUnits )
+    Q_PROPERTY( Qgis::DistanceUnit mapUnits READ mapUnits )
     Q_PROPERTY( bool isGeographic READ isGeographic )
+    Q_PROPERTY( QString authid READ authid )
+    Q_PROPERTY( QString description READ description )
 
   public:
 
@@ -222,13 +220,6 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
       InternalCrsId,  //!< Internal ID used by QGIS in the local SQLite database
       PostgisCrsId,   //!< SRID used in PostGIS. DEPRECATED -- DO NOT USE
       EpsgCrsId       //!< EPSG code
-    };
-
-    //! Projection definition formats
-    enum Format
-    {
-      FormatWkt = 0, //!< WKT format (always recommended over proj string format)
-      FormatProj, //!< Proj string format
     };
 
     //! Constructs an invalid CRS object
@@ -251,6 +242,10 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      *
      * If no prefix is specified, WKT definition is assumed.
      * \param definition A String containing a coordinate reference system definition.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \see createFromString()
      */
     explicit QgsCoordinateReferenceSystem( const QString &definition );
@@ -266,14 +261,11 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * and proj strings are a lossy format.
      * \param id The ID valid for the chosen CRS ID type
      * \param type One of the types described in CrsType
-     * \deprecated QGIS 3.10 We encourage you to use EPSG codes or WKT to describe CRSes in your code wherever possible. Internal QGIS CRS IDs are not guaranteed to be permanent / involatile, and Proj strings are a lossy format.
+     * \deprecated QGIS 3.10. We encourage you to use EPSG codes or WKT to describe CRSes in your code wherever possible. Internal QGIS CRS IDs are not guaranteed to be permanent / involatile, and Proj strings are a lossy format.
      */
     Q_DECL_DEPRECATED explicit QgsCoordinateReferenceSystem( long id, CrsType type = PostgisCrsId ) SIP_DEPRECATED;
 
-    //! Copy constructor
     QgsCoordinateReferenceSystem( const QgsCoordinateReferenceSystem &srs );
-
-    //! Assignment operator
     QgsCoordinateReferenceSystem &operator=( const QgsCoordinateReferenceSystem &srs );
 
     //! Allows direct construction of QVariants from QgsCoordinateReferenceSystem.
@@ -287,7 +279,6 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * returned values can be safely passed to fromSrsId() to create a new, valid
      * QgsCoordinateReferenceSystem object.
      * \see fromSrsId()
-     * \since QGIS 3.0
      */
     static QList< long > validSrsIds();
 
@@ -295,26 +286,36 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
 
     /**
      * Creates a CRS from a given OGC WMS-format Coordinate Reference System string.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \param ogcCrs OGR compliant CRS definition, e.g., "EPSG:4326"
      * \returns matching CRS, or an invalid CRS if string could not be matched
      * \see createFromOgcWmsCrs()
-     * \since QGIS 3.0
     */
     static QgsCoordinateReferenceSystem fromOgcWmsCrs( const QString &ogcCrs );
 
     /**
      * Creates a CRS from a given EPSG ID.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \param epsg epsg CRS ID
      * \returns matching CRS, or an invalid CRS if string could not be matched
-     * \since QGIS 3.0
     */
     Q_INVOKABLE static QgsCoordinateReferenceSystem fromEpsgId( long epsg );
 
     /**
      * Creates a CRS from a proj style formatted string.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \returns matching CRS, or an invalid CRS if string could not be matched
      * \see createFromProj()
-     * \deprecated QGIS 3.10 Use fromProj() instead.
+     * \deprecated QGIS 3.10. Use fromProj() instead.
     */
     Q_DECL_DEPRECATED static QgsCoordinateReferenceSystem fromProj4( const QString &proj4 ) SIP_DEPRECATED;
 
@@ -329,22 +330,45 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
 
     /**
      * Creates a CRS from a WKT spatial ref sys definition string.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \param wkt WKT for the desired spatial reference system.
      * \returns matching CRS, or an invalid CRS if string could not be matched
      * \see createFromWkt()
-     * \since QGIS 3.0
     */
     static QgsCoordinateReferenceSystem fromWkt( const QString &wkt );
 
     /**
      * Creates a CRS from a specified QGIS SRS ID.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \param srsId internal QGIS SRS ID
      * \returns matching CRS, or an invalid CRS if ID could not be found
      * \see createFromSrsId()
      * \see validSrsIds()
-     * \since QGIS 3.0
     */
     static QgsCoordinateReferenceSystem fromSrsId( long srsId );
+
+    /**
+     * Given a horizontal and vertical CRS, attempts to create a compound CRS
+     * from them.
+     *
+     * Returns an invalid CRS if the inputs are not suitable for a compound CRS,
+     * or the compound CRS could not be created for the combination.
+     *
+     * \param horizontalCrs horizontal component for CRS
+     * \param verticalCrs vertical component for CRS
+     * \param error will be set to a descriptive error if the compound CRS could not be created
+     *
+     * \returns compound CRS if it was possible to create one, or an invalid CRS if not
+     *
+     * \since QGIS 3.38
+     */
+    static QgsCoordinateReferenceSystem createCompoundCrs( const QgsCoordinateReferenceSystem &horizontalCrs, const QgsCoordinateReferenceSystem &verticalCrs, QString &error SIP_OUT );
 
     // Misc helper functions -----------------------
 
@@ -353,7 +377,7 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
     /**
      * Sets this CRS by lookup of the given ID in the CRS database.
      * \returns TRUE on success else FALSE
-     * \deprecated QGIS 3.10 We encourage you to use EPSG code or WKT to describe CRSes in your code wherever possible. Internal QGIS CRS IDs are not guaranteed to be permanent / involatile, and Proj strings are a lossy format.
+     * \deprecated QGIS 3.10. We encourage you to use EPSG code or WKT to describe CRSes in your code wherever possible. Internal QGIS CRS IDs are not guaranteed to be permanent / involatile, and Proj strings are a lossy format.
      */
     Q_DECL_DEPRECATED bool createFromId( long id, CrsType type = PostgisCrsId ) SIP_DEPRECATED;
 
@@ -366,7 +390,10 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * It also recognizes "QGIS", "USER", "CUSTOM" authorities, which all have the same meaning
      * and refer to QGIS internal CRS IDs.
      * \returns TRUE on success else FALSE
-     * \note this method uses an internal cache. Call invalidateCache() to clear the cache.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \see fromOgcWmsCrs()
      */
     bool createFromOgcWmsCrs( const QString &crs );
@@ -378,7 +405,7 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * \param srid The PostGIS SRID for the desired spatial reference system.
      * \returns TRUE on success else FALSE
      *
-     * \deprecated QGIS 3.10 Use alternative methods for SRS construction instead -- this method was specifically created for use by the postgres provider alone, and using it elsewhere will lead to subtle bugs.
+     * \deprecated QGIS 3.10. Use alternative methods for SRS construction instead -- this method was specifically created for use by the postgres provider alone, and using it elsewhere will lead to subtle bugs.
      */
     Q_DECL_DEPRECATED bool createFromSrid( long srid ) SIP_DEPRECATED;
 
@@ -391,7 +418,10 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * \param wkt The WKT for the desired spatial reference system.
      * \returns TRUE on success else FALSE
      * \note Some members may be left blank if no match can be found in CRS database.
-     * \note this method uses an internal cache. Call invalidateCache() to clear the cache.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \see fromWkt()
      */
     bool createFromWkt( const QString &wkt );
@@ -403,7 +433,10 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * user's local CRS database from home directory is used.
      * \param srsId The internal QGIS CRS ID for the desired spatial reference system.
      * \returns TRUE on success else FALSE
-     * \note this method uses an internal cache. Call invalidateCache() to clear the cache.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \see fromSrsId()
      * \warning This method is highly discouraged, and CRS objects should instead be constructed
      * using auth:id codes or WKT strings
@@ -429,9 +462,12 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * \param projString A Proj format string
      * \returns TRUE on success else FALSE
      * \note Some members may be left blank if no match can be found in CRS database.
-     * \note This method uses an internal cache. Call invalidateCache() to clear the cache.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \see fromProj()
-     * \deprecated QGIS 3.10 Use createFromProj() instead
+     * \deprecated QGIS 3.10. Use createFromProj() instead.
      */
     Q_DECL_DEPRECATED bool createFromProj4( const QString &projString ) SIP_DEPRECATED;
 
@@ -458,7 +494,9 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      *
      * \returns TRUE on success else FALSE
      * \note Some members may be left blank if no match can be found in CRS database.
-     * \note This method uses an internal cache. Call invalidateCache() to clear the cache.
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \see fromProj()
      * \since QGIS 3.10.3
      */
@@ -481,6 +519,10 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      *
      * If no prefix is specified, WKT definition is assumed.
      * \param definition A String containing a coordinate reference system definition.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
+     *
      * \returns TRUE on success else FALSE
      */
     bool createFromString( const QString &definition );
@@ -501,6 +543,9 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * \returns TRUE on success else FALSE
      * \note this function generates a WKT string using OSRSetFromUserInput() and
      * passes it to createFromWkt() function.
+     *
+     * \note This method uses an internal cache to speed up creation of multiple CRS with the same definition.
+     * Call invalidateCache() to clear the cache.
      */
     bool createFromUserInput( const QString &definition );
 
@@ -512,7 +557,7 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * \note This function sets CPL config option GDAL_FIX_ESRI_WKT to a proper value,
      * unless it has been set by the user through the commandline or an environment variable.
      * For more details refer to OGRSpatialReference::morphFromESRI() .
-     * \deprecated QGIS 3.10 Not used on builds based on Proj version 6 or later
+     * \deprecated QGIS 3.10. Not used on builds based on Proj version 6 or later.
      */
     Q_DECL_DEPRECATED static void setupESRIWktFix() SIP_DEPRECATED;
 
@@ -528,7 +573,8 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      *
      * \note It is not usually necessary to use this function, unless you
      * are trying to force this CRS to be valid.
-     * \see setCustomCrsValidation(), customCrsValidation()
+     * \see setCustomCrsValidation()
+     * \see customCrsValidation()
      */
     void validate();
 
@@ -540,22 +586,11 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      *  pieces of information about CRS.
      *  \note The ellipsoid and projection acronyms must be set as well as the proj string!
      *  \returns long the SrsId of the matched CRS, zero if no match was found
-     * \deprecated QGIS 3.10 Not used in Proj >= 6 based builds
+     * \deprecated QGIS 3.10. Not used in Proj >= 6 based builds.
      */
     Q_DECL_DEPRECATED long findMatchingProj() SIP_DEPRECATED;
 
-    /**
-     * Overloaded == operator used to compare to CRS's.
-     *
-     *  Internally it will use authid() for comparison.
-     */
     bool operator==( const QgsCoordinateReferenceSystem &srs ) const;
-
-    /**
-     * Overloaded != operator used to compare to CRS's.
-     *
-     *  Returns opposite bool value to operator ==
-     */
     bool operator!=( const QgsCoordinateReferenceSystem &srs ) const;
 
     /**
@@ -627,18 +662,6 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
     QString description() const;
 
     /**
-     * Type of identifier string to create.
-     *
-     * \since QGIS 3.10.3
-     */
-    enum IdentifierType
-    {
-      ShortString, //!< A heavily abbreviated string, for use when a compact representation is required
-      MediumString, //!< A medium-length string, recommended for general purpose use
-      FullString, //!< Full definition -- possibly a very lengthy string, e.g. with no truncation of custom WKT definitions
-    };
-
-    /**
      * Returns a user friendly identifier for the CRS.
      *
      * Depending on the format of the CRS, this may reflect the CRSes registered name, or for
@@ -651,7 +674,7 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * \see description()
      * \since QGIS 3.10.3
      */
-    QString userFriendlyIdentifier( IdentifierType type = MediumString ) const;
+    QString userFriendlyIdentifier( Qgis::CrsIdentifierType type = Qgis::CrsIdentifierType::MediumString ) const;
 
     /**
      * Returns the projection acronym for the projection used by the CRS.
@@ -669,23 +692,6 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      */
     QString ellipsoidAcronym() const;
 
-    //! WKT formatting variants, only used for builds based on Proj >= 6
-    enum WktVariant
-    {
-      WKT1_GDAL, //!< WKT1 as traditionally output by GDAL, deriving from OGC 01-009. A notable departure from WKT1_GDAL with respect to OGC 01-009 is that in WKT1_GDAL, the unit of the PRIMEM value is always degrees.
-      WKT1_ESRI, //!< WKT1 as traditionally output by ESRI software, deriving from OGC 99-049.
-      WKT2_2015, //!< Full WKT2 string, conforming to ISO 19162:2015(E) / OGC 12-063r5 with all possible nodes and new keyword names.
-      WKT2_2015_SIMPLIFIED, //!< Same as WKT2_2015 with the following exceptions: UNIT keyword used. ID node only on top element. No ORDER element in AXIS element. PRIMEM node omitted if it is Greenwich.  ELLIPSOID.UNIT node omitted if it is UnitOfMeasure::METRE. PARAMETER.UNIT / PRIMEM.UNIT omitted if same as AXIS. AXIS.UNIT omitted and replaced by a common GEODCRS.UNIT if they are all the same on all axis.
-      WKT2_2018, //!< Alias for WKT2_2019
-      WKT2_2018_SIMPLIFIED, //!< Alias for WKT2_2019_SIMPLIFIED
-      WKT2_2019 = WKT2_2018, //!< Full WKT2 string, conforming to ISO 19162:2019 / OGC 18-010, with all possible nodes and new keyword names. Non-normative list of differences: WKT2_2019 uses GEOGCRS / BASEGEOGCRS keywords for GeographicCRS.
-      WKT2_2019_SIMPLIFIED = WKT2_2018_SIMPLIFIED, //!< WKT2_2019 with the simplification rule of WKT2_SIMPLIFIED
-
-      WKT_PREFERRED = WKT2_2019, //!< Preferred format, matching the most recent WKT ISO standard. Currently an alias to WKT2_2019, but may change in future versions.
-      WKT_PREFERRED_SIMPLIFIED = WKT2_2019_SIMPLIFIED, //!< Preferred simplified format, matching the most recent WKT ISO standard. Currently an alias to WKT2_2019_SIMPLIFIED, but may change in future versions.
-      WKT_PREFERRED_GDAL = WKT2_2019, //!< Preferred format for conversion of CRS to WKT for use with the GDAL library.
-    };
-
     /**
      * Returns a WKT representation of this CRS.
      *
@@ -697,7 +703,7 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      *
      * \see toProj()
      */
-    QString toWkt( WktVariant variant = WKT1_GDAL, bool multiline = false, int indentationWidth = 4 ) const;
+    QString toWkt( Qgis::CrsWktVariant variant = Qgis::CrsWktVariant::Wkt1Gdal, bool multiline = false, int indentationWidth = 4 ) const;
 
     /**
      * Returns a Proj string representation of this CRS.
@@ -709,7 +715,7 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * \warning Not all CRS definitions can be represented by Proj strings. An empty
      * string will be returned if the CRS could not be represented by a Proj string.
      * \see toWkt()
-     * \deprecated QGIS 3.10 Use toProj() instead.
+     * \deprecated QGIS 3.10. Use toProj() instead.
      */
     Q_DECL_DEPRECATED QString toProj4() const SIP_DEPRECATED;
 
@@ -726,6 +732,20 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * \since QGIS 3.10.3
      */
     QString toProj() const;
+
+    /**
+     * Returns the type of the CRS.
+     *
+     * \since QGIS 3.34
+     */
+    Qgis::CrsType type() const;
+
+    /**
+     * Returns TRUE if the CRS is considered deprecated.
+     *
+     * \since QGIS 3.36
+     */
+    bool isDeprecated() const;
 
     /**
      * Returns whether the CRS is a geographic CRS (using lat/lon coordinates)
@@ -749,24 +769,18 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * If the CRS does not use a datum ensemble then an invalid QgsDatumEnsemble will
      * be returned.
      *
-     * \warning This method requires PROJ 8.0 or later
-     *
-     * \throws QgsNotSupportedException on QGIS builds based on PROJ 7 or earlier.
+     * \note In the case of a compound crs, this method will always return the datum ensemble for the horizontal component.
      *
      * \since QGIS 3.20
      */
-    QgsDatumEnsemble datumEnsemble() const SIP_THROW( QgsNotSupportedException );
+    QgsDatumEnsemble datumEnsemble() const;
 
     /**
      * Attempts to retrieve the name of the celestial body associated with the CRS (e.g. "Earth").
      *
-     * \warning This method requires PROJ 8.1 or later
-     *
-     * \throws QgsNotSupportedException on QGIS builds based on PROJ 8.0 or earlier.
-     *
      * \since QGIS 3.20
      */
-    QString celestialBodyName() const SIP_THROW( QgsNotSupportedException );
+    QString celestialBodyName() const;
 
     /**
      * Sets the coordinate \a epoch, as a decimal year.
@@ -840,15 +854,65 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
     QgsProjOperation operation() const;
 
     /**
-     * Returns whether axis is inverted (e.g., for WMS 1.3) for the CRS.
+     * Returns whether the axis order is inverted for the CRS compared to the order east/north (longitude/latitude).
+     * E.g. with WMS 1.3 the axis order for EPSG:4326 is north/east (latitude/longitude), i.e. inverted.
      * \returns TRUE if CRS axis is inverted
+     *
+     * \see axisOrdering()
      */
     bool hasAxisInverted() const;
 
     /**
-     * Returns the units for the projection used by the CRS.
+     * Returns an ordered list of the axis directions reflecting the native axis order for the CRS.
+     *
+     * \since QGIS 3.26
      */
-    QgsUnitTypes::DistanceUnit mapUnits() const;
+#ifndef SIP_RUN
+    QList< Qgis::CrsAxisDirection > axisOrdering() const;
+#else
+    SIP_PYOBJECT axisOrdering() const SIP_TYPEHINT( List[Qgis.CrsAxisDirection] );
+    % MethodCode
+    // adapted from the qpymultimedia_qlist.sip file from the PyQt6 sources
+
+    const QList< Qgis::CrsAxisDirection > cppRes = sipCpp->axisOrdering();
+
+    PyObject *l = PyList_New( cppRes.size() );
+
+    if ( !l )
+      sipIsErr = 1;
+    else
+    {
+      for ( int i = 0; i < cppRes.size(); ++i )
+      {
+        PyObject *eobj = sipConvertFromEnum( static_cast<int>( cppRes.at( i ) ),
+                                             sipType_Qgis_CrsAxisDirection );
+
+        if ( !eobj )
+        {
+          sipIsErr = 1;
+        }
+
+        PyList_SetItem( l, i, eobj );
+      }
+
+      if ( !sipIsErr )
+      {
+        sipRes = l;
+      }
+      else
+      {
+        Py_DECREF( l );
+      }
+    }
+    % End
+#endif
+
+    /**
+     * Returns the units for the projection used by the CRS.
+     *
+     * \note In the case of a compound CRS, this method will always return the units for the horizontal component.
+     */
+    Qgis::DistanceUnit mapUnits() const;
 
     /**
      * Returns the approximate bounds for the region the CRS is usable within.
@@ -856,9 +920,24 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * The returned bounds represent the latitude and longitude extent for the
      * projection in the WGS 84 CRS.
      *
-     * \since QGIS 3.0
      */
     QgsRectangle bounds() const;
+
+    /**
+     * Returns the crs as OGC URI (format: http://www.opengis.net/def/crs/OGC/1.3/CRS84)
+     * Returns an empty string on failure.
+     *
+     * \since QGIS 3.30
+     */
+    QString toOgcUri() const;
+
+    /**
+     * Returns the crs as OGC URN (format: urn:ogc:def:crs:OGC:1.3:CRS84)
+     * Returns an empty string on failure.
+     *
+     * \since QGIS 3.38
+     */
+    QString toOgcUrn() const;
 
     // Mutators -----------------------------------
 
@@ -888,7 +967,7 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
     /**
      * Gets user hint for validation
      */
-    QString validationHint();
+    QString validationHint() const;
 
     /**
      * Update proj.4 parameters in our database from proj.4
@@ -911,7 +990,74 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      *
      * \note Since QGIS 3.18, internally this calls QgsCoordinateReferenceSystemRegistry::addUserCrs().
      */
-    long saveAsUserCrs( const QString &name, Format nativeFormat = FormatWkt );
+    long saveAsUserCrs( const QString &name, Qgis::CrsDefinitionFormat nativeFormat = Qgis::CrsDefinitionFormat::Wkt );
+
+    /**
+     * Sets the native \a format for the CRS definition.
+     *
+     * \note This has no effect on the underlying definition of the CRS, rather it controls what format
+     * to use when displaying the CRS's definition to users.
+     *
+     * \see nativeFormat()
+     * \since QGIS 3.24
+     */
+    void setNativeFormat( Qgis::CrsDefinitionFormat format );
+
+    /**
+     * Returns the native format for the CRS definition.
+     *
+     * \note This has no effect on the underlying definition of the CRS, rather it controls what format
+     * to use when displaying the CRS's definition to users.
+     *
+     * \see setNativeFormat()
+     * \since QGIS 3.24
+     */
+    Qgis::CrsDefinitionFormat nativeFormat() const;
+
+    /**
+     * Returns the geographic CRS associated with this CRS object.
+     *
+     * May return an invalid CRS if the geographic CRS could not be determined.
+     *
+     * \note This method will always return a longitude, latitude ordered CRS.
+     *
+     * \since QGIS 3.24
+     */
+    QgsCoordinateReferenceSystem toGeographicCrs() const;
+
+    /**
+     * Returns the horizontal CRS associated with this CRS object.
+     *
+     * In the case of a compound CRS, this method will return just the horizontal CRS component.
+     *
+     * An invalid CRS will be returned if the object does not contain a horizontal component.
+     *
+     * \see verticalCrs()
+     * \since QGIS 3.38
+     */
+    QgsCoordinateReferenceSystem horizontalCrs() const;
+
+    /**
+     * Returns the vertical CRS associated with this CRS object.
+     *
+     * In the case of a compound CRS, this method will return just the vertical CRS component.
+     *
+     * An invalid CRS will be returned if the object does not contain a vertical component.
+     *
+     * \see horizontalCrs()
+     * \see hasVerticalAxis()
+     *
+     * \since QGIS 3.38
+     */
+    QgsCoordinateReferenceSystem verticalCrs() const;
+
+    /**
+     * Returns TRUE if the CRS has a vertical axis.
+     *
+     * \see verticalCrs()
+     * \since QGIS 3.38
+     */
+    bool hasVerticalAxis() const;
 
     //! Returns auth id of related geographic CRS
     QString geographicCrsAuthId() const;
@@ -919,7 +1065,7 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
 #ifdef SIP_RUN
     SIP_PYOBJECT __repr__();
     % MethodCode
-    const QString str = sipCpp->isValid() ? QStringLiteral( "<QgsCoordinateReferenceSystem: %1%2>" ).arg( !sipCpp->authid().isEmpty() ? sipCpp->authid() : sipCpp->toWkt( QgsCoordinateReferenceSystem::WKT_PREFERRED ),
+    const QString str = sipCpp->isValid() ? QStringLiteral( "<QgsCoordinateReferenceSystem: %1%2>" ).arg( !sipCpp->authid().isEmpty() ? sipCpp->authid() : sipCpp->toWkt( Qgis::CrsWktVariant::Preferred ),
                         std::isfinite( sipCpp->coordinateEpoch() ) ? QStringLiteral( " @ %1" ).arg( sipCpp->coordinateEpoch() ) : QString() )
                         : QStringLiteral( "<QgsCoordinateReferenceSystem: invalid>" );
     sipRes = PyUnicode_FromString( str.toUtf8().constData() );
@@ -929,35 +1075,74 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
 #ifndef SIP_RUN
 
     /**
-     * Returns the underlying PROJ PJ object corresponding to the CRS, or NULLPTR
-     * if the CRS is invalid.
-     *
-     * This object is only valid for the lifetime of the QgsCoordinateReferenceSystem.
-     *
-     * \note Not available in Python bindings.
-     * \since QGIS 3.8
-     */
+    * Returns the underlying PROJ PJ object corresponding to the CRS, or NULLPTR
+    * if the CRS is invalid.
+    *
+    * This object is only valid for the lifetime of the QgsCoordinateReferenceSystem.
+    *
+    * \note Not available in Python bindings.
+    * \since QGIS 3.8
+    */
     PJ *projObject() const;
+
+    /**
+     * Constructs a QgsCoordinateReferenceSystem from a PROJ PJ object.
+     *
+     * The \a object must correspond to a PROJ CRS object.
+     *
+     * Ownership of \a object is not transferred.
+     *
+     * \note Not available in Python bindings
+     * \since QGIS 3.24
+     */
+    static QgsCoordinateReferenceSystem fromProjObject( PJ *object );
+
+    /**
+     * Sets this CRS by passing it a PROJ PJ \a object, corresponding to a PROJ CRS object.
+     *
+     * Ownership of \a object is not transferred.
+     *
+     * \note Not available in Python bindings
+     * \since QGIS 3.24
+     */
+    bool createFromProjObject( PJ *object );
 #endif
 
     /**
      * Returns a list of recently used projections
      * \returns list of srsid for recently used projections
-     * \deprecated QGIS 3.10 Use recentCoordinateReferenceSystems() instead.
+     *
+     * \deprecated QGIS 3.10. Use QgsApplication::coordinateReferenceSystemRegistry()->recentCrs() instead.
      */
     Q_DECL_DEPRECATED static QStringList recentProjections() SIP_DEPRECATED;
 
     /**
      * Returns a list of recently used CRS.
-     * \since QGIS 3.10.3
+     *
+     * \deprecated QGIS 3.36. Use QgsApplication::coordinateReferenceSystemRegistry()->recentCrs() instead.
     */
-    static QList< QgsCoordinateReferenceSystem > recentCoordinateReferenceSystems();
+    Q_DECL_DEPRECATED static QList< QgsCoordinateReferenceSystem > recentCoordinateReferenceSystems() SIP_DEPRECATED;
 
     /**
      * Pushes a recently used CRS to the top of the recent CRS list.
-     * \since QGIS 3.10.3
+     *
+     * \deprecated QGIS 3.36. Use QgsApplication::coordinateReferenceSystemRegistry()->pushRecent() instead.
      */
-    static void pushRecentCoordinateReferenceSystem( const QgsCoordinateReferenceSystem &crs );
+    Q_DECL_DEPRECATED static void pushRecentCoordinateReferenceSystem( const QgsCoordinateReferenceSystem &crs ) SIP_DEPRECATED;
+
+    /**
+     * Removes a CRS from the list of recently used CRS.
+     *
+     * \deprecated QGIS 3.36. Use QgsApplication::coordinateReferenceSystemRegistry()->removeRecent() instead.
+     */
+    Q_DECL_DEPRECATED static void removeRecentCoordinateReferenceSystem( const QgsCoordinateReferenceSystem &crs ) SIP_DEPRECATED;
+
+    /**
+     * Cleans the list of recently used CRS.
+     *
+     * \deprecated QGIS 3.36. Use QgsApplication::coordinateReferenceSystemRegistry()->clearRecent() instead.
+     */
+    Q_DECL_DEPRECATED static void clearRecentCoordinateReferenceSystems() SIP_DEPRECATED;
 
 #ifndef SIP_RUN
 
@@ -969,7 +1154,6 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * If \a disableCache is TRUE then the inbuilt cache will be completely disabled. This
      * argument is for internal use only.
      *
-     * \since QGIS 3.0
      */
     static void invalidateCache( bool disableCache = false );
 #else
@@ -979,7 +1163,6 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
      * This should be called whenever the srs database has been modified in order to ensure
      * that outdated CRS objects are not created.
      *
-     * \since QGIS 3.0
      */
     static void invalidateCache( bool disableCache SIP_PYARGREMOVE = false );
 #endif
@@ -1037,6 +1220,11 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
     //! Helper for getting number of user CRS already in db
     static long getRecordCount();
 
+    /**
+     * \warning This method does not utilize caching, and can be slow to call. Consider
+     * using one of the alternate createFrom methods or constructors which take
+     * advantage of caches.
+     */
     bool loadFromAuthCode( const QString &auth, const QString &code );
 
     /**
@@ -1064,6 +1252,8 @@ class CORE_EXPORT QgsCoordinateReferenceSystem
     QExplicitlySharedDataPointer<QgsCoordinateReferenceSystemPrivate> d;
 
     QString mValidationHint;
+
+    Qgis::CrsDefinitionFormat mNativeFormat = Qgis::CrsDefinitionFormat::Wkt;
 
     friend class QgsProjContext;
 

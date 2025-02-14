@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgsvectorfilewriter.h                                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -108,10 +108,8 @@ There are two possibilities how to use this class:
 
     struct MetaData
     {
+
       MetaData();
-%Docstring
-Constructor for MetaData
-%End
 
       MetaData( const QString &longName, const QString &trLongName, const QString &glob, const QString &ext, const QMap<QString, QgsVectorFileWriter::Option *> &driverOptions, const QMap<QString, QgsVectorFileWriter::Option *> &layerOptions, const QString &compulsoryEncoding = QString() );
 
@@ -139,13 +137,6 @@ Constructor for MetaData
       Canceled,
     };
 
-    enum SymbologyExport
-    {
-      NoSymbology,
-      FeatureSymbology,
-      SymbolLayerSymbology
-    };
-
     enum FieldNameSource
     {
       Original,
@@ -156,6 +147,7 @@ Constructor for MetaData
     {
       SortRecommended,
       SkipNonSpatialFormats,
+      SupportsMultipleLayers,
     };
     typedef QFlags<QgsVectorFileWriter::VectorFormatOption> VectorFormatOptions;
 
@@ -164,18 +156,14 @@ Constructor for MetaData
 {
 %Docstring(signature="appended")
 Interface to convert raw field values to their user-friendly value.
-
-.. versionadded:: 2.16
 %End
 
 %TypeHeaderCode
 #include "qgsvectorfilewriter.h"
 %End
       public:
+
         FieldValueConverter();
-%Docstring
-Constructor
-%End
 
         virtual ~FieldValueConverter();
 
@@ -249,15 +237,15 @@ Creates a clone of the FieldValueConverter.
         const QStringList &layerOptions = QStringList(),
         bool skipAttributeCreation = false,
         QString *newFilename = 0,
-        QgsVectorFileWriter::SymbologyExport symbologyExport = QgsVectorFileWriter::NoSymbology,
+        Qgis::FeatureSymbologyExport symbologyExport = Qgis::FeatureSymbologyExport::NoSymbology,
         double symbologyScale = 1.0,
         const QgsRectangle *filterExtent = 0,
-        QgsWkbTypes::Type overrideGeometryType = QgsWkbTypes::Unknown,
+        Qgis::WkbType overrideGeometryType = Qgis::WkbType::Unknown,
         bool forceMulti = false,
         bool includeZ = false,
         const QgsAttributeList &attributes = QgsAttributeList(),
         QgsVectorFileWriter::FieldValueConverter *fieldValueConverter = 0
-                                                                                 ) /Deprecated/;
+                                                                                 ) /Deprecated="Since 3.40. Use writeAsVectorFormatV2() instead."/;
 %Docstring
 Write contents of vector layer to an (OGR supported) vector format
 
@@ -267,7 +255,6 @@ Write contents of vector layer to an (OGR supported) vector format
 :param destCRS: CRS to reproject exported geometries to, or invalid CRS for no reprojection
 :param driverName: OGR driver to use
 :param onlySelected: write only selected features of layer
-:param errorMessage: will be set to the error message text, if an error occurs while writing the layer
 :param datasourceOptions: list of OGR data source creation options
 :param layerOptions: list of OGR layer creation options
 :param skipAttributeCreation: only write geometries
@@ -282,7 +269,10 @@ Write contents of vector layer to an (OGR supported) vector format
 :param attributes: attributes to export (empty means all unless skipAttributeCreation is set)
 :param fieldValueConverter: field value converter (added in QGIS 2.16)
 
-.. deprecated::
+:return: - errorMessage: the error message text, if an error occurs while writing the layer
+
+.. deprecated:: 3.40
+
    Use :py:func:`~QgsVectorFileWriter.writeAsVectorFormatV2` instead.
 %End
 
@@ -298,15 +288,15 @@ Write contents of vector layer to an (OGR supported) vector format
         const QStringList &layerOptions = QStringList(),
         bool skipAttributeCreation = false,
         QString *newFilename = 0,
-        QgsVectorFileWriter::SymbologyExport symbologyExport = QgsVectorFileWriter::NoSymbology,
+        Qgis::FeatureSymbologyExport symbologyExport = Qgis::FeatureSymbologyExport::NoSymbology,
         double symbologyScale = 1.0,
         const QgsRectangle *filterExtent = 0,
-        QgsWkbTypes::Type overrideGeometryType = QgsWkbTypes::Unknown,
+        Qgis::WkbType overrideGeometryType = Qgis::WkbType::Unknown,
         bool forceMulti = false,
         bool includeZ = false,
         const QgsAttributeList &attributes = QgsAttributeList(),
         QgsVectorFileWriter::FieldValueConverter *fieldValueConverter = 0
-                                                                                 ) /Deprecated/;
+                                                                                 ) /Deprecated="Since 3.40. Use writeAsVectorFormatV2() instead."/;
 %Docstring
 Writes a layer out to a vector file.
 
@@ -317,7 +307,6 @@ Writes a layer out to a vector file.
            for no transformation
 :param driverName: OGR driver to use
 :param onlySelected: write only selected features of layer
-:param errorMessage: will be set to the error message text, if an error occurs while writing the layer
 :param datasourceOptions: list of OGR data source creation options
 :param layerOptions: list of OGR layer creation options
 :param skipAttributeCreation: only write geometries
@@ -332,9 +321,10 @@ Writes a layer out to a vector file.
 :param attributes: attributes to export (empty means all unless skipAttributeCreation is set)
 :param fieldValueConverter: field value converter (added in QGIS 2.16)
 
-.. versionadded:: 2.2
+:return: - errorMessage: the error message text, if an error occurs while writing the layer
 
-.. deprecated::
+.. deprecated:: 3.40
+
    Use :py:func:`~QgsVectorFileWriter.writeAsVectorFormatV2` instead.
 %End
 
@@ -342,18 +332,14 @@ Writes a layer out to a vector file.
 {
 %Docstring(signature="appended")
 Options to pass to :py:func:`~QgsVectorFileWriter.writeAsVectorFormat`
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgsvectorfilewriter.h"
 %End
       public:
+
         SaveVectorOptions();
-%Docstring
-Constructor
-%End
 
         virtual ~SaveVectorOptions();
 
@@ -377,13 +363,15 @@ Constructor
 
         QgsAttributeList attributes;
 
-        QgsVectorFileWriter::SymbologyExport symbologyExport;
+        QStringList attributesExportNames;
+
+        Qgis::FeatureSymbologyExport symbologyExport;
 
         double symbologyScale;
 
         QgsRectangle filterExtent;
 
-        QgsWkbTypes::Type overrideGeometryType;
+        Qgis::WkbType overrideGeometryType;
 
         bool forceMulti;
 
@@ -398,6 +386,12 @@ Constructor
         bool saveMetadata;
 
         QgsLayerMetadata layerMetadata;
+
+        bool includeConstraints;
+
+        bool setFieldDomains;
+
+        const QgsAbstractDatabaseProviderConnection *sourceDatabaseProviderConnection;
     };
 
 
@@ -406,7 +400,7 @@ Constructor
         const QgsVectorFileWriter::SaveVectorOptions &options,
         QString *newFilename = 0,
         QString *errorMessage /Out/ = 0
-                                                                                 ) /Deprecated/;
+                                                                                 ) /Deprecated="Since 3.40. Use writeAsVectorFormatV2() instead."/;
 %Docstring
 Writes a layer out to a vector file.
 
@@ -414,32 +408,39 @@ Writes a layer out to a vector file.
 :param fileName: file name to write to
 :param options: options.
 :param newFilename: QString pointer which will contain the new file name created (in case it is different to fileName).
-:param errorMessage: will be set to the error message text, if an error occurs while writing the layer
 
-.. versionadded:: 3.0
+:return: - errorMessage: the error message text, if an error occurs while writing the layer
 
-.. deprecated::
+.. deprecated:: 3.40
+
    Use :py:func:`~QgsVectorFileWriter.writeAsVectorFormatV2` instead.
 %End
 
  QgsVectorFileWriter( const QString &vectorFileName,
                                            const QString &fileEncoding,
                                            const QgsFields &fields,
-                                           QgsWkbTypes::Type geometryType,
+                                           Qgis::WkbType geometryType,
                                            const QgsCoordinateReferenceSystem &srs = QgsCoordinateReferenceSystem(),
                                            const QString &driverName = "GPKG",
                                            const QStringList &datasourceOptions = QStringList(),
                                            const QStringList &layerOptions = QStringList(),
                                            QString *newFilename = 0,
-                                           QgsVectorFileWriter::SymbologyExport symbologyExport = QgsVectorFileWriter::NoSymbology,
+                                           Qgis::FeatureSymbologyExport symbologyExport = Qgis::FeatureSymbologyExport::NoSymbology,
                                            QgsFeatureSink::SinkFlags sinkFlags = QgsFeatureSink::SinkFlags()
-                                         ) /Deprecated/;
+                                         ) /Deprecated="Since 3.40. Use create() instead."/;
+%Docstring
+Create a new vector file writer
+
+.. deprecated:: 3.40
+
+   Use :py:func:`~QgsVectorFileWriter.create` instead.
+%End
 
 
 
     static QgsVectorFileWriter *create( const QString &fileName,
                                         const QgsFields &fields,
-                                        QgsWkbTypes::Type geometryType,
+                                        Qgis::WkbType geometryType,
                                         const QgsCoordinateReferenceSystem &srs,
                                         const QgsCoordinateTransformContext &transformContext,
                                         const QgsVectorFileWriter::SaveVectorOptions &options,
@@ -468,7 +469,7 @@ Create a new vector file writer.
         const QgsVectorFileWriter::SaveVectorOptions &options,
         QString *newFilename = 0,
         QString *newLayer = 0,
-        QString *errorMessage /Out/ = 0 ) /Deprecated/;
+        QString *errorMessage /Out/ = 0 ) /Deprecated="Since 3.20. Use writeAsVectorFormatV3() instead."/;
 %Docstring
 Writes a layer out to a vector file.
 
@@ -480,10 +481,11 @@ Writes a layer out to a vector file.
 :param newLayer: potentially modified layer name (output parameter)
 
 :return: - Error message code, or QgsVectorFileWriter.NoError if the write operation was successful
-         - errorMessage: will be set to the error message text, if an error occurs while writing the layer
+         - errorMessage: the error message text, if an error occurs while writing the layer
 
-.. deprecated:: QGIS 3.20
-  use writeAsVectorFormatV3 instead
+.. deprecated:: 3.20
+
+   Use :py:func:`~QgsVectorFileWriter.writeAsVectorFormatV3` instead.
 %End
 
     static QgsVectorFileWriter::WriterError writeAsVectorFormatV3( QgsVectorLayer *layer,
@@ -500,11 +502,11 @@ Writes a layer out to a vector file.
 :param fileName: file name to write to
 :param transformContext: coordinate transform context
 :param options: save options
-:param newFilename: potentially modified file name (output parameter)
-:param errorMessage: will be set to the error message text, if an error occurs while writing the layer
 
 :return: - Error message code, or QgsVectorFileWriter.NoError if the write operation was successful
+         - newFilename: potentially modified file name (output parameter)
          - newLayer: potentially modified layer name (output parameter)
+         - errorMessage: the error message text, if an error occurs while writing the layer
 
 .. versionadded:: 3.20
 %End
@@ -536,8 +538,6 @@ The ``options`` argument can be used to control the sorting and filtering of
 returned formats.
 
 .. seealso:: :py:func:`supportedFiltersAndFormats`
-
-.. versionadded:: 3.0
 %End
 
     static bool supportsFeatureStyles( const QString &driverName );
@@ -545,8 +545,6 @@ returned formats.
 Returns ``True`` if the specified ``driverName`` supports feature styles.
 
 The ``driverName`` argument must be a valid GDAL driver name.
-
-.. versionadded:: 3.0
 %End
 
     struct DriverDetails
@@ -574,8 +572,6 @@ returned drivers.
 Returns the OGR driver name for a specified file ``extension``. E.g. the
 driver name for the ".shp" extension is "ESRI Shapefile".
 If no suitable drivers are found then an empty string is returned.
-
-.. versionadded:: 3.0
 %End
 
     static QString fileFilterString( VectorFormatOptions options = SortRecommended );
@@ -596,14 +592,39 @@ Creates a filter for an OGR driver key
 Converts codec name to string passed to ENCODING layer creation option of OGR Shapefile
 %End
 
-    QgsVectorFileWriter::WriterError hasError();
+    QgsVectorFileWriter::WriterError hasError() const;
 %Docstring
 Checks whether there were any errors in constructor
 %End
 
-    QString errorMessage();
+    QString errorMessage() const;
 %Docstring
 Retrieves error message
+%End
+
+    QString driver() const;
+%Docstring
+Returns the GDAL (short) driver name associated with the output file.
+
+.. seealso:: :py:func:`driverLongName`
+
+.. versionadded:: 3.32
+%End
+
+    QString driverLongName() const;
+%Docstring
+Returns the GDAL long driver name associated with the output file.
+
+.. seealso:: :py:func:`driver`
+
+.. versionadded:: 3.32
+%End
+
+    Qgis::VectorFileWriterCapabilities capabilities() const;
+%Docstring
+Returns the capabilities supported by the writer.
+
+.. versionadded:: 3.32
 %End
 
     virtual bool addFeature( QgsFeature &feature, QgsFeatureSink::Flags flags = QgsFeatureSink::Flags() );
@@ -613,11 +634,9 @@ Retrieves error message
     virtual QString lastError() const;
 
 
-    bool addFeatureWithStyle( QgsFeature &feature, QgsFeatureRenderer *renderer, QgsUnitTypes::DistanceUnit outputUnit = QgsUnitTypes::DistanceMeters );
+    bool addFeatureWithStyle( QgsFeature &feature, QgsFeatureRenderer *renderer, Qgis::DistanceUnit outputUnit = Qgis::DistanceUnit::Meters );
 %Docstring
 Adds a ``feature`` to the currently opened data source, using the style from a specified ``renderer``.
-
-.. versionadded:: 3.0
 %End
 
 
@@ -632,8 +651,19 @@ Delete a shapefile (and its accompanying shx / dbf / prj / qix / qpj / cpg / sbn
 :return: bool ``True`` if the file was deleted successfully
 %End
 
-    QgsVectorFileWriter::SymbologyExport symbologyExport() const;
-    void setSymbologyExport( QgsVectorFileWriter::SymbologyExport symExport );
+    Qgis::FeatureSymbologyExport symbologyExport() const;
+%Docstring
+Returns the feature symbology export handling for the writer.
+
+.. seealso:: :py:func:`setSymbologyExport`
+%End
+
+    void setSymbologyExport( Qgis::FeatureSymbologyExport symExport );
+%Docstring
+Sets the feature symbology export handling for the writer.
+
+.. seealso:: :py:func:`symbologyExport`
+%End
 
     double symbologyScale() const;
 %Docstring
@@ -641,8 +671,6 @@ Returns the reference scale for output.
 The  scale value indicates the scale denominator, e.g. 1000.0 for a 1:1000 map.
 
 .. seealso:: :py:func:`setSymbologyScale`
-
-.. versionadded:: 3.0
 %End
 
     void setSymbologyScale( double scale );
@@ -651,8 +679,6 @@ Set reference ``scale`` for output.
 The ``scale`` value indicates the scale denominator, e.g. 1000.0 for a 1:1000 map.
 
 .. seealso:: :py:func:`symbologyScale`
-
-.. versionadded:: 3.0
 %End
 
     static bool driverMetadata( const QString &driverName, MetaData &driverMetadata );
@@ -664,8 +690,6 @@ Returns a list of the default dataset options for a specified driver.
 :param driverName: name of OGR driver
 
 .. seealso:: :py:func:`defaultLayerOptions`
-
-.. versionadded:: 3.0
 %End
 
     static QStringList defaultLayerOptions( const QString &driverName );
@@ -675,24 +699,18 @@ Returns a list of the default layer options for a specified driver.
 :param driverName: name of OGR driver
 
 .. seealso:: :py:func:`defaultDatasetOptions`
-
-.. versionadded:: 3.0
 %End
 
 
     static QgsVectorFileWriter::EditionCapabilities editionCapabilities( const QString &datasetName );
 %Docstring
 Returns edition capabilities for an existing dataset name.
-
-.. versionadded:: 3.0
 %End
 
     static bool targetLayerExists( const QString &datasetName,
                                    const QString &layerName );
 %Docstring
 Returns whether the target layer already exists.
-
-.. versionadded:: 3.0
 %End
 
     static bool areThereNewFieldsToCreate( const QString &datasetName,
@@ -701,11 +719,11 @@ Returns whether the target layer already exists.
                                            const QgsAttributeList &attributes );
 %Docstring
 Returns whether there are among the attributes specified some that do not exist yet in the layer
-
-.. versionadded:: 3.0
 %End
 
   protected:
+
+
 
 
 
@@ -733,5 +751,5 @@ QFlags<QgsVectorFileWriter::VectorFormatOption> operator|(QgsVectorFileWriter::V
  *                                                                      *
  * src/core/qgsvectorfilewriter.h                                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

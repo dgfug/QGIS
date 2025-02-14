@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include "qgspointcloudrgbrendererwidget.h"
+#include "moc_qgspointcloudrgbrendererwidget.cpp"
 #include "qgscontrastenhancement.h"
 #include "qgspointcloudlayer.h"
 #include "qgspointcloudrgbrenderer.h"
@@ -54,20 +55,20 @@ QgsPointCloudRgbRendererWidget::QgsPointCloudRgbRendererWidget( QgsPointCloudLay
     setFromRenderer( layer->renderer() );
   }
 
-  connect( mRedAttributeComboBox, &QgsPointCloudAttributeComboBox::attributeChanged,
-           this, &QgsPointCloudRgbRendererWidget::redAttributeChanged );
-  connect( mGreenAttributeComboBox, &QgsPointCloudAttributeComboBox::attributeChanged,
-           this, &QgsPointCloudRgbRendererWidget::greenAttributeChanged );
-  connect( mBlueAttributeComboBox, &QgsPointCloudAttributeComboBox::attributeChanged,
-           this, &QgsPointCloudRgbRendererWidget::blueAttributeChanged );
+  connect( mRedAttributeComboBox, &QgsPointCloudAttributeComboBox::attributeChanged, this, &QgsPointCloudRgbRendererWidget::redAttributeChanged );
+  connect( mGreenAttributeComboBox, &QgsPointCloudAttributeComboBox::attributeChanged, this, &QgsPointCloudRgbRendererWidget::greenAttributeChanged );
+  connect( mBlueAttributeComboBox, &QgsPointCloudAttributeComboBox::attributeChanged, this, &QgsPointCloudRgbRendererWidget::blueAttributeChanged );
   connect( mContrastEnhancementAlgorithmComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsPointCloudRgbRendererWidget::emitWidgetChanged );
 
   if ( layer )
   {
     // set nice initial values
+    mBlockChangedSignal = true;
     redAttributeChanged();
     greenAttributeChanged();
     blueAttributeChanged();
+    mBlockChangedSignal = false;
+    minMaxModified();
   }
 }
 
@@ -83,7 +84,7 @@ QgsPointCloudRenderer *QgsPointCloudRgbRendererWidget::renderer()
     return nullptr;
   }
 
-  std::unique_ptr< QgsPointCloudRgbRenderer > renderer = std::make_unique< QgsPointCloudRgbRenderer >();
+  auto renderer = std::make_unique<QgsPointCloudRgbRenderer>();
   renderer->setRedAttribute( mRedAttributeComboBox->currentAttribute() );
   renderer->setGreenAttribute( mGreenAttributeComboBox->currentAttribute() );
   renderer->setBlueAttribute( mBlueAttributeComboBox->currentAttribute() );
@@ -109,8 +110,7 @@ void QgsPointCloudRgbRendererWidget::setCustomMinMaxValues( QgsPointCloudRgbRend
     return;
   }
 
-  if ( mContrastEnhancementAlgorithmComboBox->currentData().toInt() ==
-       QgsContrastEnhancement::NoEnhancement )
+  if ( mContrastEnhancementAlgorithmComboBox->currentData().toInt() == QgsContrastEnhancement::NoEnhancement )
   {
     r->setRedContrastEnhancement( nullptr );
     r->setGreenContrastEnhancement( nullptr );
@@ -154,18 +154,21 @@ void QgsPointCloudRgbRendererWidget::setCustomMinMaxValues( QgsPointCloudRgbRend
 
   if ( redEnhancement )
   {
-    redEnhancement->setContrastEnhancementAlgorithm( static_cast< QgsContrastEnhancement::ContrastEnhancementAlgorithm >(
-          ( mContrastEnhancementAlgorithmComboBox->currentData().toInt() ) ) );
+    redEnhancement->setContrastEnhancementAlgorithm( static_cast<QgsContrastEnhancement::ContrastEnhancementAlgorithm>(
+      ( mContrastEnhancementAlgorithmComboBox->currentData().toInt() )
+    ) );
   }
   if ( greenEnhancement )
   {
-    greenEnhancement->setContrastEnhancementAlgorithm( static_cast< QgsContrastEnhancement::ContrastEnhancementAlgorithm >(
-          ( mContrastEnhancementAlgorithmComboBox->currentData().toInt() ) ) );
+    greenEnhancement->setContrastEnhancementAlgorithm( static_cast<QgsContrastEnhancement::ContrastEnhancementAlgorithm>(
+      ( mContrastEnhancementAlgorithmComboBox->currentData().toInt() )
+    ) );
   }
   if ( blueEnhancement )
   {
-    blueEnhancement->setContrastEnhancementAlgorithm( static_cast< QgsContrastEnhancement::ContrastEnhancementAlgorithm >(
-          ( mContrastEnhancementAlgorithmComboBox->currentData().toInt() ) ) );
+    blueEnhancement->setContrastEnhancementAlgorithm( static_cast<QgsContrastEnhancement::ContrastEnhancementAlgorithm>(
+      ( mContrastEnhancementAlgorithmComboBox->currentData().toInt() )
+    ) );
   }
   r->setRedContrastEnhancement( redEnhancement );
   r->setGreenContrastEnhancement( greenEnhancement );
@@ -212,16 +215,16 @@ void QgsPointCloudRgbRendererWidget::redAttributeChanged()
 {
   if ( mLayer && mLayer->dataProvider() )
   {
-    const QVariant max = mLayer->dataProvider()->metadataStatistic( mRedAttributeComboBox->currentAttribute(), QgsStatisticalSummary::Max );
-    if ( max.isValid() )
+    const QgsPointCloudStatistics stats = mLayer->statistics();
+    const double max = stats.maximum( mRedAttributeComboBox->currentAttribute() );
+    if ( !std::isnan( max ) )
     {
-      const int maxValue = max.toInt();
       mDisableMinMaxWidgetRefresh++;
       mRedMinLineEdit->setText( QLocale().toString( 0 ) );
 
       // try and guess suitable range from input max values -- we don't just take the provider max value directly here, but rather see if it's
       // likely to be 8 bit or 16 bit color values
-      mRedMaxLineEdit->setText( QLocale().toString( maxValue > 255 ? 65535 : 255 ) );
+      mRedMaxLineEdit->setText( QLocale().toString( max > 255 ? 65535 : 255 ) );
       mDisableMinMaxWidgetRefresh--;
       emitWidgetChanged();
     }
@@ -232,16 +235,16 @@ void QgsPointCloudRgbRendererWidget::greenAttributeChanged()
 {
   if ( mLayer && mLayer->dataProvider() )
   {
-    const QVariant max = mLayer->dataProvider()->metadataStatistic( mGreenAttributeComboBox->currentAttribute(), QgsStatisticalSummary::Max );
-    if ( max.isValid() )
+    const QgsPointCloudStatistics stats = mLayer->statistics();
+    const double max = stats.maximum( mGreenAttributeComboBox->currentAttribute() );
+    if ( !std::isnan( max ) )
     {
-      const int maxValue = max.toInt();
       mDisableMinMaxWidgetRefresh++;
       mGreenMinLineEdit->setText( QLocale().toString( 0 ) );
 
       // try and guess suitable range from input max values -- we don't just take the provider max value directly here, but rather see if it's
       // likely to be 8 bit or 16 bit color values
-      mGreenMaxLineEdit->setText( QLocale().toString( maxValue > 255 ? 65535 : 255 ) );
+      mGreenMaxLineEdit->setText( QLocale().toString( max > 255 ? 65535 : 255 ) );
       mDisableMinMaxWidgetRefresh--;
       emitWidgetChanged();
     }
@@ -252,16 +255,16 @@ void QgsPointCloudRgbRendererWidget::blueAttributeChanged()
 {
   if ( mLayer && mLayer->dataProvider() )
   {
-    const QVariant max = mLayer->dataProvider()->metadataStatistic( mBlueAttributeComboBox->currentAttribute(), QgsStatisticalSummary::Max );
-    if ( max.isValid() )
+    const QgsPointCloudStatistics stats = mLayer->statistics();
+    const double max = stats.maximum( mBlueAttributeComboBox->currentAttribute() );
+    if ( !std::isnan( max ) )
     {
-      const int maxValue = max.toInt();
       mDisableMinMaxWidgetRefresh++;
       mBlueMinLineEdit->setText( QLocale().toString( 0 ) );
 
       // try and guess suitable range from input max values -- we don't just take the provider max value directly here, but rather see if it's
       // likely to be 8 bit or 16 bit color values
-      mBlueMaxLineEdit->setText( QLocale().toString( maxValue > 255 ? 65535 : 255 ) );
+      mBlueMaxLineEdit->setText( QLocale().toString( max > 255 ? 65535 : 255 ) );
       mDisableMinMaxWidgetRefresh--;
       emitWidgetChanged();
     }
@@ -275,7 +278,8 @@ void QgsPointCloudRgbRendererWidget::minMaxModified()
     if ( ( QgsContrastEnhancement::ContrastEnhancementAlgorithm )( mContrastEnhancementAlgorithmComboBox->currentData().toInt() ) == QgsContrastEnhancement::NoEnhancement )
     {
       mContrastEnhancementAlgorithmComboBox->setCurrentIndex(
-        mContrastEnhancementAlgorithmComboBox->findData( ( int ) QgsContrastEnhancement::StretchToMinimumMaximum ) );
+        mContrastEnhancementAlgorithmComboBox->findData( ( int ) QgsContrastEnhancement::StretchToMinimumMaximum )
+      );
     }
     emitWidgetChanged();
   }
@@ -301,7 +305,8 @@ void QgsPointCloudRgbRendererWidget::setMinMaxValue( const QgsContrastEnhancemen
   // QgsMultiBandColorRenderer is using individual contrast enhancements for each
   // band, but this widget GUI has one for all
   mContrastEnhancementAlgorithmComboBox->setCurrentIndex( mContrastEnhancementAlgorithmComboBox->findData(
-        static_cast< int >( ce->contrastEnhancementAlgorithm() ) ) );
+    static_cast<int>( ce->contrastEnhancementAlgorithm() )
+  ) );
 }
 
 void QgsPointCloudRgbRendererWidget::setFromRenderer( const QgsPointCloudRenderer *r )
@@ -322,8 +327,7 @@ void QgsPointCloudRgbRendererWidget::setFromRenderer( const QgsPointCloudRendere
   }
   else
   {
-    if ( mRedAttributeComboBox->findText( QStringLiteral( "Red" ) ) > -1 && mRedAttributeComboBox->findText( QStringLiteral( "Green" ) ) > -1 &&
-         mRedAttributeComboBox->findText( QStringLiteral( "Blue" ) ) > -1 )
+    if ( mRedAttributeComboBox->findText( QStringLiteral( "Red" ) ) > -1 && mRedAttributeComboBox->findText( QStringLiteral( "Green" ) ) > -1 && mRedAttributeComboBox->findText( QStringLiteral( "Blue" ) ) > -1 )
     {
       mRedAttributeComboBox->setAttribute( QStringLiteral( "Red" ) );
       mGreenAttributeComboBox->setAttribute( QStringLiteral( "Green" ) );

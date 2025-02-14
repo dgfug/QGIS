@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/labeling/qgslabelobstaclesettings.h                         *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -23,8 +23,8 @@ Contains settings related to how the label engine treats features as obstacles
 %End
   public:
 
-    enum ObstacleType
-    {
+    enum class ObstacleType
+      {
       PolygonInterior,
       PolygonBoundary,
       PolygonWhole
@@ -128,5 +128,5 @@ set within the specified ``properties`` collection.
  *                                                                      *
  * src/core/labeling/qgslabelobstaclesettings.h                         *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

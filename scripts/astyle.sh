@@ -16,13 +16,13 @@
 
 # sort by version option
 SV=V
-if [[ "$OSTYPE" =~ darwin* ]]; then
+if [[ "$OSTYPE" == *bsd* ]] || [[ "$OSTYPE" =~ darwin* ]]; then
 	SV=n
 fi
 
 min_version="3"
 astyle_version_check() {
-	[ $(printf "$($1 --version 2>&1 | cut -d ' ' -f4)\\n$min_version" | sort -${SV} | head -n1) = "$min_version" ]
+	[ $(printf "$($1 --version 2>/dev/null | cut -d ' ' -f4)\\n$min_version" | sort -${SV} | head -n1) = "$min_version" ]
 }
 
 for ASTYLE in ${QGISSTYLE} $(dirname "$0")/qgisstyle $(dirname "$0")/RelWithDebInfo/qgisstyle astyle
@@ -83,12 +83,16 @@ if ! type -p autopep8 >/dev/null; then
 fi
 
 ASTYLEOPTS=$(dirname "$0")/astyle.options
-if type -p cygpath >/dev/null; then
-	ASTYLEOPTS="$(cygpath -w "$ASTYLEOPTS")"
-fi
+# when using `qgisstyle` built alongside QGIS (on windows),
+# convert path to options file
+if [ $ASTYLE != "astyle" ] ; then
+	if type -p cygpath >/dev/null; then
+		ASTYLEOPTS="$(cygpath -w "$ASTYLEOPTS")"
+	fi
 
-if type -p wslpath >/dev/null; then
-	ASTYLEOPTS="$(wslpath -a -w "$ASTYLEOPTS")"
+	if type -p wslpath >/dev/null; then
+		ASTYLEOPTS="$(wslpath -a -w "$ASTYLEOPTS")"
+	fi
 fi
 
 set -e
@@ -98,14 +102,14 @@ astyleit() {
         modified=$1.unify_includes_modified
 	cp "$1" "$modified"
 	perl -i.sortinc -n scripts/unify_includes.pl "$modified"
-	scripts/doxygen_space.pl "$modified"
+	scripts/doxygen_space.py "$modified"
 	diff "$1" "$modified" >/dev/null || mv "$modified" "$1"
 	rm -f "$modified"
 }
 
 for f in "$@"; do
 	case "$f" in
-                src/plugins/grass/qtermwidget/*|external/libdxfrw/*|external/untwine/*|external/qwt*|external/o2/*|external/odbccpp/*|external/qt-unix-signals/*|external/rtree/*|external/astyle/*|external/kdbush/*|external/poly2tri/*|external/wintoast/*|external/qt3dextra-headers/*|external/laz-perf/*|external/meshOptimizer/*|external/mapbox-vector-tile/*|python/ext-libs/*|ui_*.py|*.astyle|tests/testdata/*|editors/*)
+                external/libdxfrw/*|external/untwine/*|external/qwt*|external/o2/*|external/odbccpp/*|external/qt-unix-signals/*|external/rtree/*|external/astyle/*|external/kdbush/*|external/PDF4QT/*|external/poly2tri/*|external/wintoast/*|external/qt3dextra-headers/*|external/lazperf/*|external/meshOptimizer/*|external/mapbox-vector-tile/*|external/pdal_wrench/*|external/tinygltf/*|python/ext-libs/*|ui_*.py|*.astyle|src/core/providers/gdal/gdal_minmax_element.hpp|src/core/providers/gdal/gdal_priv_templates.hpp|tests/testdata/*|editors/*)
 			echo -ne "$f skipped $elcr"
 			continue
 			;;
@@ -117,7 +121,7 @@ for f in "$@"; do
 			cmd=astyleit
 			;;
 
-		*.ui|*.qgm|*.txt|resources/context_help/*)
+		*.ui|*.qgm|*.txt)
 			cmd=:
 			;;
 

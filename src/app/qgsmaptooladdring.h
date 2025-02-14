@@ -13,15 +13,26 @@
  *                                                                         *
  ***************************************************************************/
 
+#ifndef QGSMAPTOOLADDRING_H
+#define QGSMAPTOOLADDRING_H
+
 #include "qgsmaptoolcapture.h"
 #include "qgis_app.h"
 
 //! A tool to cut holes into polygons and multipolygon features
-class APP_EXPORT QgsMapToolAddRing: public QgsMapToolCapture
+class APP_EXPORT QgsMapToolAddRing : public QgsMapToolCapture
 {
     Q_OBJECT
   public:
     QgsMapToolAddRing( QgsMapCanvas *canvas );
-    bool supportsTechnique( CaptureTechnique technique ) const override;
+    QgsMapToolCapture::Capabilities capabilities() const override;
+    bool supportsTechnique( Qgis::CaptureTechnique technique ) const override;
     void cadCanvasReleaseEvent( QgsMapMouseEvent *e ) override;
+
+    // QgsMapToolCapture interface
+  private:
+    QgsVectorLayer *getCheckLayer();
+    void polygonCaptured( const QgsCurvePolygon *polygon ) override;
 };
+
+#endif // QGSMAPTOOLADDRING_H

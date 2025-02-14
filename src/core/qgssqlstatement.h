@@ -30,7 +30,6 @@
 /**
  * \ingroup core
  * \brief Class for parsing SQL statements.
- * \since QGIS 2.16
  */
 class CORE_EXPORT QgsSQLStatement
 {
@@ -42,14 +41,8 @@ class CORE_EXPORT QgsSQLStatement
      */
     QgsSQLStatement( const QString &statement );
 
-    /**
-     * Create a copy of this statement.
-     */
     QgsSQLStatement( const QgsSQLStatement &other );
 
-    /**
-     * Create a copy of this statement.
-     */
     QgsSQLStatement &operator=( const QgsSQLStatement &other );
     virtual ~QgsSQLStatement();
 
@@ -90,14 +83,16 @@ class CORE_EXPORT QgsSQLStatement
 
     /**
      * Returns a quoted column reference (in double quotes)
-     * \see quotedString(), quotedIdentifierIfNeeded()
+     * \see quotedString()
+     * \see quotedIdentifierIfNeeded()
      */
     static QString quotedIdentifier( QString name );
 
     /**
      * Returns a quoted column reference (in double quotes) if needed, or
      * otherwise the original string.
-     * \see quotedString(), quotedIdentifier()
+     * \see quotedString()
+     * \see quotedIdentifier()
      */
     static QString quotedIdentifierIfNeeded( const QString &name );
 
@@ -115,7 +110,8 @@ class CORE_EXPORT QgsSQLStatement
 
     /**
      * Returns a quoted version of a string (in single quotes)
-     * \see quotedIdentifier(), quotedIdentifierIfNeeded()
+     * \see quotedIdentifier()
+     * \see quotedIdentifierIfNeeded()
      */
     static QString quotedString( QString text );
 
@@ -274,13 +270,13 @@ class CORE_EXPORT QgsSQLStatement
          *
          * For any implementation this should look like
          *
-         * C++:
+         * \code{.cpp}
+         *   v.visit( *this );
+         * \endcode
          *
-         *     v.visit( *this );
-         *
-         * Python:
-         *
-         *     v.visit( self)
+         * \code{py}
+         *   v.visit(self)
+         * \endcode
          *
          * \param v A visitor that visits this node.
          */
@@ -294,7 +290,7 @@ class CORE_EXPORT QgsSQLStatement
     class CORE_EXPORT NodeList
     {
       public:
-        //! Constructor
+
         NodeList() = default;
         virtual ~NodeList() { qDeleteAll( mList ); }
 
@@ -629,8 +625,21 @@ class CORE_EXPORT QgsSQLStatement
         //! Constructor with table name and alias
         NodeTableDef( const QString &name, const QString &alias ) : mName( name ), mAlias( alias ) {}
 
+        /**
+         * Constructor with schema, table name and alias
+         * \since QGIS 3.28
+         */
+        NodeTableDef( const QString &schema, const QString &name, const QString &alias ) : mName( name ), mSchema( schema ), mAlias( alias ) {}
+
         //! Table name
         QString name() const { return mName; }
+
+        /**
+         * Returns the schema name.
+         *
+         * \since QGIS 3.28
+         */
+        QString schema() const { return mSchema; }
 
         //! Table alias
         QString alias() const { return mAlias; }
@@ -645,6 +654,7 @@ class CORE_EXPORT QgsSQLStatement
 
       protected:
         QString mName;
+        QString mSchema;
         QString mAlias;
     };
 
@@ -812,7 +822,7 @@ class CORE_EXPORT QgsSQLStatement
     class CORE_EXPORT RecursiveVisitor: public QgsSQLStatement::Visitor
     {
       public:
-        //! Constructor
+
         RecursiveVisitor() = default;
 
         void visit( const QgsSQLStatement::NodeUnaryOperator &n ) override { n.operand()->accept( *this ); }

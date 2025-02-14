@@ -27,7 +27,11 @@
 class QgsVectorLayer;
 class QgsVectorLayerJoinInfo;
 
-class GUI_EXPORT QgsJoinDialog: public QDialog, private Ui::QgsJoinDialogBase
+/**
+ * \ingroup gui
+ * \class QgsJoinDialog
+ */
+class GUI_EXPORT QgsJoinDialog : public QDialog, private Ui::QgsJoinDialogBase
 {
     Q_OBJECT
   public:

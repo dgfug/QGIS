@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgssymbol3dwidget.h"
+#include "moc_qgssymbol3dwidget.cpp"
 #include "qgsabstractmaterialsettings.h"
 #include "qgsstyleitemslistwidget.h"
 #include "qgsstylesavedialog.h"
@@ -22,6 +23,8 @@
 #include "qgs3dsymbolregistry.h"
 #include "qgs3dsymbolwidget.h"
 #include "qgsabstract3dsymbol.h"
+#include "qgsproject.h"
+#include "qgsprojectstylesettings.h"
 #include <QStackedWidget>
 #include <QMessageBox>
 
@@ -44,7 +47,7 @@ QgsSymbol3DWidget::QgsSymbol3DWidget( QgsVectorLayer *layer, QWidget *parent )
   mStyleWidget->setEntityType( QgsStyle::Symbol3DEntity );
   mStyleWidget->setLayerType( mLayer->geometryType() );
 
-  connect( mStyleWidget, &QgsStyleItemsListWidget::selectionChanged, this, &QgsSymbol3DWidget::setSymbolFromStyle );
+  connect( mStyleWidget, &QgsStyleItemsListWidget::selectionChangedWithStylePath, this, &QgsSymbol3DWidget::setSymbolFromStyle );
   connect( mStyleWidget, &QgsStyleItemsListWidget::saveEntity, this, &QgsSymbol3DWidget::saveSymbol );
 
   layout->addWidget( mStyleWidget, 1 );
@@ -52,9 +55,9 @@ QgsSymbol3DWidget::QgsSymbol3DWidget( QgsVectorLayer *layer, QWidget *parent )
 
 std::unique_ptr<QgsAbstract3DSymbol> QgsSymbol3DWidget::symbol()
 {
-  if ( Qgs3DSymbolWidget *w = qobject_cast< Qgs3DSymbolWidget * >( widgetStack->currentWidget() ) )
+  if ( Qgs3DSymbolWidget *w = qobject_cast<Qgs3DSymbolWidget *>( widgetStack->currentWidget() ) )
   {
-    return std::unique_ptr< QgsAbstract3DSymbol >( w->symbol() );
+    return std::unique_ptr<QgsAbstract3DSymbol>( w->symbol() );
   }
   return nullptr;
 }
@@ -64,7 +67,7 @@ void QgsSymbol3DWidget::setSymbol( const QgsAbstract3DSymbol *symbol, QgsVectorL
   mLayer = vlayer;
   mStyleWidget->setLayerType( mLayer->geometryType() );
 
-  if ( Qgs3DSymbolWidget *w = qobject_cast< Qgs3DSymbolWidget * >( widgetStack->currentWidget() ) )
+  if ( Qgs3DSymbolWidget *w = qobject_cast<Qgs3DSymbolWidget *>( widgetStack->currentWidget() ) )
   {
     if ( w->symbolType() == symbol->type() )
     {
@@ -77,10 +80,19 @@ void QgsSymbol3DWidget::setSymbol( const QgsAbstract3DSymbol *symbol, QgsVectorL
   updateSymbolWidget( symbol );
 }
 
-void QgsSymbol3DWidget::setSymbolFromStyle( const QString &name )
+void QgsSymbol3DWidget::setSymbolFromStyle( const QString &name, QgsStyle::StyleEntity, const QString &stylePath )
 {
+  if ( name.isEmpty() )
+    return;
+
+  QgsStyle *style = nullptr;
+  style = QgsProject::instance()->styleSettings()->styleAtPath( stylePath );
+
+  if ( !style )
+    style = QgsStyle::defaultStyle();
+
   // get new instance of symbol from style
-  const std::unique_ptr< QgsAbstract3DSymbol > s( QgsStyle::defaultStyle()->symbol3D( name ) );
+  const std::unique_ptr<QgsAbstract3DSymbol> s( style->symbol3D( name ) );
   if ( !s )
     return;
 
@@ -97,30 +109,29 @@ void QgsSymbol3DWidget::saveSymbol()
   if ( saveDlg.name().isEmpty() )
     return;
 
-  std::unique_ptr< QgsAbstract3DSymbol > newSymbol( symbol() );
+  QgsStyle *destinationStyle = saveDlg.destinationStyle();
+
+  std::unique_ptr<QgsAbstract3DSymbol> newSymbol( symbol() );
 
   // check if there is no symbol with same name
-  if ( QgsStyle::defaultStyle()->symbol3DNames().contains( saveDlg.name() ) )
+  if ( destinationStyle->symbol3DNames().contains( saveDlg.name() ) )
   {
-    const int res = QMessageBox::warning( this, tr( "Save 3D Symbol" ),
-                                          tr( "A 3D symbol with the name '%1' already exists. Overwrite?" )
-                                          .arg( saveDlg.name() ),
-                                          QMessageBox::Yes | QMessageBox::No );
+    const int res = QMessageBox::warning( this, tr( "Save 3D Symbol" ), tr( "A 3D symbol with the name '%1' already exists. Overwrite?" ).arg( saveDlg.name() ), QMessageBox::Yes | QMessageBox::No );
     if ( res != QMessageBox::Yes )
     {
       return;
     }
-    QgsStyle::defaultStyle()->removeEntityByName( QgsStyle::Symbol3DEntity, saveDlg.name() );
+    destinationStyle->removeEntityByName( QgsStyle::Symbol3DEntity, saveDlg.name() );
   }
 
   const QStringList symbolTags = saveDlg.tags().split( ',' );
 
   // add new symbol to style and re-populate the list
   QgsAbstract3DSymbol *s = newSymbol.get();
-  QgsStyle::defaultStyle()->addSymbol3D( saveDlg.name(), newSymbol.release() );
+  destinationStyle->addSymbol3D( saveDlg.name(), newSymbol.release() );
 
   // make sure the symbol is stored
-  QgsStyle::defaultStyle()->saveSymbol3D( saveDlg.name(), s, saveDlg.isFavorite(), symbolTags );
+  destinationStyle->saveSymbol3D( saveDlg.name(), s, saveDlg.isFavorite(), symbolTags );
 }
 
 void QgsSymbol3DWidget::updateSymbolWidget( const QgsAbstract3DSymbol *newSymbol )
@@ -128,7 +139,7 @@ void QgsSymbol3DWidget::updateSymbolWidget( const QgsAbstract3DSymbol *newSymbol
   if ( widgetStack->currentWidget() != widgetUnsupported )
   {
     // stop updating from the original widget
-    if ( Qgs3DSymbolWidget *w = qobject_cast< Qgs3DSymbolWidget * >( widgetStack->currentWidget() ) )
+    if ( Qgs3DSymbolWidget *w = qobject_cast<Qgs3DSymbolWidget *>( widgetStack->currentWidget() ) )
       disconnect( w, &Qgs3DSymbolWidget::changed, this, &QgsSymbol3DWidget::widgetChanged );
     widgetStack->removeWidget( widgetStack->currentWidget() );
   }

@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/geometry/qgslinestring.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -17,8 +17,6 @@ class QgsLineString: QgsCurve
 {
 %Docstring(signature="appended")
 Line string geometry type, with support for z-dimension and m-values.
-
-.. versionadded:: 2.10
 %End
 
 %TypeHeaderCode
@@ -188,7 +186,7 @@ The linestring Z and M type will be set based on the type of the first point in 
                 ml.append( p->m() );
               }
 
-              if ( i == 0 && p->wkbType() == QgsWkbTypes::Point25D )
+              if ( i == 0 && p->wkbType() == Qgis::WkbType::Point25D )
                 is25D = true;
             }
             sipReleaseType( p, sipType_QgsPoint, state );
@@ -238,8 +236,6 @@ LineString will be LineStringZ (or LineStringZM) type.
 
 If the sizes of ``x`` and ``y`` are non-equal then the resultant linestring
 will be created using the minimum size of these arrays.
-
-.. versionadded:: 3.0
 %End
 
     QgsLineString( const QgsPoint &p1, const QgsPoint &p2 ) /HoldGIL/;
@@ -249,7 +245,7 @@ Constructs a linestring with a single segment from ``p1`` to ``p2``.
 .. versionadded:: 3.2
 %End
 
-    static QgsLineString *fromBezierCurve( const QgsPoint &start, const QgsPoint &controlPoint1, const QgsPoint &controlPoint2, const QgsPoint &end, int segments = 30 ) /Factory/;
+    static std::unique_ptr< QgsLineString > fromBezierCurve( const QgsPoint &start, const QgsPoint &controlPoint1, const QgsPoint &controlPoint2, const QgsPoint &end, int segments = 30 );
 %Docstring
 Returns a new linestring created by segmentizing the bezier curve between ``start`` and ``end``, with
 the specified control points.
@@ -261,12 +257,17 @@ Any z or m values present in the input coordinates will be interpolated along wi
 .. versionadded:: 3.10
 %End
 
-    static QgsLineString *fromQPolygonF( const QPolygonF &polygon ) /Factory/;
+    static std::unique_ptr< QgsLineString > fromQPolygonF( const QPolygonF &polygon );
 %Docstring
 Returns a new linestring from a QPolygonF ``polygon`` input.
 
 .. versionadded:: 3.10
 %End
+
+  public:
+    virtual bool fuzzyEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const /HoldGIL/;
+
+    virtual bool fuzzyDistanceEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const /HoldGIL/;
 
     virtual bool equals( const QgsCurve &other ) const;
 
@@ -358,11 +359,17 @@ corresponds to the last point in the line.
 
 
 
-    double zAt( int index ) const;
+
+
+
+
+
+    virtual double zAt( int index ) const;
+
 %Docstring
 Returns the z-coordinate of the specified node in the line string.
 
-If the LineString does not have a z-dimension then ``nan`` will be returned.
+If the LineString does not have a z-dimension then ``NaN`` will be returned.
 
 Indexes can be less than 0, in which case they correspond to positions from the end of the line. E.g. an index of -1
 corresponds to the last point in the line.
@@ -386,11 +393,12 @@ corresponds to the last point in the line.
 %End
 
 
-    double mAt( int index ) const;
+    virtual double mAt( int index ) const;
+
 %Docstring
 Returns the m-coordinate of the specified node in the line string.
 
-If the LineString does not have a m-dimension then ``nan`` will be returned.
+If the LineString does not have a m-dimension then ``NaN`` will be returned.
 
 Indexes can be less than 0, in which case they correspond to positions from the end of the line. E.g. an index of -1
 corresponds to the last point in the line.
@@ -529,6 +537,7 @@ corresponds to the last point in the line.
     }
 %End
 
+
     void setPoints( const QgsPointSequence &points );
 %Docstring
 Resets the line string to match the specified list of points. The line string will
@@ -569,8 +578,6 @@ Returns the geometry converted to the more generic curve type :py:class:`QgsComp
 Extends the line geometry by extrapolating out the start or end of the line
 by a specified distance. Lines are extended using the bearing of the first or last
 segment in the line.
-
-.. versionadded:: 3.0
 %End
 
 
@@ -587,7 +594,7 @@ segment in the line.
     int indexOf( const QgsPoint &point ) const final;
     virtual bool isValid( QString &error /Out/, Qgis::GeometryValidityFlags flags = Qgis::GeometryValidityFlags() ) const;
 
-    virtual QgsLineString *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0 ) const /Factory/;
+    virtual QgsLineString *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0, bool removeRedundantPoints = false ) const /Factory/;
 
     virtual bool removeDuplicateNodes( double epsilon = 4 * DBL_EPSILON, bool useZValues = false );
 
@@ -596,6 +603,8 @@ segment in the line.
     virtual bool isClosed2D() const /HoldGIL/;
 
     virtual bool boundingBoxIntersects( const QgsRectangle &rectangle ) const /HoldGIL/;
+
+    virtual bool boundingBoxIntersects( const QgsBox3D &box3d ) const /HoldGIL/;
 
 
     QVector< QgsVertexId > collectDuplicateNodes( double epsilon = 4 * DBL_EPSILON, bool useZValues = false ) const;
@@ -609,6 +618,8 @@ If ``useZValues`` is ``True`` then z values will also be considered when testing
 
     virtual QPolygonF asQPolygonF() const;
 
+
+    virtual QgsLineString *simplifyByDistance( double tolerance ) const /Factory/;
 
     virtual bool fromWkb( QgsConstWkbPtr &wkb );
 
@@ -631,6 +642,17 @@ If ``useZValues`` is ``True`` then z values will also be considered when testing
     virtual double length() const /HoldGIL/;
 
 
+
+    QVector<QgsLineString *> splitToDisjointXYParts() const /Factory/;
+%Docstring
+Divides the linestring into parts that don't share any points or lines.
+
+This method throws away Z and M coordinates.
+
+The ownership of returned pointers is transferred to the caller.
+
+.. versionadded:: 3.40
+%End
 
     double length3D() const /HoldGIL/;
 %Docstring
@@ -700,6 +722,16 @@ of the curve.
 
     virtual void sumUpArea( double &sum /Out/ ) const;
 
+%Docstring
+Calculates the shoelace/triangle formula sum for the points in the linestring.
+If the linestring is closed (i.e. a polygon) then the polygon area is equal to the absolute value of the sum.
+Please note that the sum will be negative if the points are defined in clockwise order.
+Therefore, if you want to use the sum as an area (as the method name indicates) then you probably should use the absolute value,
+since otherwise a bug can be introduced (such as the bug fixed for github issue 49578)
+
+.. seealso:: https://en.wikipedia.org/wiki/Shoelace_formula#Triangle_formula
+%End
+
     virtual double vertexAngle( QgsVertexId vertex ) const;
 
     virtual double segmentLength( QgsVertexId startVertex ) const;
@@ -716,7 +748,7 @@ of the curve.
     virtual void swapXy();
 
 
-    virtual bool convertTo( QgsWkbTypes::Type type );
+    virtual bool convertTo( Qgis::WkbType type );
 
 
     virtual bool transform( QgsAbstractGeometryTransformer *transformer, QgsFeedback *feedback = 0 );
@@ -822,11 +854,82 @@ corresponds to the last point in the line.
 %End
 
 
+ QgsBox3D calculateBoundingBox3d() const /Deprecated="Since 3.34. use calculateBoundingBox3D() instead"/;
+%Docstring
+Calculates the minimal 3D bounding box for the geometry.
+
+.. seealso:: :py:func:`calculateBoundingBox`
+
+.. versionadded:: 3.26
+
+.. deprecated:: 3.34
+
+   use :py:func:`~QgsLineString.calculateBoundingBox3D` instead
+%End
+
+    virtual QgsBox3D calculateBoundingBox3D() const;
+
+%Docstring
+Calculates the minimal 3D bounding box for the geometry.
+
+.. seealso:: :py:func:`calculateBoundingBox`
+
+.. versionadded:: 3.34
+%End
+
+    std::unique_ptr< QgsLineString > measuredLine( double start, double end ) const;
+%Docstring
+Re-write the measure ordinate (or add one, if it isn't already there) interpolating
+the measure between the supplied ``start`` and ``end`` values.
+
+.. versionadded:: 3.36
+%End
+
+    std::unique_ptr< QgsLineString > interpolateM( bool use3DDistance = true ) const;
+%Docstring
+Returns a copy of this line with all missing (NaN) m values interpolated
+from m values of surrounding vertices.
+
+If the line does not contain m values, ``None`` is returned.
+
+The ``use3DDistance`` controls whether 2D or 3D distances between vertices
+should be used during interpolation. This option is only considered for lines
+with z values.
+
+.. seealso:: :py:func:`lineLocatePointByM`
+
+.. versionadded:: 3.38
+%End
+
+    bool lineLocatePointByM( double m, double &x /Out/, double &y /Out/, double &z /Out/, double &distanceFromStart /Out/, bool use3DDistance = true ) const;
+%Docstring
+Attempts to locate a point on the linestring by m value.
+
+This method will linearly interpolate along line segments to find the point which corresponds to the specified m value.
+
+If the linestring contains sections with constant m values matching ``m``, then the interpolated point will be located
+at the center of these sections.
+
+Any missing (NaN) values in the linestring will be linearly interpolated from the
+m values of surrounding vertices (see :py:func:`~QgsLineString.interpolateM`).
+
+:param m: target m value
+:param use3DDistance: controls whether 2D or 3D distances between vertices should be used during interpolation. This option is only considered for lines with z values.
+
+:return: - ``True`` if a matching point was found, or ``False`` if it could not be found
+         - x: interpolated x coordinate
+         - y: interpolated y coordinate
+         - z: interpolated z coordinate (for 3D lines only)
+         - distanceFromStart: calculated distance from the start of the linestring to the located point
+
+.. seealso:: :py:func:`interpolateM`
+
+.. versionadded:: 3.40
+%End
+
   protected:
 
     int compareToSameClass( const QgsAbstractGeometry *other ) const final;
-    virtual QgsRectangle calculateBoundingBox() const;
-
 
 };
 
@@ -836,5 +939,5 @@ corresponds to the last point in the line.
  *                                                                      *
  * src/core/geometry/qgslinestring.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

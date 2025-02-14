@@ -21,7 +21,6 @@
 #include "qgis_core.h"
 #include "qgis_sip.h"
 #include "qgscolorramp.h"
-#include "qgscolorrampshader.h"
 #include "qgsrasterrenderer.h"
 #include "qgsrectangle.h"
 
@@ -46,7 +45,7 @@ class CORE_EXPORT QgsSingleBandPseudoColorRenderer: public QgsRasterRenderer
     const QgsSingleBandPseudoColorRenderer &operator=( const QgsSingleBandPseudoColorRenderer & ) = delete;
 
     QgsSingleBandPseudoColorRenderer *clone() const override SIP_FACTORY;
-
+    Qgis::RasterRendererFlags flags() const override;
     static QgsRasterRenderer *create( const QDomElement &elem, QgsRasterInterface *input ) SIP_FACTORY;
 
     QgsRasterBlock *block( int bandNo, const QgsRectangle &extent, int width, int height, QgsRasterBlockFeedback *feedback = nullptr ) override SIP_FACTORY;
@@ -60,6 +59,8 @@ class CORE_EXPORT QgsSingleBandPseudoColorRenderer: public QgsRasterRenderer
     //! \note available in Python as constShader
     const QgsRasterShader *shader() const SIP_PYNAME( constShader ) { return mShader.get(); }
 
+    bool canCreateRasterAttributeTable( ) const override;
+
     /**
      * Creates a color ramp shader
      * \param colorRamp vector color ramp. Ownership is transferred to the shader.
@@ -70,8 +71,8 @@ class CORE_EXPORT QgsSingleBandPseudoColorRenderer: public QgsRasterRenderer
      * \param extent extent used in classification (only used in quantile mode)
      */
     void createShader( QgsColorRamp *colorRamp SIP_TRANSFER = nullptr,
-                       QgsColorRampShader::Type colorRampType  = QgsColorRampShader::Interpolated,
-                       QgsColorRampShader::ClassificationMode classificationMode = QgsColorRampShader::Continuous,
+                       Qgis::ShaderInterpolationMethod colorRampType = Qgis::ShaderInterpolationMethod::Linear,
+                       Qgis::ShaderClassificationMethod classificationMode = Qgis::ShaderClassificationMethod::Continuous,
                        int classes = 0,
                        bool clip = false,
                        const QgsRectangle &extent = QgsRectangle() );
@@ -85,21 +86,38 @@ class CORE_EXPORT QgsSingleBandPseudoColorRenderer: public QgsRasterRenderer
 
     /**
      * Returns the band used by the renderer
-     * \since QGIS 2.7
+     *
+     * \deprecated QGIS 3.38. Use inputBand() instead.
      */
-    int band() const { return mBand; }
+    Q_DECL_DEPRECATED int band() const SIP_DEPRECATED { return mBand; }
 
     /**
      * Sets the band used by the renderer.
      * \see band
-     * \since QGIS 2.10
+     *
+     * \deprecated QGIS 3.38. Use setInputBand() instead.
      */
-    void setBand( int bandNo );
+    Q_DECL_DEPRECATED void setBand( int bandNo ) SIP_DEPRECATED;
+
+    int inputBand() const override;
+    bool setInputBand( int band ) override;
 
     double classificationMin() const { return mClassificationMin; }
     double classificationMax() const { return mClassificationMax; }
     void setClassificationMin( double min );
     void setClassificationMax( double max );
+
+    /**
+     * \brief Refreshes the renderer according to the \a min and \a max values associated with the \a extent.
+     * If \a min or \a max size is greater than 1, the last values are ignored.
+     * NaN values are ignored.
+     * If \a forceRefresh is TRUE, this will force the refresh even if needsRefresh() returns FALSE.
+     * \returns TRUE if the renderer has been refreshed
+     * \note not available in Python bindings
+     *
+     * \since QGIS 3.42
+     */
+    bool refresh( const QgsRectangle &extent, const QList<double> &min, const QList<double> &max, bool forceRefresh = false ) override SIP_SKIP;
 
   private:
 #ifdef SIP_RUN

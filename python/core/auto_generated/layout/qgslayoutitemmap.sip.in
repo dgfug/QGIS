@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layout/qgslayoutitemmap.h                                   *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -289,8 +289,6 @@ class QgsLayoutItemMap : QgsLayoutItem, QgsTemporalRangeObject
 {
 %Docstring(signature="appended")
 Layout graphical items for displaying a map.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -363,7 +361,13 @@ The caller takes responsibility for deleting the returned object.
 
     virtual void paint( QPainter *painter, const QStyleOptionGraphicsItem *itemStyle, QWidget *pWidget );
 
- virtual int numberExportLayers() const /Deprecated/;
+
+ virtual int numberExportLayers() const /Deprecated="Since 3.10. "/;
+
+%Docstring
+
+.. deprecated:: 3.10
+%End
 
     virtual void startLayeredExport();
 
@@ -927,6 +931,63 @@ Returns the map's item based clip path settings.
 .. versionadded:: 3.16
 %End
 
+    void setZRangeEnabled( bool enabled );
+%Docstring
+Sets whether the z range is ``enabled`` (i.e. whether the map will be filtered
+to content within the :py:func:`~QgsLayoutItemMap.zRange`.)
+
+.. seealso:: :py:func:`zRangeEnabled`
+
+.. versionadded:: 3.38
+%End
+
+    bool zRangeEnabled() const;
+%Docstring
+Returns whether the z range is enabled (i.e. whether the map will be filtered
+to content within the :py:func:`~QgsLayoutItemMap.zRange`.)
+
+.. seealso:: :py:func:`setZRangeEnabled`
+
+.. seealso:: :py:func:`zRange`
+
+.. versionadded:: 3.38
+%End
+
+    QgsDoubleRange zRange() const;
+%Docstring
+Returns the map's z range, which is used to filter the map's content to only
+display features within the specified z range.
+
+.. note::
+
+   This is only considered when :py:func:`~QgsLayoutItemMap.zRangeEnabled` is ``True``.
+
+.. seealso:: :py:func:`setZRange`
+
+.. seealso:: :py:func:`zRangeEnabled`
+
+.. versionadded:: 3.38
+%End
+
+    void setZRange( const QgsDoubleRange &range );
+%Docstring
+Sets the map's z ``range``, which is used to filter the map's content to only
+display features within the specified z range.
+
+.. note::
+
+   This is only considered when :py:func:`~QgsLayoutItemMap.zRangeEnabled` is ``True``.
+
+.. seealso:: :py:func:`zRange`
+
+.. seealso:: :py:func:`setZRangeEnabled`
+
+.. versionadded:: 3.38
+%End
+
+    virtual double estimatedFrameBleed() const;
+
+
   protected:
 
     virtual void draw( QgsLayoutItemRenderContext &context );
@@ -1031,7 +1092,7 @@ Emitted whenever the item's map preview has been refreshed.
 Updates the bounding rect of this item. Call this function before doing any changes related to annotation out of the map rectangle
 %End
 
-    virtual void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::AllProperties );
+    virtual void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::DataDefinedProperty::AllProperties );
 
 
 };
@@ -1044,5 +1105,5 @@ QFlags<QgsLayoutItemMap::MapItemFlag> operator|(QgsLayoutItemMap::MapItemFlag f1
  *                                                                      *
  * src/core/layout/qgslayoutitemmap.h                                   *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

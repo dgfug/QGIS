@@ -37,16 +37,22 @@ class QgsRectangle;
 namespace QgsWms
 {
   //! Supported image output format
-  enum ImageOutputFormat
+  enum class ImageOutputFormat
   {
-    UNKN,
-    PNG,
-    PNG8,
-    PNG16,
-    PNG1,
-    JPEG,
-    WEBP
+    Unknown, //!< Unknown/invalid format
+    PNG,     //!< PNG format
+    PNG8,    //!< PNG8 format
+    PNG16,   //!< PNG16 format
+    PNG1,    //!< PNG1 format
+    JPEG,    //!< JPEG format
+    WEBP,    //!< WEBP format
   };
+
+  /**
+   * Returns the highest version supported by this implementation
+   * \since QGIS 3.22.12
+   */
+  QString implementationVersion();
 
   /**
    * Returns WMS service URL
@@ -62,10 +68,7 @@ namespace QgsWms
   /**
    * Write image response
    */
-  void writeImage( QgsServerResponse &response, QImage &img, const QString &formatStr,
-                   int imageQuality = -1 );
+  void writeImage( QgsServerResponse &response, QImage &img, const QString &formatStr, int imageQuality = -1 );
 } // namespace QgsWms
 
 #endif
-
-

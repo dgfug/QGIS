@@ -3,7 +3,7 @@
  *                                                                      *
  * src/server/qgsserverparameters.h                                     *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -21,14 +21,25 @@ Definition of a parameter with basic conversion methods
 #include "qgsserverparameters.h"
 %End
   public:
-
-    QgsServerParameterDefinition( const QVariant::Type type = QVariant::String,
-                                  const QVariant defaultValue = QVariant( "" ) );
+    QgsServerParameterDefinition( const QMetaType::Type type = QMetaType::Type::QString, const QVariant defaultValue = QVariant( "" ) );
 %Docstring
 Constructor for QgsServerParameterDefinition.
 
 :param type: The type of the parameter
 :param defaultValue: The default value of the parameter
+%End
+
+
+ QgsServerParameterDefinition( const QVariant::Type type, const QVariant defaultValue = QVariant( "" ) ) /Deprecated="Since 3.38. Use the method with a QMetaType.Type argument instead."/;
+%Docstring
+Constructor for QgsServerParameterDefinition.
+
+:param type: The type of the parameter
+:param defaultValue: The default value of the parameter
+
+.. deprecated:: 3.38
+
+   Use the method with a QMetaType.Type argument instead.
 %End
 
     virtual ~QgsServerParameterDefinition();
@@ -59,44 +70,66 @@ Converts the parameter into a list of strings
 :return: A list of strings
 %End
 
-    QList<int> toIntList( bool &ok, char delimiter = ',' ) const;
+    QList<int> toIntList( bool &ok, char delimiter = ',', bool skipEmptyParts = true ) const;
 %Docstring
 Converts the parameter into a list of integers.
 
 :param ok: ``True`` if there's no error during the conversion, ``False`` otherwise
 :param delimiter: The character used for delimiting
+:param skipEmptyParts: for splitting
 
 :return: A list of integers
 %End
 
-    QList<double> toDoubleList( bool &ok, char delimiter = ',' ) const;
+    QList<double> toDoubleList( bool &ok, char delimiter = ',', bool skipEmptyParts = true ) const;
 %Docstring
 Converts the parameter into a list of doubles.
 
 :param ok: ``True`` if there's no error during the conversion, ``False`` otherwise
 :param delimiter: The character used for delimiting
+:param skipEmptyParts: for splitting
 
 :return: A list of doubles
 %End
 
-    QList<QColor> toColorList( bool &ok, char delimiter = ',' ) const;
+    QList<QColor> toColorList( bool &ok, char delimiter = ',', bool skipEmptyParts = true ) const;
 %Docstring
 Converts the parameter into a list of colors.
 
 :param ok: ``True`` if there's no error during the conversion, ``False`` otherwise
 :param delimiter: The character used for delimiting
+:param skipEmptyParts: for splitting
 
 :return: A list of colors
 %End
 
-    QList<QgsGeometry> toGeomList( bool &ok, char delimiter = ',' ) const;
+    QList<QgsGeometry> toGeomList( bool &ok, char delimiter = ',', bool skipEmptyParts = true ) const;
 %Docstring
 Converts the parameter into a list of geometries.
 
 :param ok: ``True`` if there's no error during the conversion, ``False`` otherwise
 :param delimiter: The character used for delimiting
+:param skipEmptyParts: for splitting
 
 :return: A list of geometries
+%End
+
+    QStringList toOgcFilterList() const;
+%Docstring
+Converts the parameter into a list of OGC filters.
+
+:return: A list of strings
+
+.. versionadded:: 3.24
+%End
+
+    QStringList toExpressionList() const;
+%Docstring
+Converts the parameter into a list of QGIS expressions.
+
+:return: A list of strings
+
+.. versionadded:: 3.24
 %End
 
     QgsRectangle toRectangle( bool &ok ) const;
@@ -173,7 +206,7 @@ Raises an exception in case of an invalid parameters.
 :raises QgsBadRequestException: Invalid parameter exception
 %End
 
-    QVariant::Type mType;
+    QMetaType::Type mType;
     QVariant mValue;
     QVariant mDefaultValue;
 };
@@ -203,15 +236,26 @@ Parameter common to all services (WMS, WFS, ...)
       FILE_NAME
     };
 
-    QgsServerParameter( const QgsServerParameter::Name name = QgsServerParameter::UNKNOWN,
-                        const QVariant::Type type = QVariant::String,
-                        const QVariant defaultValue = QVariant( "" ) );
+    QgsServerParameter( const QgsServerParameter::Name name = QgsServerParameter::UNKNOWN, const QMetaType::Type type = QMetaType::Type::QString, const QVariant defaultValue = QVariant( "" ) );
 %Docstring
 Constructor for QgsServerParameter.
 
 :param name: The name of the parameter
 :param type: The type of the parameter
 :param defaultValue: The default value to use if not defined
+%End
+
+ QgsServerParameter( const QgsServerParameter::Name name, const QVariant::Type type, const QVariant defaultValue = QVariant( "" ) ) /Deprecated="Since 3.38. Use the method with a QMetaType.Type argument instead."/;
+%Docstring
+Constructor for QgsServerParameter.
+
+:param name: The name of the parameter
+:param type: The type of the parameter
+:param defaultValue: The default value to use if not defined
+
+.. deprecated:: 3.38
+
+   Use the method with a QMetaType.Type argument instead.
 %End
 
     void raiseError() const;
@@ -250,7 +294,6 @@ class QgsServerParameters
     static const QMetaObject staticMetaObject;
 
   public:
-
     QgsServerParameters();
 %Docstring
 Constructor.
@@ -357,7 +400,6 @@ defined.
 %End
 
   protected:
-
     virtual bool loadParameter( const QString &name, const QString &value );
 %Docstring
 Loads a parameter with a specific value. This method should be
@@ -372,5 +414,5 @@ implemented in subclasses.
  *                                                                      *
  * src/server/qgsserverparameters.h                                     *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

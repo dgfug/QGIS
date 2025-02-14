@@ -42,6 +42,7 @@
 
 #include "qgis_core.h"
 #include "qgsrectangle.h"
+#include "qgsgeos.h"
 
 namespace pal
 {
@@ -57,13 +58,13 @@ namespace pal
    */
   struct OrientedConvexHullBoundingBox
   {
-    double x[4];
-    double y[4];
+    double x[4] = {0, 0, 0, 0};
+    double y[4] = {0, 0, 0, 0};
 
-    double alpha;
+    double alpha = 0;
 
-    double width;
-    double length;
+    double width = 0;
+    double length = 0;
   };
 
   /**
@@ -117,7 +118,7 @@ namespace pal
       /**
        * Computes an oriented bounding box for the shape's convex hull.
        */
-      OrientedConvexHullBoundingBox computeConvexHullOrientedBoundingBox( bool &ok );
+      OrientedConvexHullBoundingBox computeConvexHullOrientedBoundingBox( bool &ok ) const;
 
       /**
        * Split a polygon using some random logic into some other polygons.
@@ -146,8 +147,8 @@ namespace pal
        * Optionally, the nearest point is stored in (rx,ry).
        * \param px x coordinate of the point
        * \param py y coordinate of the points
-       * \param rx pointer to x coorinates of the nearest point (can be NULL)
-       * \param ry pointer to y coorinates of the nearest point (can be NULL)
+       * \param rx pointer to x coordinates of the nearest point (can be NULL)
+       * \param ry pointer to y coordinates of the nearest point (can be NULL)
        * \returns minimum distance
        */
       double minDistanceToPoint( double px, double py, double *rx = nullptr, double *ry = nullptr ) const;
@@ -183,7 +184,17 @@ namespace pal
        * \param px final x coord on line
        * \param py final y coord on line
       */
-      void getPointByDistance( double *d, double *ad, double dl, double *px, double *py );
+      void getPointByDistance( double *d, double *ad, double dl, double *px, double *py ) const;
+
+      /**
+       * Returns a GEOS geometry representing the point interpolated on the shape by distance.
+       */
+      geos::unique_ptr interpolatePoint( double distance ) const;
+
+      /**
+       * Returns the distance along the geometry closest to the specified GEOS \a point.
+       */
+      double lineLocatePoint( const GEOSGeometry *point ) const;
 
       /**
        * Returns the point set's GEOS geometry.
@@ -242,7 +253,7 @@ namespace pal
       void createGeosGeom() const;
       const GEOSPreparedGeometry *preparedGeom() const;
 
-      void invalidateGeos();
+      void invalidateGeos() const;
 
       double xmin = std::numeric_limits<double>::max();
       double xmax = std::numeric_limits<double>::lowest();

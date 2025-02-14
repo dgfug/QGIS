@@ -43,8 +43,8 @@ class TestQgsMapToolAddFeaturePointM : public QObject
     TestQgsMapToolAddFeaturePointM();
 
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
 
     void testPointM();
 
@@ -94,10 +94,10 @@ void TestQgsMapToolAddFeaturePointM::initTestCase()
   pointFM.setGeometry( QgsGeometry::fromWkt( pointWktM ) );
 
   mLayerPointM->addFeature( pointFM );
-  QCOMPARE( mLayerPointM->featureCount(), ( long )1 );
+  QCOMPARE( mLayerPointM->featureCount(), ( long ) 1 );
 
   // create the tool
-  mCaptureTool = new QgsMapToolAddFeature( mCanvas, /*mAdvancedDigitizingDockWidget, */ QgsMapToolCapture::CapturePoint );
+  mCaptureTool = new QgsMapToolAddFeature( mCanvas, QgisApp::instance()->cadDockWidget(), QgsMapToolCapture::CapturePoint );
   mCanvas->setMapTool( mCaptureTool );
 
   QCOMPARE( mCanvas->mapSettings().outputSize(), QSize( 512, 512 ) );
@@ -117,28 +117,28 @@ void TestQgsMapToolAddFeaturePointM::testPointM()
   TestQgsMapToolAdvancedDigitizingUtils utils( mCaptureTool );
   mCanvas->setCurrentLayer( mLayerPointM );
   // test with default M value = 333
-  QgsSettingsRegistryCore::settingsDigitizingDefaultMValue.setValue( 333 );
+  QgsSettingsRegistryCore::settingsDigitizingDefaultMValue->setValue( 333 );
 
   QSet<QgsFeatureId> oldFids = utils.existingFeatureIds();
 
   utils.mouseClick( 4, 0, Qt::LeftButton, Qt::KeyboardModifiers(), true );
   QgsFeatureId newFid = utils.newFeatureId( oldFids );
 
-  QCOMPARE( mLayerPointM->featureCount(), ( long )2 );
+  QCOMPARE( mLayerPointM->featureCount(), ( long ) 2 );
 
-  QString wkt = "PointM (4 0 333)";
+  QString wkt = "Point M (4 0 333)";
   QCOMPARE( mLayerPointM->getFeature( newFid ).geometry().asWkt(), wkt );
 
   mLayerPointM->undoStack()->undo();
 
   // test with default M value = 123
-  QgsSettingsRegistryCore::settingsDigitizingDefaultMValue.setValue( 123 );
+  QgsSettingsRegistryCore::settingsDigitizingDefaultMValue->setValue( 123 );
 
   oldFids = utils.existingFeatureIds();
   utils.mouseClick( 6, 6, Qt::LeftButton, Qt::KeyboardModifiers(), true );
   newFid = utils.newFeatureId( oldFids );
 
-  wkt = "PointM (6 6 123)";
+  wkt = "Point M (6 6 123)";
   QCOMPARE( mLayerPointM->getFeature( newFid ).geometry().asWkt(), wkt );
 
   mLayerPointM->undoStack()->undo();

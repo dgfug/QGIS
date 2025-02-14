@@ -23,8 +23,6 @@
 #include <QString>
 #include <QStringList>
 
-#include "qgsraster.h"
-
 class QgsRasterBlockFeedback;
 class QgsRasterIterator;
 class QgsRasterPipe;
@@ -35,36 +33,26 @@ class QgsRasterInterface;
 /**
  * \ingroup core
  * \brief The raster file writer which allows you to save a raster to a new file.
+ *
+ * The writer defaults to creating GeoTIFF outputs using GDAL. Alternative formats and
+ * data providers can be used by calling setOutputFormat() and setOutputProviderKey().
  */
 class CORE_EXPORT QgsRasterFileWriter
 {
   public:
-    enum Mode
-    {
-      Raw = 0, //!< Raw data
-      Image = 1 //!< Rendered image
-    };
-    enum WriterError
-    {
-      NoError = 0,
-      SourceProviderError = 1,
-      DestProviderError = 2,
-      CreateDatasourceError = 3,
-      WriteError = 4,
-      NoDataConflict = 5, //!< Internal error if a value used for 'no data' was found in input
-      WriteCanceled = 6, //!< Writing was manually canceled
-    };
 
     /**
      * Options for sorting and filtering raster formats.
-     * \since QGIS 3.0
      */
-    enum RasterFormatOption
+    enum RasterFormatOption SIP_ENUM_BASETYPE( IntFlag )
     {
       SortRecommended = 1 << 1, //!< Use recommended sort order, with extremely commonly used formats listed first
     };
     Q_DECLARE_FLAGS( RasterFormatOptions, RasterFormatOption )
 
+    /**
+     * Constructor for QgsRasterFileWriter, writing to the specified output URL/filename.
+     */
     QgsRasterFileWriter( const QString &outputUrl );
 
     /**
@@ -73,7 +61,6 @@ class CORE_EXPORT QgsRasterFileWriter
      * Ownership of the returned provider is passed to the caller.
      * \returns Instance of data provider in editing mode (on success) or NULLPTR on error.
      * \note Does not work with tiled mode enabled.
-     * \since QGIS 3.0
      */
     QgsRasterDataProvider *createOneBandRaster( Qgis::DataType dataType,
         int width, int height,
@@ -86,7 +73,6 @@ class CORE_EXPORT QgsRasterFileWriter
      * Ownership of the returned provider is passed to the caller.
      * \returns Instance of data provider in editing mode (on success) or NULLPTR on error.
      * \note Does not work with tiled mode enabled.
-     * \since QGIS 3.0
      */
     QgsRasterDataProvider *createMultiBandRaster( Qgis::DataType dataType,
         int width, int height,
@@ -103,9 +89,9 @@ class CORE_EXPORT QgsRasterFileWriter
      * \param outputExtent extent to output
      * \param crs crs to reproject to
      * \param feedback optional feedback object for progress reports
-     * \deprecated since QGIS 3.8, use version with transformContext instead
+     * \deprecated QGIS 3.8. Use version with transformContext instead.
     */
-    Q_DECL_DEPRECATED WriterError writeRaster( const QgsRasterPipe *pipe, int nCols, int nRows, const QgsRectangle &outputExtent,
+    Q_DECL_DEPRECATED Qgis::RasterFileWriterResult writeRaster( const QgsRasterPipe *pipe, int nCols, int nRows, const QgsRectangle &outputExtent,
         const QgsCoordinateReferenceSystem &crs, QgsRasterBlockFeedback *feedback = nullptr ) SIP_DEPRECATED;
 
     /**
@@ -119,49 +105,178 @@ class CORE_EXPORT QgsRasterFileWriter
      * \param feedback optional feedback object for progress reports
      * \since QGIS 3.8
     */
-    WriterError writeRaster( const QgsRasterPipe *pipe, int nCols, int nRows, const QgsRectangle &outputExtent,
-                             const QgsCoordinateReferenceSystem &crs,
-                             const QgsCoordinateTransformContext &transformContext,
-                             QgsRasterBlockFeedback *feedback = nullptr );
-
+    Qgis::RasterFileWriterResult writeRaster( const QgsRasterPipe *pipe, int nCols, int nRows, const QgsRectangle &outputExtent,
+        const QgsCoordinateReferenceSystem &crs,
+        const QgsCoordinateTransformContext &transformContext,
+        QgsRasterBlockFeedback *feedback = nullptr );
 
     /**
-     * Returns the output URL for the raster.
-     * \since QGIS 3.0
+     * Returns the output URL (filename) for the raster.
      */
     QString outputUrl() const { return mOutputUrl; }
 
+    /**
+     * Sets the output \a format.
+     *
+     * For GDAL disk based outputs this should match the GDAL driver name, e.g. "GTiff" for GeoTiff exports.
+     *
+     * \see outputFormat()
+     */
     void setOutputFormat( const QString &format ) { mOutputFormat = format; }
+
+    /**
+     * Returns the output format.
+     *
+     * For GDAL disk based outputs this will match the GDAL driver name, e.g. "GTiff" for GeoTiff exports.
+     *
+     * \see setOutputFormat()
+     */
     QString outputFormat() const { return mOutputFormat; }
 
+    /**
+     * Sets the name of the data provider for the raster output.
+     *
+     * E.g. set to "gdal" to use GDAL to create disk based raster files.
+     *
+     * \see outputProviderKey()
+     */
     void setOutputProviderKey( const QString &key ) { mOutputProviderKey = key; }
+
+    /**
+     * Returns the name of the data provider for the raster output.
+     *
+     * \see setOutputProviderKey()
+     */
     QString outputProviderKey() const { return mOutputProviderKey; }
 
+    /**
+     * Sets whether the output should be tiled.
+     *
+     * Tiled outputs will automatically split the raster into multiple parts, based on the
+     * maxTileWidth() value.
+     *
+     * \see tiledMode()
+     */
     void setTiledMode( bool t ) { mTiledMode = t; }
+
+    /**
+     * Returns whether the output will be tiled.
+     *
+     * \see setTiledMode()
+     */
     bool tiledMode() const { return mTiledMode; }
 
+    /**
+     * Sets the maximum tile width (in pixels) for tiled outputs.
+     *
+     * \see maxTileWidth()
+     * \see setMaxTileHeight()
+     * \see tiledMode()
+     */
     void setMaxTileWidth( int w ) { mMaxTileWidth = w; }
+
+    /**
+     * Returns the maximum tile width (in pixels) for tiled outputs.
+     *
+     * \see maxTileHeight()
+     * \see setMaxTileWidth()
+     * \see tiledMode()
+     */
     int maxTileWidth() const { return mMaxTileWidth; }
 
-    QgsRaster::RasterBuildPyramids buildPyramidsFlag() const { return mBuildPyramidsFlag; }
-    void setBuildPyramidsFlag( QgsRaster::RasterBuildPyramids f ) { mBuildPyramidsFlag = f; }
+    /**
+     * Returns the pyramid building option.
+     *
+     * \see setBuildPyramidsFlag()
+     */
+    Qgis::RasterBuildPyramidOption buildPyramidsFlag() const { return mBuildPyramidsFlag; }
 
+    /**
+     * Sets the pyramid building option.
+     *
+     * \see buildPyramidsFlag()
+     */
+    void setBuildPyramidsFlag( Qgis::RasterBuildPyramidOption f ) { mBuildPyramidsFlag = f; }
+
+    /**
+     * Returns the list of pyramids which will be created for the output file.
+     *
+     * \see setPyramidsList()
+     */
     QList< int > pyramidsList() const { return mPyramidsList; }
+
+    /**
+     * Sets the \a list of pyramids which will be created for the output file.
+     *
+     * \see pyramidsList()
+     */
     void setPyramidsList( const QList< int > &list ) { mPyramidsList = list; }
 
     QString pyramidsResampling() const { return mPyramidsResampling; }
     void setPyramidsResampling( const QString &str ) { mPyramidsResampling = str; }
 
-    QgsRaster::RasterPyramidsFormat pyramidsFormat() const { return mPyramidsFormat; }
-    void setPyramidsFormat( QgsRaster::RasterPyramidsFormat f ) { mPyramidsFormat = f; }
+    /**
+     * Returns the raster pyramid format.
+     *
+     * \see setPyramidsFormat()
+     */
+    Qgis::RasterPyramidFormat pyramidsFormat() const { return mPyramidsFormat; }
 
+    /**
+     * Sets the raster pyramid format.
+     *
+     * \see pyramidsFormat()
+     */
+    void setPyramidsFormat( Qgis::RasterPyramidFormat f ) { mPyramidsFormat = f; }
+
+    /**
+     * Sets the maximum tile height (in pixels) for tiled outputs.
+     *
+     * \see maxTileHeight()
+     * \see setMaxTileWidth()
+     * \see tiledMode()
+     */
     void setMaxTileHeight( int h ) { mMaxTileHeight = h; }
+
+    /**
+     * Returns the maximum tile height (in pixels) for tiled outputs.
+     *
+     * \see maxTileWidth()
+     * \see setMaxTileHeight()
+     * \see tiledMode()
+     */
     int maxTileHeight() const { return mMaxTileHeight; }
 
+    /**
+     * Sets a list of data source creation options to use when
+     * creating the output raster file.
+     *
+     * \see createOptions()
+     */
     void setCreateOptions( const QStringList &list ) { mCreateOptions = list; }
+
+    /**
+     * Returns the list of data source creation options which will be used when
+     * creating the output raster file.
+     *
+     * \see setCreateOptions()
+     */
     QStringList createOptions() const { return mCreateOptions; }
 
+    /**
+     * Sets a \a list of configuration options to use when
+     * creating the pyramids for the output raster file.
+     *
+     * \see pyramidsConfigOptions()
+     */
     void setPyramidsConfigOptions( const QStringList &list ) { mPyramidsConfigOptions = list; }
+
+    /**
+     * Returns the list of configuration options used when
+     * creating the pyramids for the output raster file.
+     *
+     * \see setPyramidsConfigOptions()
+     */
     QStringList pyramidsConfigOptions() const { return mPyramidsConfigOptions; }
 
     //! Creates a filter for an GDAL driver key
@@ -169,7 +284,6 @@ class CORE_EXPORT QgsRasterFileWriter
 
     /**
      * Details of available filters and formats.
-     * \since QGIS 3.0
      */
     struct FilterFormatDetails
     {
@@ -198,7 +312,6 @@ class CORE_EXPORT QgsRasterFileWriter
      * returned formats.
      *
      * \see supportedFiltersAndFormats()
-     * \since QGIS 3.0
      */
     static QStringList supportedFormatExtensions( RasterFormatOptions options = SortRecommended );
 
@@ -210,7 +323,6 @@ class CORE_EXPORT QgsRasterFileWriter
      * Note that this method works for all GDAL drivers, including those without create support
      * (and which are not supported by QgsRasterFileWriter).
      *
-     * \since QGIS 3.0
      */
     static QString driverForExtension( const QString &extension );
 
@@ -223,31 +335,30 @@ class CORE_EXPORT QgsRasterFileWriter
      * Note that this method works for all GDAL drivers, including those without create support
      * (and which are not supported by QgsRasterFileWriter).
      *
-     * \since QGIS 3.0
      */
     static QStringList extensionsForFormat( const QString &format );
 
   private:
     QgsRasterFileWriter(); //forbidden
-    WriterError writeDataRaster( const QgsRasterPipe *pipe, QgsRasterIterator *iter, int nCols, int nRows, const QgsRectangle &outputExtent,
-                                 const QgsCoordinateReferenceSystem &crs, const QgsCoordinateTransformContext &transformContext,
-                                 QgsRasterBlockFeedback *feedback = nullptr );
+    Qgis::RasterFileWriterResult writeDataRaster( const QgsRasterPipe *pipe, QgsRasterIterator *iter, int nCols, int nRows, const QgsRectangle &outputExtent,
+        const QgsCoordinateReferenceSystem &crs, const QgsCoordinateTransformContext &transformContext,
+        QgsRasterBlockFeedback *feedback = nullptr );
 
     // Helper method used by previous one
-    WriterError writeDataRaster( const QgsRasterPipe *pipe,
-                                 QgsRasterIterator *iter,
-                                 int nCols, int nRows,
-                                 const QgsRectangle &outputExtent,
-                                 const QgsCoordinateReferenceSystem &crs,
-                                 Qgis::DataType destDataType,
-                                 const QList<bool> &destHasNoDataValueList,
-                                 const QList<double> &destNoDataValueList,
-                                 QgsRasterDataProvider *destProvider,
-                                 QgsRasterBlockFeedback *feedback = nullptr );
+    Qgis::RasterFileWriterResult writeDataRaster( const QgsRasterPipe *pipe,
+        QgsRasterIterator *iter,
+        int nCols, int nRows,
+        const QgsRectangle &outputExtent,
+        const QgsCoordinateReferenceSystem &crs,
+        Qgis::DataType destDataType,
+        const QList<bool> &destHasNoDataValueList,
+        const QList<double> &destNoDataValueList,
+        QgsRasterDataProvider *destProvider,
+        QgsRasterBlockFeedback *feedback = nullptr );
 
-    WriterError writeImageRaster( QgsRasterIterator *iter, int nCols, int nRows, const QgsRectangle &outputExtent,
-                                  const QgsCoordinateReferenceSystem &crs,
-                                  QgsRasterBlockFeedback *feedback = nullptr );
+    Qgis::RasterFileWriterResult writeImageRaster( QgsRasterIterator *iter, int nCols, int nRows, const QgsRectangle &outputExtent,
+        const QgsCoordinateReferenceSystem &crs,
+        QgsRasterBlockFeedback *feedback = nullptr );
 
     /**
      * \brief Initialize vrt member variables
@@ -294,7 +405,7 @@ class CORE_EXPORT QgsRasterFileWriter
     QString partFileName( int fileIndex );
     QString vrtFileName();
 
-    Mode mMode = Raw;
+    Qgis::RasterExportType mMode = Qgis::RasterExportType::Raw;
     QString mOutputUrl;
     QString mOutputProviderKey = QStringLiteral( "gdal" );
     QString mOutputFormat = QStringLiteral( "GTiff" );
@@ -308,8 +419,8 @@ class CORE_EXPORT QgsRasterFileWriter
 
     QList< int > mPyramidsList;
     QString mPyramidsResampling = QStringLiteral( "AVERAGE" );
-    QgsRaster::RasterBuildPyramids mBuildPyramidsFlag = QgsRaster::PyramidsFlagNo;
-    QgsRaster::RasterPyramidsFormat mPyramidsFormat = QgsRaster::PyramidsGTiff;
+    Qgis::RasterBuildPyramidOption mBuildPyramidsFlag = Qgis::RasterBuildPyramidOption::No;
+    Qgis::RasterPyramidFormat mPyramidsFormat = Qgis::RasterPyramidFormat::GeoTiff;
     QStringList mPyramidsConfigOptions;
 
     QDomDocument mVRTDocument;

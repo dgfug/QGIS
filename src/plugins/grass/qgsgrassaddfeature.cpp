@@ -15,9 +15,12 @@
  ***************************************************************************/
 
 #include "qgsgrassaddfeature.h"
+#include "moc_qgsgrassaddfeature.cpp"
+
+#include "qgisapp.h"
 
 QgsGrassAddFeature::QgsGrassAddFeature( QgsMapCanvas *canvas, CaptureMode mode )
-  : QgsMapToolAddFeature( canvas, mode )
+  : QgsMapToolAddFeature( canvas, QgisApp::instance()->cadDockWidget(), mode )
 {
   setCheckGeometryType( false );
 }

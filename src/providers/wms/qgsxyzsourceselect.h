@@ -21,6 +21,8 @@
 #include "qgsabstractdatasourcewidget.h"
 #include "ui_qgstilesourceselectbase.h"
 
+class QgsXyzSourceWidget;
+
 /*!
  * \brief   Dialog to create connections to XYZ servers.
  *
@@ -36,7 +38,7 @@ class QgsXyzSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsTi
 
   public:
     //! Constructor
-    QgsXyzSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
+    QgsXyzSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Standalone );
 
     //! Determines the layers the user selected
     void addButtonClicked() override;
@@ -60,6 +62,9 @@ class QgsXyzSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsTi
     void populateConnectionList();
     void setConnectionListPosition();
     void showHelp();
+
+    QgsXyzSourceWidget *mSourceWidget = nullptr;
+    int mBlockChanges = 0;
 };
 
 #endif // QGSXYZSOURCESELECT_H

@@ -68,13 +68,19 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
      */
     struct RenderJob
     {
-        RenderJob( QgsRuleBasedRenderer::FeatureToRender &_ftr, QgsSymbol *_s )
+
+        /**
+         * Constructor for a render job, with the specified feature to render and symbol.
+         *
+         * \note The symbol ownership is not transferred.
+         */
+        RenderJob( const QgsRuleBasedRenderer::FeatureToRender &_ftr, QgsSymbol *_s )
           : ftr( _ftr )
           , symbol( _s )
         {}
 
         //! Feature to render
-        QgsRuleBasedRenderer::FeatureToRender &ftr;
+        QgsRuleBasedRenderer::FeatureToRender ftr;
 
         //! Symbol to render feature with (not owned by this object).
         QgsSymbol *symbol = nullptr;
@@ -156,9 +162,7 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
               const QString &label = QString(), const QString &description = QString(), bool elseRule = false );
         ~Rule();
 
-        //! Rules cannot be copied
         Rule( const Rule &rh ) = delete;
-        //! Rules cannot be copied
         Rule &operator=( const Rule &rh ) = delete;
 
         /**
@@ -182,7 +186,6 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
         //! \note available in Python bindings as symbol2
         QgsSymbolList symbols( const QgsRenderContext &context = QgsRenderContext() ) const;
 
-        //! \since QGIS 2.6
         QgsLegendSymbolList legendSymbolItems( int currentLevel = -1 ) const;
 
         /**
@@ -213,7 +216,6 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
          * A scale of 0 indicates no maximum scale visibility.
          * \see minimumScale()
          * \see setMaximumScale()
-         * \since QGIS 3.0
         */
         double maximumScale() const { return mMaximumScale; }
 
@@ -223,7 +225,6 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
          * A scale of 0 indicates no minimum scale visibility.
          * \see maximumScale()
          * \see setMinimumScale()
-         * \since QGIS 3.0
         */
         double minimumScale() const { return mMinimumScale; }
 
@@ -255,13 +256,11 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
 
         /**
          * Unique rule identifier (for identification of rule within renderer)
-         * \since QGIS 2.6
          */
         QString ruleKey() const { return mRuleKey; }
 
         /**
          * Override the assigned rule key (should be used just internally by rule-based renderer)
-         * \since QGIS 2.6
          */
         void setRuleKey( const QString &key ) { mRuleKey = key; }
 
@@ -316,12 +315,21 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
         /**
          * Create a rule from the SLD provided in element and for the specified geometry type.
          */
-        static QgsRuleBasedRenderer::Rule *createFromSld( QDomElement &element, QgsWkbTypes::GeometryType geomType ) SIP_FACTORY;
+        static QgsRuleBasedRenderer::Rule *createFromSld( QDomElement &element, Qgis::GeometryType geomType ) SIP_FACTORY;
 
         QDomElement save( QDomDocument &doc, QgsSymbolMap &symbolMap ) const;
 
         //! prepare the rule for rendering and its children (build active children array)
         bool startRender( QgsRenderContext &context, const QgsFields &fields, QString &filter );
+
+        /**
+         * Returns TRUE if the rule has any active children.
+         *
+         * \note Must be called after startRender()
+         *
+         * \since QGIS 3.30
+         */
+        bool hasActiveChildren() const;
 
         //! Gets all used z-levels from this rule and children
         QSet<int> collectZLevels();
@@ -351,7 +359,6 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
 
         /**
          * Returns which legend keys match the feature
-         * \since QGIS 2.14
          */
         QSet< QString > legendKeysForFeature( const QgsFeature &feature, QgsRenderContext *context = nullptr );
 
@@ -377,17 +384,18 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
          *
          * \param ruleElem  The XML rule element
          * \param symbolMap Symbol map
+         * \param reuseId set to TRUE to create an exact copy of the original symbol or FALSE to create a new rule with the same parameters as the original but a new unique ruleKey(). (Since QGIS 3.30)
          *
          * \returns A new rule
          */
-        static QgsRuleBasedRenderer::Rule *create( QDomElement &ruleElem, QgsSymbolMap &symbolMap ) SIP_FACTORY;
+        static QgsRuleBasedRenderer::Rule *create( QDomElement &ruleElem, QgsSymbolMap &symbolMap, bool reuseId = true ) SIP_FACTORY;
 
         /**
          * Returns all children rules of this rule
          *
          * \returns A list of rules
          */
-        const QgsRuleBasedRenderer::RuleList &children() { return mChildren; }
+        const QgsRuleBasedRenderer::RuleList &children() const { return mChildren; }
 
         /**
          * Returns all children, grand-children, grand-grand-children, grand-gra... you get it
@@ -423,7 +431,6 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
 
         /**
          * Try to find a rule given its unique key
-         * \since QGIS 2.6
          */
         QgsRuleBasedRenderer::Rule *findRuleByKey( const QString &key );
 
@@ -500,10 +507,11 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
     //! Returns symbol for current feature. Should not be used individually: there could be more symbols for a feature
     QgsSymbol *symbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
 
+    Qgis::FeatureRendererFlags flags() const override;
     bool renderFeature( const QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false ) override SIP_THROW( QgsCsException );
 
     void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
-
+    bool canSkipRender() override;
     void stopRender( QgsRenderContext &context ) override;
 
     QString filter( const QgsFields &fields = QgsFields() ) override;
@@ -516,7 +524,10 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
 
     void toSld( QDomDocument &doc, QDomElement &element, const QVariantMap &props = QVariantMap() ) const override;
 
-    static QgsFeatureRenderer *createFromSld( QDomElement &element, QgsWkbTypes::GeometryType geomType ) SIP_FACTORY;
+    /**
+     * Creates a new rule based renderer from an SLD XML element.
+     */
+    static QgsFeatureRenderer *createFromSld( QDomElement &element, Qgis::GeometryType geomType ) SIP_FACTORY;
 
     QgsSymbolList symbols( QgsRenderContext &context ) const override;
 
@@ -524,6 +535,7 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
     bool legendSymbolItemsCheckable() const override;
     bool legendSymbolItemChecked( const QString &key ) override;
     void checkLegendSymbolItem( const QString &key, bool state = true ) override;
+    QString legendKeyToExpression( const QString &key, QgsVectorLayer *layer, bool &ok ) const override;
 
     void setLegendSymbolItem( const QString &key, QgsSymbol *symbol SIP_TRANSFER ) override;
     QgsLegendSymbolList legendSymbolItems() const override;
@@ -554,7 +566,6 @@ class CORE_EXPORT QgsRuleBasedRenderer : public QgsFeatureRenderer
      * Since QGIS 3.20, the optional \a layer parameter is required for conversions of some renderer types.
      *
      * \returns a new renderer if the conversion was possible, otherwise NULLPTR.
-     * \since QGIS 2.5
      */
     static QgsRuleBasedRenderer *convertFromRenderer( const QgsFeatureRenderer *renderer, QgsVectorLayer *layer = nullptr ) SIP_FACTORY;
 

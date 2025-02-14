@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgsfeaturesource.h                                          *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -14,21 +14,12 @@ class QgsFeatureSource
 {
 %Docstring(signature="appended")
 An interface for objects which provide features via a getFeatures method.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgsfeaturesource.h"
 %End
   public:
-
-    enum FeatureAvailability
-    {
-      NoFeaturesAvailable,
-      FeaturesAvailable,
-      FeaturesMaybeAvailable
-    };
 
     virtual ~QgsFeatureSource();
 
@@ -54,7 +45,7 @@ Returns the coordinate reference system for features in the source.
 Returns the fields associated with features in the source.
 %End
 
-    virtual QgsWkbTypes::Type wkbType() const = 0;
+    virtual Qgis::WkbType wkbType() const = 0;
 %Docstring
 Returns the geometry type for features returned by this source.
 %End
@@ -81,7 +72,7 @@ Returns the number of features contained in the source, or -1
 if the feature count is unknown.
 %End
 
-    virtual FeatureAvailability hasFeatures() const;
+    virtual Qgis::FeatureAvailability hasFeatures() const;
 %Docstring
 Determines if there are any features available in the source.
 
@@ -129,6 +120,15 @@ The base class implementation uses a non-optimised approach of looping through
 all features in the source.
 %End
 
+    virtual QgsBox3D sourceExtent3D() const;
+%Docstring
+Returns the 3D extent of all geometries from the source.
+The base class implementation uses a non-optimised approach of looping through
+all features in the source.
+
+.. versionadded:: 3.36
+%End
+
     virtual QgsFeatureIds allFeatureIds() const;
 %Docstring
 Returns a list of all feature IDs for features present in the source.
@@ -156,18 +156,9 @@ before it has fully completed.
 
 The returned value is a new instance and the caller takes responsibility
 for its ownership.
-
-.. versionadded:: 3.0
 %End
 
-    enum SpatialIndexPresence
-    {
-      SpatialIndexUnknown,
-      SpatialIndexNotPresent,
-      SpatialIndexPresent,
-    };
-
-    virtual SpatialIndexPresence hasSpatialIndex() const;
+    virtual Qgis::SpatialIndexPresence hasSpatialIndex() const;
 %Docstring
 Returns an enum value representing the presence of a valid spatial index on the source,
 if it can be determined.
@@ -185,5 +176,5 @@ be determined.
  *                                                                      *
  * src/core/qgsfeaturesource.h                                          *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

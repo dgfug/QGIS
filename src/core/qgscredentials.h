@@ -46,16 +46,13 @@ class CORE_EXPORT QgsCredentials
 {
   public:
 
-    /**
-     * Destructor.
-     */
     virtual ~QgsCredentials() = default;
 
     /**
      * Requests credentials for the specified \a realm.
      *
      * If existing credentials exist for the given \a realm, these will be returned. Otherwise the credential
-     * handler will prompt for the correct username and password.
+     * handler will prompt for the correct username and password if \a requestCredentials is set to True.
      *
      * The retrieved or user-entered details will be stored in \a username and \a password.
      *
@@ -66,7 +63,7 @@ class CORE_EXPORT QgsCredentials
      *
      * \see put()
      */
-    bool get( const QString &realm, QString &username SIP_INOUT, QString &password SIP_INOUT, const QString &message = QString() );
+    bool get( const QString &realm, QString &username SIP_INOUT, QString &password SIP_INOUT, const QString &message = QString(), bool requestCredentials = true );
 
     /**
      * Stores the correct \a username and \a password for the specified \a realm.
@@ -88,27 +85,21 @@ class CORE_EXPORT QgsCredentials
      * Lock the instance against access from multiple threads. This does not really lock access to get/put methods,
      * it will just prevent other threads to lock the instance and continue the execution. When the class is used
      * from non-GUI threads, they should call lock() before the get/put calls to avoid race conditions.
-     * \since QGIS 2.4
      */
     void lock();
 
     /**
      * Unlock the instance after being locked.
-     * \since QGIS 2.4
      */
     void unlock();
 
     /**
      * Returns pointer to mutex
-     * \since QGIS 2.4
      */
     QMutex *mutex() { return &mAuthMutex; }
 
   protected:
 
-    /**
-     * Constructor for QgsCredentials.
-     */
     QgsCredentials() = default;
 
     //! request a password

@@ -21,7 +21,7 @@
 #include "qgis_core.h"
 #include "qgis_sip.h"
 #include "qgsabstractgeometry.h"
-#include "qgsrectangle.h"
+#include "qgsbox3d.h"
 #include <QPainterPath>
 
 class QgsLineString;
@@ -30,20 +30,15 @@ class QgsLineString;
  * \ingroup core
  * \class QgsCurve
  * \brief Abstract base class for curved geometry type
- * \since QGIS 2.10
  */
 class CORE_EXPORT QgsCurve: public QgsAbstractGeometry SIP_ABSTRACT
 {
   public:
 
-    /**
-     * Constructor for QgsCurve.
-     */
     QgsCurve() = default;
 
     /**
      * Checks whether this curve exactly equals another curve.
-     * \since QGIS 3.0
      */
     virtual bool equals( const QgsCurve &other ) const = 0;
 
@@ -169,7 +164,6 @@ class CORE_EXPORT QgsCurve: public QgsAbstractGeometry SIP_ABSTRACT
 
     /**
      * Returns a reversed copy of the curve, where the direction of the curve has been flipped.
-     * \since QGIS 2.14
      */
     virtual QgsCurve *reversed() const = 0 SIP_FACTORY;
 
@@ -191,7 +185,7 @@ class CORE_EXPORT QgsCurve: public QgsAbstractGeometry SIP_ABSTRACT
     QgsCurve *toCurveType() const override SIP_FACTORY;
     void normalize() final SIP_HOLDGIL;
 
-    QgsRectangle boundingBox() const override;
+    QgsBox3D boundingBox3D() const override;
     bool isValid( QString &error SIP_OUT, Qgis::GeometryValidityFlags flags = Qgis::GeometryValidityFlags() ) const override;
 
     /**
@@ -207,6 +201,22 @@ class CORE_EXPORT QgsCurve: public QgsAbstractGeometry SIP_ABSTRACT
      * \returns y-coordinate of node, or 0.0 if index is out of bounds
      */
     virtual double yAt( int index ) const = 0;
+
+    /**
+     * Returns the z-coordinate of the specified node in the line string.
+    * \param index index of node, where the first node in the line is 0
+    * \returns z-coordinate of node, or 0.0 if index is out of bounds
+    * \since QGIS 3.28
+    */
+    virtual double zAt( int index ) const = 0;
+
+    /**
+     * Returns the m-coordinate of the specified node in the line string.
+     * \param index index of node, where the first node in the line is 0
+     * \returns m-coordinate of node, or 0.0 if index is out of bounds
+     * \since QGIS 3.28
+     */
+    virtual double mAt( int index ) const = 0;
 
     /**
      * Returns a QPolygonF representing the points.
@@ -289,15 +299,14 @@ class CORE_EXPORT QgsCurve: public QgsAbstractGeometry SIP_ABSTRACT
      * Should be used by qgsgeometry_cast<QgsCurve *>( geometry ).
      *
      * \note Not available in Python. Objects will be automatically be converted to the appropriate target type.
-     * \since QGIS 3.0
      */
     inline static const QgsCurve *cast( const QgsAbstractGeometry *geom )
     {
       if ( !geom )
         return nullptr;
 
-      const QgsWkbTypes::Type type = geom->wkbType();
-      if ( QgsWkbTypes::geometryType( type ) == QgsWkbTypes::LineGeometry && QgsWkbTypes::isSingleType( type ) )
+      const Qgis::WkbType type = geom->wkbType();
+      if ( QgsWkbTypes::geometryType( type ) == Qgis::GeometryType::Line && QgsWkbTypes::isSingleType( type ) )
       {
         return static_cast<const QgsCurve *>( geom );
       }
@@ -333,13 +342,17 @@ class CORE_EXPORT QgsCurve: public QgsAbstractGeometry SIP_ABSTRACT
      */
     bool snapToGridPrivate( double hSpacing, double vSpacing, double dSpacing, double mSpacing,
                             const QVector<double> &srcX, const QVector<double> &srcY, const QVector<double> &srcZ, const QVector<double> &srcM,
-                            QVector<double> &outX, QVector<double> &outY, QVector<double> &outZ, QVector<double> &outM ) const;
+                            QVector<double> &outX, QVector<double> &outY, QVector<double> &outZ, QVector<double> &outM,
+                            bool removeRedundantPoints ) const;
 #endif
 
     /**
      * Cached bounding box.
      */
-    mutable QgsRectangle mBoundingBox;
+    mutable QgsBox3D mBoundingBox;
+
+    mutable bool mHasCachedSummedUpArea = false;
+    mutable double mSummedUpArea = 0;
 
   private:
 

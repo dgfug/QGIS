@@ -1,4 +1,5 @@
 #include <iostream>
+#include <algorithm>
 
 #include "QgisUntwine.hpp"
 
@@ -27,7 +28,7 @@ bool QgisUntwine::start(Options& options)
         cmdline += "--" + op.first + " \"" + op.second + "\" ";
 
     PROCESS_INFORMATION processInfo;
-    STARTUPINFO startupInfo;
+    STARTUPINFOA startupInfo;
 
     ZeroMemory(&processInfo, sizeof(PROCESS_INFORMATION));
     ZeroMemory(&startupInfo, sizeof(STARTUPINFO));
@@ -75,6 +76,7 @@ bool QgisUntwine::stop()
 void QgisUntwine::childStopped()
 {
     m_running = false;
+    GetExitCodeProcess(m_pid, &m_exitCode);
     CloseHandle(m_progressFd);
     CloseHandle(m_pid);
 }
@@ -135,13 +137,29 @@ void QgisUntwine::readPipe() const
     while (true)
     {
         DWORD numRead;
-        ReadFile(m_progressFd, &m_percent, sizeof(m_percent), &numRead, NULL);
-        if (numRead != sizeof(m_percent))
+	uint32_t msgId;
+
+        ReadFile(m_progressFd, &msgId, sizeof(msgId), &numRead, NULL);
+        if (numRead != sizeof(msgId))
             return;
 
-        // Read the string, waiting as necessary.
-        if (readString(m_progressFd, m_progressMsg) != 0)
-            break;
+        if (msgId == ProgressMsg)
+        {
+            // Read the percent value.
+            ReadFile(m_progressFd, &m_percent, sizeof(m_percent), &numRead, NULL);
+            if (numRead != sizeof(m_percent))
+                return;
+
+            // Read the string, waiting as necessary.
+            if (readString(m_progressFd, m_progressMsg) != 0)
+                break;
+        }
+        else if (msgId == ErrorMsg)
+        {
+            // Read the string, waiting as necessary.
+            if (readString(m_progressFd, m_errorMsg) != 0)
+                break;
+        }
     }
 }
 

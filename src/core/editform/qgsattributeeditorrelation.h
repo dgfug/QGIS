@@ -19,8 +19,6 @@
 #include "qgis_core.h"
 #include "qgsattributeeditorelement.h"
 #include "qgsrelation.h"
-#include "qgsoptionalexpression.h"
-#include "qgspropertycollection.h"
 #include <QColor>
 
 class QgsRelationManager;
@@ -36,10 +34,10 @@ class CORE_EXPORT QgsAttributeEditorRelation : public QgsAttributeEditorElement
 
     /**
        * Possible buttons shown in the relation editor
-       * \deprecated since QGIS 3.18 use QgsRelationEditorWidget::Button instead
+       * \deprecated QGIS 3.18. Use QgsRelationEditorWidget::Button instead.
        * \since QGIS 3.16
        */
-    enum Q_DECL_DEPRECATED Button
+    enum Button SIP_ENUM_BASETYPE( IntFlag )
     {
       Link = 1 << 1, //!< Link button
       Unlink = 1 << 2, //!< Unlink button
@@ -50,25 +48,26 @@ class CORE_EXPORT QgsAttributeEditorRelation : public QgsAttributeEditorElement
       ZoomToChildFeature = 1 << 7, //!< Zoom to child feature
       AllButtons = Link | Unlink | SaveChildEdits | AddChildFeature | DuplicateChildFeature | DeleteChildFeature | ZoomToChildFeature //!< All buttons
     };
-    Q_NOWARN_DEPRECATED_PUSH
+    // TODO QGIS 4: remove
+    // this could not be tagged with Q_DECL_DEPRECATED due to Doxygen warning
+
     Q_ENUM( Button )
     Q_DECLARE_FLAGS( Buttons, Button )
     Q_FLAG( Buttons )
-    Q_NOWARN_DEPRECATED_POP
 
     /**
-     * \deprecated since QGIS 3.0.2. The name parameter is not used for anything and overwritten by the relationId internally.
+     * \deprecated QGIS 3.16
      */
     Q_DECL_DEPRECATED QgsAttributeEditorRelation( const QString &name, const QString &relationId, QgsAttributeEditorElement *parent )
-      : QgsAttributeEditorElement( AeTypeRelation, name, parent )
+      : QgsAttributeEditorElement( Qgis::AttributeEditorType::Relation, name, parent )
       , mRelationId( relationId )
     {}
 
     /**
-     * \deprecated since QGIS 3.0.2. The name parameter is not used for anything and overwritten by the relationId internally.
+     * \deprecated QGIS 3.16
      */
     Q_DECL_DEPRECATED QgsAttributeEditorRelation( const QString &name, const QgsRelation &relation, QgsAttributeEditorElement *parent )
-      : QgsAttributeEditorElement( AeTypeRelation, name, parent )
+      : QgsAttributeEditorElement( Qgis::AttributeEditorType::Relation, name, parent )
       , mRelationId( relation.id() )
       , mRelation( relation )
     {}
@@ -80,7 +79,7 @@ class CORE_EXPORT QgsAttributeEditorRelation : public QgsAttributeEditorElement
      * \param parent       The parent (used as container)
      */
     QgsAttributeEditorRelation( const QString &relationId, QgsAttributeEditorElement *parent )
-      : QgsAttributeEditorElement( AeTypeRelation, relationId, parent )
+      : QgsAttributeEditorElement( Qgis::AttributeEditorType::Relation, relationId, parent )
       , mRelationId( relationId )
     {}
 
@@ -91,7 +90,7 @@ class CORE_EXPORT QgsAttributeEditorRelation : public QgsAttributeEditorElement
      * \param parent       The parent (used as container)
      */
     QgsAttributeEditorRelation( const QgsRelation &relation, QgsAttributeEditorElement *parent )
-      : QgsAttributeEditorElement( AeTypeRelation, relation.id(), parent )
+      : QgsAttributeEditorElement( Qgis::AttributeEditorType::Relation, relation.id(), parent )
       , mRelationId( relation.id() )
       , mRelation( relation )
     {}

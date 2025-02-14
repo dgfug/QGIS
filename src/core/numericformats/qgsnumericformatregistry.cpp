@@ -22,6 +22,8 @@
 #include "qgspercentagenumericformat.h"
 #include "qgsscientificnumericformat.h"
 #include "qgsfractionnumericformat.h"
+#include "qgscoordinatenumericformat.h"
+#include "qgsexpressionbasednumericformat.h"
 #include "qgsxmlutils.h"
 
 QgsNumericFormatRegistry::QgsNumericFormatRegistry()
@@ -29,10 +31,12 @@ QgsNumericFormatRegistry::QgsNumericFormatRegistry()
   addFormat( new QgsFallbackNumericFormat() );
   addFormat( new QgsBasicNumericFormat() );
   addFormat( new QgsBearingNumericFormat() );
+  addFormat( new QgsGeographicCoordinateNumericFormat() );
   addFormat( new QgsCurrencyNumericFormat() );
   addFormat( new QgsPercentageNumericFormat() );
   addFormat( new QgsScientificNumericFormat() );
   addFormat( new QgsFractionNumericFormat() );
+  addFormat( new QgsExpressionBasedNumericFormat() );
 }
 
 QgsNumericFormatRegistry::~QgsNumericFormatRegistry()

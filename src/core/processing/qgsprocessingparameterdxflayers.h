@@ -52,7 +52,9 @@ class CORE_EXPORT QgsProcessingParameterDxfLayers : public QgsProcessingParamete
     QString type() const override;
     bool checkValueIsAcceptable( const QVariant &input, QgsProcessingContext *context = nullptr ) const override;
     QString valueAsPythonString( const QVariant &value, QgsProcessingContext &context ) const override;
-    QString asPythonString( QgsProcessing::PythonOutputType outputType = QgsProcessing::PythonQgsProcessingAlgorithmSubclass ) const override;
+    QString asPythonString( QgsProcessing::PythonOutputType outputType = QgsProcessing::PythonOutputType::PythonQgsProcessingAlgorithmSubclass ) const override;
+    QString valueAsString( const QVariant &value, QgsProcessingContext &context, bool &ok SIP_OUT ) const override;
+    QVariant valueAsJsonObject( const QVariant &value, QgsProcessingContext &context ) const override;
 
     //! Returns the type name for the parameter class.
     static QString typeName() { return QStringLiteral( "dxflayers" ); }

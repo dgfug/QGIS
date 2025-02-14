@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layout/qgslayoutgridsettings.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -12,8 +12,6 @@ class QgsLayoutGridSettings : QgsLayoutSerializableObject
 {
 %Docstring(signature="appended")
 Contains settings relating to the appearance, spacing and offset for layout grids.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -137,5 +135,5 @@ Sets the grid's state from a DOM element. gridElement is the DOM node correspond
  *                                                                      *
  * src/core/layout/qgslayoutgridsettings.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

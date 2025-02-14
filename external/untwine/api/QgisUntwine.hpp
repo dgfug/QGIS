@@ -26,18 +26,24 @@ public:
     bool running();
     int progressPercent() const;
     std::string progressMessage() const;
+    std::string errorMessage() const;
 
 private:
+    const int32_t ProgressMsg = 1000;
+    const int32_t ErrorMsg = 1001;
     std::string m_path;
     mutable bool m_running;
-    mutable int m_percent;
+    mutable uint32_t m_percent;
     mutable std::string m_progressMsg;
+    mutable std::string m_errorMsg;
 #ifndef _WIN32
     pid_t m_pid;
     int m_progressFd;
+    int m_exitCode;
 #else
     HANDLE m_pid;
     HANDLE m_progressFd;
+    DWORD m_exitCode;
 #endif
 
     bool start(Options& options);

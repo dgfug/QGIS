@@ -18,19 +18,22 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QRegExpValidator>
 #include <QSpacerItem>
 #include <QTimer>
 #include <QToolButton>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
+#include <QRandomGenerator>
 
 #include "qgsstatusbarcoordinateswidget.h"
+#include "moc_qgsstatusbarcoordinateswidget.cpp"
 #include "qgsapplication.h"
 #include "qgsmapcanvas.h"
 #include "qgsproject.h"
 #include "qgscoordinateutils.h"
 #include "qgsvectorlayer.h"
 #include "qgsvectorlayerjoininfo.h"
-
+#include "qgscoordinatereferencesystemutils.h"
 
 QgsStatusBarCoordinatesWidget::QgsStatusBarCoordinatesWidget( QWidget *parent )
   : QWidget( parent )
@@ -58,9 +61,7 @@ QgsStatusBarCoordinatesWidget::QgsStatusBarCoordinatesWidget( QWidget *parent )
   mLineEdit->setAlignment( Qt::AlignCenter );
   connect( mLineEdit, &QLineEdit::returnPressed, this, &QgsStatusBarCoordinatesWidget::validateCoordinates );
 
-  const QRegExp coordValidator( "[+-]?\\d+\\.?\\d*\\s*,\\s*[+-]?\\d+\\.?\\d*" );
-  mCoordsEditValidator = new QRegExpValidator( coordValidator, this );
-  mLineEdit->setToolTip( tr( "Current map coordinate (longitude,latitude or east,north)" ) );
+  mLineEdit->setToolTip( tr( "Current map coordinate (longitude latitude or east north)" ) );
 
   //toggle to switch between mouse pos and extents display in status bar widget
   mToggleExtentsViewButton = new QToolButton( this );
@@ -83,6 +84,12 @@ QgsStatusBarCoordinatesWidget::QgsStatusBarCoordinatesWidget( QWidget *parent )
   // When you feel dizzy
   mDizzyTimer = new QTimer( this );
   connect( mDizzyTimer, &QTimer::timeout, this, &QgsStatusBarCoordinatesWidget::dizzy );
+
+  connect( QgsProject::instance()->displaySettings(), &QgsProjectDisplaySettings::coordinateCrsChanged, this, &QgsStatusBarCoordinatesWidget::coordinateDisplaySettingsChanged );
+  connect( QgsProject::instance()->displaySettings(), &QgsProjectDisplaySettings::geographicCoordinateFormatChanged, this, &QgsStatusBarCoordinatesWidget::coordinateDisplaySettingsChanged );
+  connect( QgsProject::instance()->displaySettings(), &QgsProjectDisplaySettings::coordinateTypeChanged, this, &QgsStatusBarCoordinatesWidget::coordinateDisplaySettingsChanged );
+
+  coordinateDisplaySettingsChanged();
 }
 
 void QgsStatusBarCoordinatesWidget::setMapCanvas( QgsMapCanvas *mapCanvas )
@@ -108,7 +115,6 @@ void QgsStatusBarCoordinatesWidget::setMouseCoordinatesPrecision( unsigned int p
 {
   mMousePrecisionDecimalPlaces = precision;
 }
-
 
 void QgsStatusBarCoordinatesWidget::validateCoordinates()
 {
@@ -160,16 +166,19 @@ void QgsStatusBarCoordinatesWidget::validateCoordinates()
   }
 
   bool xOk = false;
-  bool  yOk = false;
-  double x = 0., y = 0.;
+  bool yOk = false;
+  double first = 0;
+  double second = 0;
   QString coordText = mLineEdit->text();
-  coordText.replace( QRegExp( " {2,}" ), QStringLiteral( " " ) );
+  const thread_local QRegularExpression sMultipleWhitespaceRx( QStringLiteral( " {2,}" ) );
+  coordText.replace( sMultipleWhitespaceRx, QStringLiteral( " " ) );
+  coordText.remove( QStringLiteral( "°" ) );
 
   QStringList parts = coordText.split( ',' );
   if ( parts.size() == 2 )
   {
-    x = parts.at( 0 ).toDouble( &xOk );
-    y = parts.at( 1 ).toDouble( &yOk );
+    first = parts.at( 0 ).toDouble( &xOk );
+    second = parts.at( 1 ).toDouble( &yOk );
   }
 
   if ( !xOk || !yOk )
@@ -177,15 +186,58 @@ void QgsStatusBarCoordinatesWidget::validateCoordinates()
     parts = coordText.split( ' ' );
     if ( parts.size() == 2 )
     {
-      x = parts.at( 0 ).toDouble( &xOk );
-      y = parts.at( 1 ).toDouble( &yOk );
+      first = parts.at( 0 ).toDouble( &xOk );
+      second = parts.at( 1 ).toDouble( &yOk );
+    }
+  }
+
+  // Use locale
+  if ( !xOk || !yOk )
+  {
+    parts = coordText.split( ' ' );
+    if ( parts.size() == 2 )
+    {
+      first = QLocale().toDouble( parts.at( 0 ), &xOk );
+      second = QLocale().toDouble( parts.at( 1 ), &yOk );
     }
   }
 
   if ( !xOk || !yOk )
     return;
 
-  mMapCanvas->setCenter( QgsPointXY( x, y ) );
+  const Qgis::CoordinateOrder projectAxisOrder = QgsProject::instance()->displaySettings()->coordinateAxisOrder();
+
+  const Qgis::CoordinateOrder coordinateOrder = projectAxisOrder == Qgis::CoordinateOrder::Default ? QgsCoordinateReferenceSystemUtils::defaultCoordinateOrderForCrs( mMapCanvas->mapSettings().destinationCrs() ) : projectAxisOrder;
+  // we may need to flip coordinates depending on crs axis ordering
+  switch ( coordinateOrder )
+  {
+    case Qgis::CoordinateOrder::Default:
+    case Qgis::CoordinateOrder::XY:
+      break;
+    case Qgis::CoordinateOrder::YX:
+      std::swap( first, second );
+      break;
+  }
+
+  QgsPointXY centerPoint { first, second };
+
+  const QgsCoordinateReferenceSystem displayCrs = QgsProject::instance()->displaySettings()->coordinateCrs();
+  const QgsCoordinateReferenceSystem canvasCrs = mMapCanvas->mapSettings().destinationCrs();
+  if ( displayCrs.isValid() && canvasCrs.isValid() && displayCrs != canvasCrs )
+  {
+    const QgsCoordinateTransform ct { displayCrs, canvasCrs, QgsProject::instance()->transformContext() };
+    try
+    {
+      centerPoint = ct.transform( centerPoint );
+    }
+    catch ( const QgsCsException & )
+    {
+      return;
+    }
+  }
+
+  mMapCanvas->setCenter( centerPoint );
+
   mMapCanvas->refresh();
 }
 
@@ -202,10 +254,11 @@ void QgsStatusBarCoordinatesWidget::dizzy()
   QRectF rect = mMapCanvas->sceneRect();
   if ( rect.x() < -d || rect.x() > d || rect.y() < -d || rect.y() > d )
     return; // do not affect panning
-  rect.moveTo( ( qrand() % ( 2 * d ) ) - d, ( qrand() % ( 2 * d ) ) - d );
+
+  rect.moveTo( static_cast<int>( QRandomGenerator::global()->generate() % ( 2 * d ) ) - d, static_cast<int>( QRandomGenerator::global()->generate() % ( 2 * d ) ) - d );
   mMapCanvas->setSceneRect( rect );
   QTransform matrix;
-  matrix.rotate( ( qrand() % ( 2 * r ) ) - r );
+  matrix.rotate( static_cast<int>( QRandomGenerator::global()->generate() % ( 2 * r ) ) - r );
   mMapCanvas->setTransform( matrix );
 }
 
@@ -218,12 +271,11 @@ void QgsStatusBarCoordinatesWidget::contributors()
   const QString fileName = QgsApplication::pkgDataPath() + QStringLiteral( "/resources/data/contributors.json" );
   const QFileInfo fileInfo = QFileInfo( fileName );
   const QgsVectorLayer::LayerOptions options { QgsProject::instance()->transformContext() };
-  QgsVectorLayer *layer = new QgsVectorLayer( fileInfo.absoluteFilePath(),
-      tr( "QGIS Contributors" ), QStringLiteral( "ogr" ), options );
+  QgsVectorLayer *layer = new QgsVectorLayer( fileInfo.absoluteFilePath(), tr( "QGIS Contributors" ), QStringLiteral( "ogr" ), options );
   // Register this layer with the layers registry
   QgsProject::instance()->addMapLayer( layer );
   layer->setAutoRefreshInterval( 500 );
-  layer->setAutoRefreshEnabled( true );
+  layer->setAutoRefreshMode( Qgis::AutoRefreshMode::RedrawOnly );
 }
 
 void QgsStatusBarCoordinatesWidget::world()
@@ -234,9 +286,9 @@ void QgsStatusBarCoordinatesWidget::world()
   }
   const QString fileName = QgsApplication::pkgDataPath() + QStringLiteral( "/resources/data/world_map.gpkg|layername=countries" );
   const QFileInfo fileInfo = QFileInfo( fileName );
-  const QgsVectorLayer::LayerOptions options { QgsProject::instance()->transformContext() };
-  QgsVectorLayer *layer = new QgsVectorLayer( fileInfo.absoluteFilePath(),
-      tr( "World Map" ), QStringLiteral( "ogr" ), options );
+  QgsVectorLayer::LayerOptions options { QgsProject::instance()->transformContext() };
+  options.forceReadOnly = true;
+  QgsVectorLayer *layer = new QgsVectorLayer( fileInfo.absoluteFilePath(), tr( "World Map" ), QStringLiteral( "ogr" ), options );
   // Register this layer with the layers registry
   QgsProject::instance()->addMapLayer( layer );
 }
@@ -250,12 +302,9 @@ void QgsStatusBarCoordinatesWidget::hackfests()
   const QString fileName = QgsApplication::pkgDataPath() + QStringLiteral( "/resources/data/qgis-hackfests.json" );
   const QFileInfo fileInfo = QFileInfo( fileName );
   const QgsVectorLayer::LayerOptions options { QgsProject::instance()->transformContext() };
-  QgsVectorLayer *layer = new QgsVectorLayer( fileInfo.absoluteFilePath(),
-      tr( "QGIS Hackfests" ), QStringLiteral( "ogr" ), options );
+  QgsVectorLayer *layer = new QgsVectorLayer( fileInfo.absoluteFilePath(), tr( "QGIS Hackfests" ), QStringLiteral( "ogr" ), options );
   // Register this layer with the layers registry
   QgsProject::instance()->addMapLayer( layer );
-  layer->setAutoRefreshInterval( 500 );
-  layer->setAutoRefreshEnabled( true );
 }
 
 void QgsStatusBarCoordinatesWidget::userGroups()
@@ -267,13 +316,11 @@ void QgsStatusBarCoordinatesWidget::userGroups()
   const QString fileName = QgsApplication::pkgDataPath() + QStringLiteral( "/resources/data/world_map.gpkg|layername=countries" );
   const QFileInfo fileInfo = QFileInfo( fileName );
   const QgsVectorLayer::LayerOptions options { QgsProject::instance()->transformContext() };
-  QgsVectorLayer *layer = new QgsVectorLayer( fileInfo.absoluteFilePath(),
-      tr( "User Groups" ), QStringLiteral( "ogr" ), options );
+  QgsVectorLayer *layer = new QgsVectorLayer( fileInfo.absoluteFilePath(), tr( "User Groups" ), QStringLiteral( "ogr" ), options );
 
   const QString fileNameData = QgsApplication::pkgDataPath() + QStringLiteral( "/resources/data/user_groups_data.json" );
   const QFileInfo fileInfoData = QFileInfo( fileNameData );
-  QgsVectorLayer *layerData = new QgsVectorLayer( fileInfoData.absoluteFilePath(),
-      tr( "user_groups_data" ), QStringLiteral( "ogr" ), options );
+  QgsVectorLayer *layerData = new QgsVectorLayer( fileInfoData.absoluteFilePath(), tr( "user_groups_data" ), QStringLiteral( "ogr" ), options );
 
   // Register layers with the layers registry
   QgsProject::instance()->addMapLayers( QList<QgsMapLayer *>() << layer << layerData );
@@ -285,7 +332,7 @@ void QgsStatusBarCoordinatesWidget::userGroups()
   joinInfo.setJoinFieldName( QStringLiteral( "country" ) );
   joinInfo.setUsingMemoryCache( true );
   joinInfo.setPrefix( QStringLiteral( "ug_" ) );
-  joinInfo.setJoinFieldNamesSubset( nullptr );  // Use all join fields
+  joinInfo.setJoinFieldNamesSubset( nullptr ); // Use all join fields
   layer->addJoin( joinInfo );
 
   // Load QML for polygon symbology and maptips
@@ -324,19 +371,12 @@ void QgsStatusBarCoordinatesWidget::refreshMapCanvas()
   mMapCanvas->redrawAllLayers();
 }
 
-void QgsStatusBarCoordinatesWidget::showMouseCoordinates( const QgsPointXY &p )
+void QgsStatusBarCoordinatesWidget::showMouseCoordinates( const QgsPointXY &mapPoint )
 {
-  if ( !mMapCanvas || mToggleExtentsViewButton->isChecked() )
-  {
-    return;
-  }
-
-  mLineEdit->setText( QgsCoordinateUtils::formatCoordinateForProject( QgsProject::instance(), p, mMapCanvas->mapSettings().destinationCrs(),
-                      mMousePrecisionDecimalPlaces ) );
-
-  ensureCoordinatesVisible();
+  mLastCoordinate = mapPoint;
+  mLastCoordinateCrs = mMapCanvas->mapSettings().destinationCrs();
+  updateCoordinateDisplay();
 }
-
 
 void QgsStatusBarCoordinatesWidget::showExtent()
 {
@@ -346,21 +386,83 @@ void QgsStatusBarCoordinatesWidget::showExtent()
   }
 
   mLabel->setText( tr( "Extents" ) );
-  mLineEdit->setText( QgsCoordinateUtils::formatExtentForProject( QgsProject::instance(), mMapCanvas->extent(), mMapCanvas->mapSettings().destinationCrs(),
-                      mMousePrecisionDecimalPlaces ) );
+  mLineEdit->setText( QgsCoordinateUtils::formatExtentForProject( QgsProject::instance(), mMapCanvas->extent(), mMapCanvas->mapSettings().destinationCrs(), mMousePrecisionDecimalPlaces ) );
 
   ensureCoordinatesVisible();
 }
 
 void QgsStatusBarCoordinatesWidget::ensureCoordinatesVisible()
 {
-
   //ensure the label is big (and small) enough
   const int width = std::max( mLineEdit->fontMetrics().boundingRect( mLineEdit->text() ).width() + 16, mMinimumWidth );
-  if ( mLineEdit->minimumWidth() < width || ( mLineEdit->minimumWidth() - width ) > mTwoCharSize )
+
+  bool allowResize = false;
+  if ( mIsFirstSizeChange )
+  {
+    allowResize = true;
+  }
+  else if ( mLineEdit->minimumWidth() < width )
+  {
+    // always immediately grow to fit
+    allowResize = true;
+  }
+  else if ( ( mLineEdit->minimumWidth() - width ) > mTwoCharSize )
+  {
+    // only allow shrinking when a sufficient time has expired since we last resized.
+    // this avoids extraneous shrinking/growing resulting in distracting UI changes
+    allowResize = mLastSizeChangeTimer.hasExpired( 2000 );
+  }
+
+  if ( allowResize )
   {
     mLineEdit->setMinimumWidth( width );
     mLineEdit->setMaximumWidth( width );
+    mLastSizeChangeTimer.restart();
+    mIsFirstSizeChange = false;
   }
 }
 
+void QgsStatusBarCoordinatesWidget::updateCoordinateDisplay()
+{
+  if ( mToggleExtentsViewButton->isChecked() )
+  {
+    return;
+  }
+
+  if ( mLastCoordinate.isEmpty() )
+    mLineEdit->clear();
+  else
+    mLineEdit->setText( QgsCoordinateUtils::formatCoordinateForProject( QgsProject::instance(), mLastCoordinate, mLastCoordinateCrs, static_cast<int>( mMousePrecisionDecimalPlaces ) ) );
+
+  ensureCoordinatesVisible();
+}
+
+void QgsStatusBarCoordinatesWidget::coordinateDisplaySettingsChanged()
+{
+  const QgsCoordinateReferenceSystem coordinateCrs = QgsProject::instance()->displaySettings()->coordinateCrs();
+
+  const Qgis::CoordinateOrder projectOrder = QgsProject::instance()->displaySettings()->coordinateAxisOrder();
+  const Qgis::CoordinateOrder order = projectOrder == Qgis::CoordinateOrder::Default
+                                        ? QgsCoordinateReferenceSystemUtils::defaultCoordinateOrderForCrs( coordinateCrs )
+                                        : projectOrder;
+
+  switch ( order )
+  {
+    case Qgis::CoordinateOrder::XY:
+      if ( coordinateCrs.isGeographic() )
+        mLineEdit->setToolTip( tr( "Current map coordinate (Longitude, Latitude)" ) );
+      else
+        mLineEdit->setToolTip( tr( "Current map coordinate (Easting, Northing)" ) );
+      break;
+    case Qgis::CoordinateOrder::YX:
+      if ( coordinateCrs.isGeographic() )
+        mLineEdit->setToolTip( tr( "Current map coordinate (Latitude, Longitude)" ) );
+      else
+        mLineEdit->setToolTip( tr( "Current map coordinate (Northing, Easting)" ) );
+      break;
+    case Qgis::CoordinateOrder::Default:
+      break;
+  }
+
+  updateCoordinateDisplay();
+}

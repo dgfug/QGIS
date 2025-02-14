@@ -27,7 +27,7 @@ namespace MDAL
    *       As SelafinFile is not thread safe, it has to be shared in the same thread.
    *
    * This class can be used to create a mesh with all the dataset contained in a file with the static method createMessh()
-   * It is also pôssible to add all the dataset of a file in a separate existing mesh with the static method populateDataset()
+   * It is also possible to add all the dataset of a file in a separate existing mesh with the static method populateDataset()
    *
    * All the method to access with lazy loading to the mesh data or datasets are encapsulted and only accessible by the friend classes :
    *    MeshSelafin
@@ -49,8 +49,8 @@ namespace MDAL
       //! Populates the mesh with dataset from the file
       static void populateDataset( Mesh *mesh, const std::string &fileName );
 
-      //! Read the header of the file and return the project name
-      std::string readHeader();
+      //! Extracts data related to the mesh frame for the file
+      void parseMeshFrame();
 
       //! Add the dataset group to the file (persist), replace dataset in the new group by Selafindataset with lazy loading
       bool addDatasetGroup( DatasetGroup *datasetGroup );
@@ -60,7 +60,10 @@ namespace MDAL
       //! Initializes and open the file file with the \a fileName
       void initialize();
 
-      //! Extracts data from files
+      //! Reads the header of the file and return the project name
+      std::string readHeader();
+
+      //! Extracts data from the file
       void parseFile();
 
       //! Returns the vertices count in the mesh stored in the file

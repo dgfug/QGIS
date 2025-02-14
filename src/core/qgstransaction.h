@@ -75,10 +75,19 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
     ~QgsTransaction() override;
 
     /**
-     * Add the \a layer to the transaction. The layer must not be
-     * in edit mode and the connection string must match.
+     * Returns the connection string of the transaction
+     * \since QGIS 3.26
      */
-    bool addLayer( QgsVectorLayer *layer );
+    QString connectionString() const;
+
+    /**
+     * Add the \a layer to the transaction. The connection string
+     * must match.
+     * \param layer that will be added to the transaction
+     * \param addLayersInEditMode if set layers that are already
+     * in edit mode can be added to the transaction \since QGIS 3.26
+     */
+    bool addLayer( QgsVectorLayer *layer, bool addLayersInEditMode = false );
 
     /**
      * Begin transaction
@@ -123,38 +132,32 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
      * creates a save point
      * returns empty string on error
      * returns the last created savepoint if it's not dirty
-     * \since QGIS 3.0
      */
     QString createSavepoint( QString &error SIP_OUT );
 
     /**
      * creates a save point
      * returns empty string on error
-     * \since QGIS 3.0
      */
     virtual QString createSavepoint( const QString &savePointId, QString &error SIP_OUT );
 
     /**
      * rollback to save point, the save point is maintained and is "undertied"
-     * \since QGIS 3.0
      */
     virtual bool rollbackToSavepoint( const QString &name, QString &error SIP_OUT );
 
     /**
      * dirty save point such that next call to createSavepoint will create a new one
-     * \since QGIS 3.0
      */
     void dirtyLastSavePoint();
 
     /**
      * returns savepoints
-     * \since QGIS 3.0
      */
     QList< QString > savePoints() const { return QList< QString >::fromVector( mSavepoints ); }
 
     /**
      * returns the last created savepoint
-     * \since QGIS 3.0
      */
     bool lastSavePointIsDirty() const { return mLastSavePointIsDirty; }
 
@@ -169,6 +172,12 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
      * Emitted after a rollback
      */
     void afterRollback();
+
+    /**
+     * Emitted after a rollback to savepoint
+     * \since QGIS 3.42
+     */
+    void afterRollbackToSavepoint( const QString &savepointName );
 
     /**
      * Emitted if a sql query is executed and the underlying data is modified
@@ -192,7 +201,7 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
 
     void setLayerTransactionIds( QgsTransaction *transaction );
 
-    static QString removeLayerIdOrName( const QString &str );
+    static QString cleanupConnectionString( const QString &str );
 
     virtual bool beginTransaction( QString &error, int statementTimeout ) = 0;
     virtual bool commitTransaction( QString &error ) = 0;

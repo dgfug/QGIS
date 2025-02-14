@@ -3,8 +3,10 @@
  *                                                                      *
  * src/core/expression/qgsexpression.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
+
+
 
 
 
@@ -121,8 +123,6 @@ it does not need to be re-parsed.
     QgsExpression();
 %Docstring
 Create an empty expression.
-
-.. versionadded:: 3.0
 %End
 
     ~QgsExpression();
@@ -133,8 +133,6 @@ Create an empty expression.
 %Docstring
 Checks if this expression is valid.
 A valid expression could be parsed but does not necessarily evaluate properly.
-
-.. versionadded:: 3.0
 %End
 
     bool hasParserError() const;
@@ -149,8 +147,6 @@ Returns parser error
     QList<QgsExpression::ParserError> parserErrors() const;
 %Docstring
 Returns parser error details including location of error.
-
-.. versionadded:: 3.0
 %End
 
     const QgsExpressionNode *rootNode() const;
@@ -165,8 +161,6 @@ The root node is ``None`` if parsing has failed.
 Gets the expression ready for evaluation - find out column indexes.
 
 :param context: context for preparing expression
-
-.. versionadded:: 2.12
 %End
 
     QSet<QString> referencedColumns() const;
@@ -189,7 +183,6 @@ Gets list of columns referenced by the expression.
    If you are seeking to use these functions to introspect an expression you must
    take care to do this with an unprepared expression.
 
-
 .. seealso:: :py:func:`referencedAttributeIndexes`
 %End
 
@@ -204,8 +197,6 @@ which is determined at runtime.
    In contrast to the :py:func:`~QgsExpression.referencedColumns` function this method
    is not affected by any previous calls to :py:func:`QgsExpression.prepare()`,
    or :py:func:`QgsExpressionNode.prepare()`.
-
-.. versionadded:: 3.0
 %End
 
     QSet<QString> referencedFunctions() const;
@@ -235,8 +226,6 @@ Returns a list of field name indexes obtained from the provided fields.
    pre-calculated nodes, regardless of their actual referenced columns.
    If you are seeking to use these functions to introspect an expression you must
    take care to do this with an unprepared expression.
-
-.. versionadded:: 3.0
 %End
 
     bool needsGeometry() const;
@@ -252,8 +241,6 @@ Evaluate the feature and return the result.
 .. note::
 
    this method does not expect that :py:func:`~QgsExpression.prepare` has been called on this instance
-
-.. versionadded:: 2.12
 %End
 
     QVariant evaluate( const QgsExpressionContext *context );
@@ -265,8 +252,6 @@ Evaluate the expression against the specified context and return the result.
 .. note::
 
    :py:func:`~QgsExpression.prepare` should be called before calling this method.
-
-.. versionadded:: 2.12
 %End
 
     bool hasEvalError() const;
@@ -287,8 +272,6 @@ Sets evaluation error (used internally by evaluation functions)
 Checks whether an expression consists only of a single field reference
 
 .. seealso:: :py:func:`expressionToLayerFieldIndex`
-
-.. versionadded:: 2.9
 %End
 
     static int expressionToLayerFieldIndex( const QString &expression, const QgsVectorLayer *layer );
@@ -306,6 +289,21 @@ method will return the corresponding field index.
 .. versionadded:: 3.22
 %End
 
+    static QString quoteFieldExpression( const QString &expression, const QgsVectorLayer *layer );
+%Docstring
+Validate if the expression is a field in the ``layer`` and ensure it is quoted.
+
+Given a string which may either directly match a field name from a layer, OR may
+be an expression which consists only of a single field reference for that layer, this
+method will return the quoted field.
+
+:return: the ``expression`` if not a field or quotes are not required, otherwise returns a quoted field.
+
+.. seealso:: :py:func:`expressionToLayerFieldIndex`
+
+.. versionadded:: 3.24
+%End
+
     static bool checkExpression( const QString &text, const QgsExpressionContext *context, QString &errorMessage /Out/ );
 %Docstring
 Tests whether a string is a valid expression.
@@ -315,15 +313,11 @@ Tests whether a string is a valid expression.
 
 :return: - ``True`` if string is a valid expression
          - errorMessage: will be filled with any error message from the validation
-
-.. versionadded:: 2.12
 %End
 
     void setExpression( const QString &expression );
 %Docstring
 Set the expression string, will reset the whole internal structure.
-
-.. versionadded:: 3.0
 %End
 
     QString expression() const;
@@ -370,7 +364,7 @@ Cartesian methods (ie no ellipsoidal calculations).
 .. seealso:: :py:func:`geomCalculator`
 %End
 
-    QgsUnitTypes::DistanceUnit distanceUnits() const;
+    Qgis::DistanceUnit distanceUnits() const;
 %Docstring
 Returns the desired distance units for calculations involving :py:func:`~QgsExpression.geomCalculator`, e.g., "$length" and "$perimeter".
 
@@ -381,11 +375,9 @@ Returns the desired distance units for calculations involving :py:func:`~QgsExpr
 .. seealso:: :py:func:`setDistanceUnits`
 
 .. seealso:: :py:func:`areaUnits`
-
-.. versionadded:: 2.14
 %End
 
-    void setDistanceUnits( QgsUnitTypes::DistanceUnit unit );
+    void setDistanceUnits( Qgis::DistanceUnit unit );
 %Docstring
 Sets the desired distance units for calculations involving :py:func:`~QgsExpression.geomCalculator`, e.g., "$length" and "$perimeter".
 If distance units are set to :py:class:`QgsUnitTypes`.DistanceUnknownUnit (default), :py:func:`~QgsExpression.prepare` will read
@@ -398,11 +390,9 @@ variables from the expression context ("project_distance_units") to determine di
 .. seealso:: :py:func:`distanceUnits`
 
 .. seealso:: :py:func:`setAreaUnits`
-
-.. versionadded:: 2.14
 %End
 
-    QgsUnitTypes::AreaUnit areaUnits() const;
+    Qgis::AreaUnit areaUnits() const;
 %Docstring
 Returns the desired areal units for calculations involving :py:func:`~QgsExpression.geomCalculator`, e.g., "$area".
 
@@ -413,11 +403,9 @@ Returns the desired areal units for calculations involving :py:func:`~QgsExpress
 .. seealso:: :py:func:`setAreaUnits`
 
 .. seealso:: :py:func:`distanceUnits`
-
-.. versionadded:: 2.14
 %End
 
-    void setAreaUnits( QgsUnitTypes::AreaUnit unit );
+    void setAreaUnits( Qgis::AreaUnit unit );
 %Docstring
 Sets the desired areal units for calculations involving :py:func:`~QgsExpression.geomCalculator`, e.g., "$area".
 If distance units are set to :py:class:`QgsUnitTypes`.AreaUnknownUnit (default), :py:func:`~QgsExpression.prepare` will read
@@ -430,8 +418,6 @@ variables from the expression context ("project_distance_units") to determine di
 .. seealso:: :py:func:`areaUnits`
 
 .. seealso:: :py:func:`setDistanceUnits`
-
-.. versionadded:: 2.14
 %End
 
     static QString replaceExpressionText( const QString &action, const QgsExpressionContext *context,
@@ -446,8 +432,6 @@ Additional substitutions can be passed through the substitutionMap parameter
 :param context: Expression context
 :param distanceArea: Optional :py:class:`QgsDistanceArea`. If specified, the :py:class:`QgsDistanceArea` is used for distance
                      and area conversion
-
-.. versionadded:: 2.12
 %End
 
     static QSet<QString> referencedVariables( const QString &text );
@@ -473,8 +457,6 @@ value.
 
    this method is inefficient for bulk evaluation of expressions, it is intended
    for one-off evaluations only.
-
-.. versionadded:: 2.7
 %End
 
     enum SpatialOperator
@@ -518,8 +500,6 @@ Unregisters a function from the expression engine. The function will no longer b
     static void cleanRegisteredFunctions();
 %Docstring
 Deletes all registered functions whose ownership have been transferred to the expression engine.
-
-.. versionadded:: 2.12
 %End
 
     static bool isFunctionName( const QString &name );
@@ -567,11 +547,22 @@ quotations where required.
 .. seealso:: :py:func:`quotedString`
 
 .. seealso:: :py:func:`quotedColumnRef`
-
-.. versionadded:: 2.14
 %End
 
-    static QString quotedValue( const QVariant &value, QVariant::Type type );
+    static QString quotedValue( const QVariant &value, QMetaType::Type type );
+%Docstring
+Returns a string representation of a literal value, including appropriate
+quotations where required.
+
+:param value: value to convert to a string representation
+:param type: value type
+
+.. seealso:: :py:func:`quotedString`
+
+.. seealso:: :py:func:`quotedColumnRef`
+%End
+
+ static QString quotedValue( const QVariant &value, QVariant::Type type ) /Deprecated="Since 3.38. Use the method with a QMetaType.Type argument instead."/;
 %Docstring
 Returns a string representation of a literal value, including appropriate
 quotations where required.
@@ -583,8 +574,11 @@ quotations where required.
 
 .. seealso:: :py:func:`quotedColumnRef`
 
-.. versionadded:: 2.14
+.. deprecated:: 3.38
+
+   Use the method with a QMetaType.Type argument instead.
 %End
+
 
 
     static QString helpText( QString name );
@@ -633,8 +627,6 @@ Returns the help text for a specified variable.
 .. seealso:: :py:func:`helpText`
 
 .. seealso:: :py:func:`addVariableHelpText`
-
-.. versionadded:: 2.12
 %End
 
     static QString formatVariableHelp( const QString &description, bool showValue = true, const QVariant &value = QVariant() );
@@ -648,8 +640,6 @@ Returns formatted help text for a variable.
 .. seealso:: :py:func:`helpText`
 
 .. seealso:: :py:func:`variableHelpText`
-
-.. versionadded:: 3.0
 %End
 
     static QString group( const QString &group );
@@ -669,11 +659,21 @@ length, and presents text representations of non numeric/text types (e.g., geome
 :param maximumPreviewLength: define the maximum character length of the preview
 
 :return: formatted string, may contain HTML formatting characters if ``htmlOutput`` is ``True``
-
-.. versionadded:: 2.14
 %End
 
-    static QString createFieldEqualityExpression( const QString &fieldName, const QVariant &value, QVariant::Type fieldType = QVariant::Type::Invalid );
+    static QString createFieldEqualityExpression( const QString &fieldName, const QVariant &value, QMetaType::Type fieldType = QMetaType::Type::UnknownType );
+%Docstring
+Create an expression allowing to evaluate if a field is equal to a
+value. The value may be null.
+
+:param fieldName: the name of the field
+:param value: the value of the field
+:param fieldType: the type of the field on the left side used to quote the value. If not given, the value type is used instead
+
+:return: the expression to evaluate field equality
+%End
+
+ static QString createFieldEqualityExpression( const QString &fieldName, const QVariant &value, QVariant::Type fieldType ) /Deprecated="Since 3.38. Use the method with a QMetaType.Type argument instead."/;
 %Docstring
 Create an expression allowing to evaluate if a field is equal to a
 value. The value may be null.
@@ -684,7 +684,9 @@ value. The value may be null.
 
 :return: the expression to evaluate field equality
 
-.. versionadded:: 3.0
+.. deprecated:: 3.38
+
+   Use the method with a QMetaType.Type argument instead.
 %End
 
     static bool isFieldEqualityExpression( const QString &expression, QString &field /Out/, QVariant &value /Out/ );
@@ -694,8 +696,8 @@ Returns ``True`` if the given ``expression`` is a simple "field=value" type expr
 :param expression: expression to test
 
 :return: - ``True`` if the expression is a field equality expression
-         - field: will be set to the field name if the expression is a field equality expression
-         - value: will be set to the value if the expression is a field equality expression
+         - field: the field name if the expression is a field equality expression
+         - value: the value if the expression is a field equality expression
 
 .. versionadded:: 3.18
 %End
@@ -712,7 +714,7 @@ Returns ``True`` if the given ``expressions`` could be converted to an IN type e
 :param expressions: expressions to test
 
 :return: - ``True`` if the expression was converted to a field IN type expression
-         - result: will be set to the calculated "field IN (...)" expression, wherever possible
+         - result: the calculated "field IN (...)" expression, wherever possible
 
 .. versionadded:: 3.18
 %End
@@ -731,5 +733,5 @@ Returns ``True`` if the given ``expressions`` could be converted to an IN type e
  *                                                                      *
  * src/core/expression/qgsexpression.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

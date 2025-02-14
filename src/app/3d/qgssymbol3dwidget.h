@@ -18,6 +18,7 @@
 
 #include <QWidget>
 #include <memory>
+#include "qgsstyle.h"
 
 class QLabel;
 class QStackedWidget;
@@ -41,7 +42,7 @@ class QgsSymbol3DWidget : public QWidget
     QgsSymbol3DWidget( QgsVectorLayer *layer, QWidget *parent = nullptr );
 
     //! Returns a new symbol instance or NULLPTR
-    std::unique_ptr< QgsAbstract3DSymbol > symbol();
+    std::unique_ptr<QgsAbstract3DSymbol> symbol();
 
     //! Sets symbol (does not take ownership)
     void setSymbol( const QgsAbstract3DSymbol *symbol, QgsVectorLayer *vlayer );
@@ -51,23 +52,18 @@ class QgsSymbol3DWidget : public QWidget
 
   private slots:
 
-    void setSymbolFromStyle( const QString &name );
+    void setSymbolFromStyle( const QString &name, QgsStyle::StyleEntity entity, const QString &stylePath );
     void saveSymbol();
 
   private:
-
     void updateSymbolWidget( const QgsAbstract3DSymbol *newSymbol );
 
     QStackedWidget *widgetStack = nullptr;
-    QgsLine3DSymbolWidget *widgetLine = nullptr;
-    QgsPoint3DSymbolWidget *widgetPoint = nullptr;
-    QgsPolygon3DSymbolWidget *widgetPolygon = nullptr;
     QLabel *widgetUnsupported = nullptr;
 
     QgsStyleItemsListWidget *mStyleWidget = nullptr;
 
     QgsVectorLayer *mLayer = nullptr;
-
 };
 
 

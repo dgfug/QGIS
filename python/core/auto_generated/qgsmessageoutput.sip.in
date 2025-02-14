@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgsmessageoutput.h                                          *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -59,8 +59,6 @@ display the message to the user and deletes itself
     static void showMessage( const QString &title, const QString &message, MessageType msgType );
 %Docstring
 Display the blocking message to the user.
-
-.. versionadded:: 2.10
 %End
 
 
@@ -89,9 +87,6 @@ be the right choice for apps without GUI.
   public:
 
     QgsMessageOutputConsole();
-%Docstring
-Constructor for QgsMessageOutputConsole.
-%End
 
     virtual void setMessage( const QString &message, MessageType msgType );
 
@@ -122,5 +117,5 @@ signals that object will be destroyed and shouldn't be used anymore
  *                                                                      *
  * src/core/qgsmessageoutput.h                                          *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

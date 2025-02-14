@@ -17,6 +17,7 @@
 #include <pdal/SpatialReference.hpp>
 #include <pdal/util/Bounds.hpp>
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -41,12 +42,22 @@ constexpr int NumFileProcessors = 8;
 
 struct FileInfo
 {
+    FileInfo() :
+        numPoints(0), start(0), untwineBitsOffset(-1), fileVersion(0)
+    {}
+
     std::string filename;
     std::string driver;
+    bool no_srs;
     DimInfoList dimInfo;
     uint64_t numPoints;
+    uint64_t start;
     pdal::BOX3D bounds;
     pdal::SpatialReference srs;
+    int untwineBitsOffset;
+    // Currently only set for LAS files.
+    int fileVersion;
+    std::array<double, 3> offsets {};     // X, Y, Z offsets
 
     bool valid() const
     { return filename.size(); }

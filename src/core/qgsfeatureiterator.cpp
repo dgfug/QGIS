@@ -13,11 +13,9 @@
  *                                                                         *
  ***************************************************************************/
 #include "qgsfeatureiterator.h"
-#include "qgslogger.h"
-
 #include "qgssimplifymethod.h"
 #include "qgsexception.h"
-#include "qgsexpressionsorter.h"
+#include "qgsexpressionsorter_p.h"
 #include "qgsfeedback.h"
 #include "qgscoordinatetransform.h"
 
@@ -56,11 +54,11 @@ bool QgsAbstractFeatureIterator::nextFeature( QgsFeature &f )
   {
     switch ( mRequest.filterType() )
     {
-      case QgsFeatureRequest::FilterExpression:
+      case Qgis::FeatureRequestFilterType::Expression:
         dataOk = nextFeatureFilterExpression( f );
         break;
 
-      case QgsFeatureRequest::FilterFids:
+      case Qgis::FeatureRequestFilterType::Fids:
         dataOk = nextFeatureFilterFids( f );
         break;
 
@@ -104,7 +102,7 @@ void QgsAbstractFeatureIterator::geometryToDestinationCrs( QgsFeature &feature, 
     try
     {
       QgsGeometry g = feature.geometry();
-      g.transform( transform );
+      g.transform( transform, Qgis::TransformDirection::Forward, transform.hasVerticalComponent() );
       feature.setGeometry( g );
     }
     catch ( QgsCsException & )
@@ -120,12 +118,48 @@ void QgsAbstractFeatureIterator::geometryToDestinationCrs( QgsFeature &feature, 
   }
 }
 
+QgsAbstractFeatureIterator::RequestToSourceCrsResult QgsAbstractFeatureIterator::updateRequestToSourceCrs( QgsFeatureRequest &request, const QgsCoordinateTransform &transform ) const
+{
+  if ( transform.isShortCircuited() )
+    return RequestToSourceCrsResult::Success; // nothing to do
+
+  switch ( request.spatialFilterType() )
+  {
+    case Qgis::SpatialFilterType::NoFilter:
+      return RequestToSourceCrsResult::Success;
+
+    case Qgis::SpatialFilterType::BoundingBox:
+    {
+      QgsRectangle newRect = transform.transformBoundingBox( request.filterRect(), Qgis::TransformDirection::Reverse, true );
+      request.setFilterRect( newRect );
+      return RequestToSourceCrsResult::Success;
+    }
+
+    case Qgis::SpatialFilterType::DistanceWithin:
+    {
+      // we can't safely handle a distance within query, as we cannot transform the
+      // static within tolerance distance from one CRS to a static distance in a different CRS.
+
+      // in this case we transform the request's distance within requirement to a "worst case" bounding box filter, so
+      // that the request itself can still take advantage of spatial indices even when we have to do the distance within check locally
+      QgsRectangle newRect = transform.transformBoundingBox( request.filterRect(), Qgis::TransformDirection::Reverse, true );
+      request.setFilterRect( newRect );
+
+      return RequestToSourceCrsResult::DistanceWithinMustBeCheckedManually;
+    }
+  }
+
+  BUILTIN_UNREACHABLE
+}
+
 QgsRectangle QgsAbstractFeatureIterator::filterRectToSourceCrs( const QgsCoordinateTransform &transform ) const
 {
   if ( mRequest.filterRect().isNull() )
     return QgsRectangle();
 
-  return transform.transformBoundingBox( mRequest.filterRect(), Qgis::TransformDirection::Reverse );
+  QgsCoordinateTransform extentTransform = transform;
+  extentTransform.setBallparkTransformsAreAppropriate( true );
+  return extentTransform.transformBoundingBox( mRequest.filterRect(), Qgis::TransformDirection::Reverse, true );
 }
 
 void QgsAbstractFeatureIterator::ref()

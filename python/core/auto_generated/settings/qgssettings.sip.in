@@ -3,8 +3,9 @@
  *                                                                      *
  * src/core/settings/qgssettings.h                                      *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
+
 
 
 
@@ -41,8 +42,6 @@ static bool setGlobalSettingsPath( QString path );
 - App
 - Providers
 - Misc
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -173,7 +172,7 @@ Returns a list of all keys, including subkeys, that can be read using the QSetti
 %Docstring
 Returns a list of all top-level keys that can be read using the QSettings object.
 %End
-    QStringList childGroups() const;
+    QStringList childGroups( Qgis::SettingsOrigin origin = Qgis::SettingsOrigin::Any ) const;
 %Docstring
 Returns a list of all key top-level groups that contain keys that can be read using the QSettings object.
 %End
@@ -214,6 +213,17 @@ Sets the current array index to i. Calls to functions such as :py:func:`~QgsSett
 :py:func:`~QgsSettings.remove`, and :py:func:`~QgsSettings.contains` will operate on the array entry at that index.
 %End
 
+    Qgis::SettingsOrigin origin( const QString &key ) const;
+%Docstring
+Returns the origin of the setting if it exists at the given ``key``
+
+.. note::
+
+   it will return :py:class:`Qgis`.SettingsOrigin.Any if the key doesn't exist
+
+.. versionadded:: 3.30
+%End
+
     void setValue( const QString &key, const QVariant &value, QgsSettings::Section section = QgsSettings::NoSection );
 %Docstring
 Sets the value of setting key to value. If the key already exists, the previous value is overwritten.
@@ -230,7 +240,7 @@ If no default value is specified, a default QVariant is returned.
 An optional Section argument can be used to get a value from a specific Section.
 %End
 %MethodCode
-    typedef PyObject *( *pyqt5_from_qvariant_by_type )( QVariant &value, PyObject *type );
+    typedef PyObject *( *pyqt_from_qvariant_by_type )( QVariant &value, PyObject *type );
     QVariant value;
 
     // QSettings has an internal mutex so release the GIL to avoid the possibility of deadlocks.
@@ -238,11 +248,12 @@ An optional Section argument can be used to get a value from a specific Section.
     value = sipCpp->value( *a0, *a1, a3 );
     Py_END_ALLOW_THREADS
 
-    pyqt5_from_qvariant_by_type f = ( pyqt5_from_qvariant_by_type ) sipImportSymbol( "pyqt5_from_qvariant_by_type" );
+    pyqt_from_qvariant_by_type f = ( pyqt_from_qvariant_by_type ) sipImportSymbol( SIP_PYQT_FROM_QVARIANT_BY_TYPE );
     sipRes = f( value, a2 );
 
     sipIsErr = !sipRes;
 %End
+
 
 
     bool contains( const QString &key, QgsSettings::Section section = QgsSettings::NoSection ) const;
@@ -275,12 +286,16 @@ Returns the sanitized and prefixed key
 Removes all entries in the user settings
 %End
 
+
+
+
 };
+
 
 /************************************************************************
  * This file has been generated automatically from                      *
  *                                                                      *
  * src/core/settings/qgssettings.h                                      *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -43,7 +43,10 @@ class CORE_EXPORT QgsProxyProgressTask : public QgsTask
     /**
      * Constructor for QgsProxyProgressTask, with the specified \a description.
      */
-    QgsProxyProgressTask( const QString &description );
+    QgsProxyProgressTask( const QString &description, bool canCancel = false );
+
+    QgsProxyProgressTask( const QgsProxyProgressTask &other ) = delete;
+    QgsProxyProgressTask &operator=( const QgsProxyProgressTask &other ) = delete;
 
     /**
      * Finalizes the task, with the specified \a result.
@@ -61,6 +64,17 @@ class CORE_EXPORT QgsProxyProgressTask : public QgsTask
      * This method is safe to call from the main thread.
      */
     void setProxyProgress( double progress );
+
+    void cancel() override;
+
+  signals:
+
+    /**
+     * Emitted when the task is canceled.
+     *
+     * \since QGIS 3.26
+     */
+    void canceled();
 
   private:
 
@@ -89,6 +103,9 @@ class CORE_EXPORT QgsScopedProxyProgressTask
      */
     QgsScopedProxyProgressTask( const QString &description );
 
+    QgsScopedProxyProgressTask( const QgsScopedProxyProgressTask &other ) = delete;
+    QgsScopedProxyProgressTask &operator=( const QgsScopedProxyProgressTask &other ) = delete;
+
     ~QgsScopedProxyProgressTask();
 
     /**
@@ -99,6 +116,10 @@ class CORE_EXPORT QgsScopedProxyProgressTask
   private:
 
     QgsProxyProgressTask *mTask = nullptr;
+
+#ifdef SIP_RUN
+    QgsScopedProxyProgressTask( const QgsScopedProxyProgressTask &other );
+#endif
 
     // SIP generates .cpp code that doesn't compile if commenting out the legit following line.
     // Q_DISABLE_COPY( QgsScopedProxyProgressTask )

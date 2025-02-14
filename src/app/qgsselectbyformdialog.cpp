@@ -16,6 +16,7 @@
 #include <QLayout>
 
 #include "qgsselectbyformdialog.h"
+#include "moc_qgsselectbyformdialog.cpp"
 #include "qgsattributeform.h"
 #include "qgsmapcanvas.h"
 #include "qgssettings.h"
@@ -62,6 +63,7 @@ void QgsSelectByFormDialog::setMapCanvas( QgsMapCanvas *canvas )
   mMapCanvas = canvas;
   connect( mForm, &QgsAttributeForm::zoomToFeatures, this, &QgsSelectByFormDialog::zoomToFeatures );
   connect( mForm, &QgsAttributeForm::flashFeatures, this, &QgsSelectByFormDialog::flashFeatures );
+  connect( mForm, &QgsAttributeForm::openFilteredFeaturesAttributeTable, this, &QgsSelectByFormDialog::showFilteredFeaturesAttributeTable );
 }
 
 void QgsSelectByFormDialog::zoomToFeatures( const QString &filter )
@@ -71,16 +73,12 @@ void QgsSelectByFormDialog::zoomToFeatures( const QString &filter )
   {
     if ( mMessageBar )
     {
-      mMessageBar->pushMessage( QString(),
-                                tr( "Zoomed to %n matching feature(s)", "number of matching features", featureCount ),
-                                Qgis::MessageLevel::Info );
+      mMessageBar->pushMessage( QString(), tr( "Zoomed to %n matching feature(s)", "number of matching features", featureCount ), Qgis::MessageLevel::Info );
     }
   }
   else if ( mMessageBar )
   {
-    mMessageBar->pushMessage( QString(),
-                              tr( "No matching features found" ),
-                              Qgis::MessageLevel::Info );
+    mMessageBar->pushMessage( QString(), tr( "No matching features found" ), Qgis::MessageLevel::Info );
   }
 }
 
@@ -89,8 +87,24 @@ void QgsSelectByFormDialog::flashFeatures( const QString &filter )
   const long featureCount = QgsMapCanvasUtils::flashMatchingFeatures( mMapCanvas, mLayer, filter );
   if ( featureCount == 0 && mMessageBar )
   {
-    mMessageBar->pushMessage( QString(),
-                              tr( "No matching features found" ),
-                              Qgis::MessageLevel::Info );
+    mMessageBar->pushMessage( QString(), tr( "No matching features found" ), Qgis::MessageLevel::Info );
+  }
+}
+
+void QgsSelectByFormDialog::openFeaturesAttributeTable( const QString &filter )
+{
+  Q_ASSERT( mLayer );
+  QgsFeatureIterator it = mLayer->getFeatures( filter );
+  QgsFeature f;
+  if ( it.isValid() && it.nextFeature( f ) )
+  {
+    emit showFilteredFeaturesAttributeTable( filter );
+  }
+  else
+  {
+    if ( mMessageBar )
+    {
+      mMessageBar->pushMessage( QString(), tr( "No matching features found" ), Qgis::MessageLevel::Info );
+    }
   }
 }

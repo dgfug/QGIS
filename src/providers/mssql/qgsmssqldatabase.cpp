@@ -24,13 +24,9 @@
 #include <QThread>
 
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-QMutex QgsMssqlDatabase::sMutex { QMutex::Recursive };
-#else
 QRecursiveMutex QgsMssqlDatabase::sMutex;
-#endif
 
-QMap<QString, std::weak_ptr<QgsMssqlDatabase> > QgsMssqlDatabase::sConnections;
+QMap<QString, std::weak_ptr<QgsMssqlDatabase>> QgsMssqlDatabase::sConnections;
 
 
 QString QgsMssqlDatabase::connectionName( const QString &service, const QString &host, const QString &database, bool transaction )
@@ -43,7 +39,7 @@ QString QgsMssqlDatabase::connectionName( const QString &service, const QString 
 
     if ( database.isEmpty() )
     {
-      QgsDebugMsg( QStringLiteral( "QgsMssqlProvider database name not specified" ) );
+      QgsDebugError( QStringLiteral( "QgsMssqlProvider database name not specified" ) );
       return QString();
     }
 
@@ -97,18 +93,14 @@ QgsMssqlDatabase::QgsMssqlDatabase( const QSqlDatabase &db, bool transaction )
 
   if ( mTransaction )
   {
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    mTransactionMutex.reset( new QMutex { QMutex::Recursive } );
-#else
     mTransactionMutex.reset( new QRecursiveMutex );
-#endif
   }
 
   if ( !mDB.isOpen() )
   {
     if ( !mDB.open() )
     {
-      QgsDebugMsg( "Failed to open MSSQL database: " + mDB.lastError().text() );
+      QgsDebugError( "Failed to open MSSQL database: " + mDB.lastError().text() );
     }
   }
 }
@@ -152,11 +144,9 @@ QSqlDatabase QgsMssqlDatabase::getDatabase( const QString &service, const QStrin
       // and a subsequent call to QSqlDatabase::database with the same thread address (yep it happens, actually a lot)
       // triggers a condition in QSqlDatabase which detects the nullptr private thread data and returns an invalid database instead.
       // QSqlDatabase::removeDatabase is thread safe, so this is ok to do.
-      QObject::connect( QThread::currentThread(), &QThread::finished, QThread::currentThread(), [threadSafeConnectionName]
-      {
+      QObject::connect( QThread::currentThread(), &QThread::finished, QThread::currentThread(), [threadSafeConnectionName] {
         const QMutexLocker locker( &sMutex );
-        QSqlDatabase::removeDatabase( threadSafeConnectionName );
-      }, Qt::DirectConnection );
+        QSqlDatabase::removeDatabase( threadSafeConnectionName ); }, Qt::DirectConnection );
     }
   }
   else
@@ -176,7 +166,7 @@ QSqlDatabase QgsMssqlDatabase::getDatabase( const QString &service, const QStrin
   {
 #ifdef Q_OS_WIN
     connectionString = "driver={SQL Server}";
-#elif defined (Q_OS_MAC)
+#elif defined( Q_OS_MAC )
     QString freeTDSDriver( QCoreApplication::applicationDirPath().append( "/lib/libtdsodbc.so" ) );
     if ( QFile::exists( freeTDSDriver ) )
     {
@@ -216,6 +206,6 @@ QSqlDatabase QgsMssqlDatabase::getDatabase( const QString &service, const QStrin
   db.setDatabaseName( connectionString );
 
   // only uncomment temporarily -- it can show connection password otherwise!
-  // QgsDebugMsg( connectionString );
+  // QgsDebugMsgLevel( connectionString, 2 );
   return db;
 }

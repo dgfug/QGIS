@@ -31,7 +31,6 @@ class Qgs3DAnimationWidget : public QWidget, private Ui::Animation3DWidget
     Q_OBJECT
   public:
     explicit Qgs3DAnimationWidget( QWidget *parent = nullptr );
-    ~Qgs3DAnimationWidget() override;
 
     void setCameraController( QgsCameraController *cameraController );
 
@@ -65,8 +64,8 @@ class Qgs3DAnimationWidget : public QWidget, private Ui::Animation3DWidget
 
   private:
     std::unique_ptr<Qgs3DAnimationSettings> mAnimationSettings;
-    QgsCameraController *mCameraController;
-    Qgs3DMapSettings *mMap;
+    QgsCameraController *mCameraController = nullptr;
+    Qgs3DMapSettings *mMap = nullptr;
     QTimer *mAnimationTimer = nullptr;
 };
 

@@ -13,9 +13,9 @@
  *                                                                         *
  ***************************************************************************/
 
-#include "qgsapplication.h"
 #include "qgscodeeditorexpression.h"
-#include "qgssymbollayerutils.h"
+#include "moc_qgscodeeditorexpression.cpp"
+#include "qgsexpression.h"
 
 #include <QString>
 #include <QFont>
@@ -27,9 +27,13 @@ QgsCodeEditorExpression::QgsCodeEditorExpression( QWidget *parent )
   {
     setTitle( tr( "Expression Editor" ) );
   }
-  setFoldingVisible( false );
   setAutoCompletionCaseSensitivity( false );
   QgsCodeEditorExpression::initializeLexer(); // avoid cppcheck warning by explicitly specifying namespace
+}
+
+Qgis::ScriptLanguage QgsCodeEditorExpression::language() const
+{
+  return Qgis::ScriptLanguage::QgisExpression;
 }
 
 void QgsCodeEditorExpression::setExpressionContext( const QgsExpressionContext &context )
@@ -41,6 +45,12 @@ void QgsCodeEditorExpression::setExpressionContext( const QgsExpressionContext &
   {
     mVariables << '@' + var;
   }
+
+  // always show feature variables in autocomplete -- they may not be available in the context
+  // at time of showing an expression builder, but they'll generally be available at evaluation time.
+  mVariables << QStringLiteral( "@feature" );
+  mVariables << QStringLiteral( "@id" );
+  mVariables << QStringLiteral( "@geometry" );
 
   mContextFunctions = context.functionNames();
 
@@ -187,7 +197,6 @@ const char *QgsLexerExpression::wordCharacters() const
 QgsSciApisExpression::QgsSciApisExpression( QsciLexer *lexer )
   : QsciAPIs( lexer )
 {
-
 }
 
 QStringList QgsSciApisExpression::callTips( const QStringList &context, int commas, QsciScintilla::CallTipsStyle style, QList<int> &shifts )

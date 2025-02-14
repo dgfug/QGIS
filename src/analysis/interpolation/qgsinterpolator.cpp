@@ -21,11 +21,11 @@
 #include "qgsvectorlayer.h"
 #include "qgsgeometry.h"
 #include "qgsfeedback.h"
+#include "qgsvariantutils.h"
 
 QgsInterpolator::QgsInterpolator( const QList<LayerData> &layerData )
   : mLayerData( layerData )
 {
-
 }
 
 QgsInterpolator::Result QgsInterpolator::cacheBaseData( QgsFeedback *feedback )
@@ -88,7 +88,7 @@ QgsInterpolator::Result QgsInterpolator::cacheBaseData( QgsFeedback *feedback )
         case ValueAttribute:
         {
           QVariant attributeVariant = feature.attribute( layer.interpolationAttribute );
-          if ( !attributeVariant.isValid() || attributeVariant.isNull() ) //attribute not found, something must be wrong (e.g. NULL value)
+          if ( QgsVariantUtils::isNull( attributeVariant ) ) //attribute not found, something must be wrong (e.g. NULL value)
           {
             continue;
           }

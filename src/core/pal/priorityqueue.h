@@ -63,17 +63,15 @@ namespace pal
       PriorityQueue( int n, int maxId, bool min );
       ~PriorityQueue();
 
-      //! PriorityQueue cannot be copied.
       PriorityQueue( const PriorityQueue & ) = delete;
-      //! PriorityQueue cannot be copied.
       PriorityQueue &operator=( const PriorityQueue & ) = delete;
 
       void print();
 
-      int getSize();
-      int getSizeByPos();
+      int getSize() const;
+      int getSizeByPos() const;
 
-      bool isIn( int key );
+      bool isIn( int key ) const;
 
       int getBest(); // O(log n)
 
@@ -89,7 +87,7 @@ namespace pal
       void setPriority( int key, double new_p );
 
 
-      int getId( int key );
+      int getId( int key ) const;
     private:
 
       int size;

@@ -21,7 +21,6 @@
 #include "qgslinestring.h"
 #include "qgsmultipoint.h"
 #include "qgsmultilinestring.h"
-#include "qgsogrprovider.h"
 #include "qgslinesymbollayer.h"
 #include "qgspolygon.h"
 #include "qgsmultipolygon.h"
@@ -35,7 +34,19 @@
 #include "qgsfillsymbol.h"
 #include "qgslinesymbol.h"
 #include "qgsmarkersymbol.h"
+#include "qgsfielddomain.h"
+#include "qgsfontmanager.h"
+#include "qgsvariantutils.h"
+#include "qgsogrproviderutils.h"
 
+#if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,6,0)
+#include "qgsweakrelation.h"
+#include "qgsproviderregistry.h"
+#include "qgsprovidermetadata.h"
+#endif
+
+#include <cmath>
+#include <limits>
 #include <QTextCodec>
 #include <QUuid>
 #include <cpl_error.h>
@@ -49,28 +60,28 @@
 #include "ogr_srs_api.h"
 
 
-void gdal::OGRDataSourceDeleter::operator()( OGRDataSourceH source )
+void gdal::OGRDataSourceDeleter::operator()( OGRDataSourceH source ) const
 {
   OGR_DS_Destroy( source );
 }
 
 
-void gdal::OGRGeometryDeleter::operator()( OGRGeometryH geometry )
+void gdal::OGRGeometryDeleter::operator()( OGRGeometryH geometry ) const
 {
   OGR_G_DestroyGeometry( geometry );
 }
 
-void gdal::OGRFldDeleter::operator()( OGRFieldDefnH definition )
+void gdal::OGRFldDeleter::operator()( OGRFieldDefnH definition ) const
 {
   OGR_Fld_Destroy( definition );
 }
 
-void gdal::OGRFeatureDeleter::operator()( OGRFeatureH feature )
+void gdal::OGRFeatureDeleter::operator()( OGRFeatureH feature ) const
 {
   OGR_F_Destroy( feature );
 }
 
-void gdal::GDALDatasetCloser::operator()( GDALDatasetH dataset )
+void gdal::GDALDatasetCloser::operator()( GDALDatasetH dataset ) const
 {
   GDALClose( dataset );
 }
@@ -95,9 +106,39 @@ void gdal::fast_delete_and_close( gdal::dataset_unique_ptr &dataset, GDALDriverH
 }
 
 
-void gdal::GDALWarpOptionsDeleter::operator()( GDALWarpOptions *options )
+void gdal::GDALWarpOptionsDeleter::operator()( GDALWarpOptions *options ) const
 {
   GDALDestroyWarpOptions( options );
+}
+
+#if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,6,0)
+void gdal::GDALRelationshipDeleter::operator()( GDALRelationshipH relationship ) const
+{
+  GDALDestroyRelationship( relationship );
+}
+#endif
+
+static void setQTTimeZoneFromOGRTZFlag( QDateTime &dt, int nTZFlag )
+{
+  // Take into account time zone
+  if ( nTZFlag == 0 )
+  {
+    // unknown time zone
+  }
+  else if ( nTZFlag == 1 )
+  {
+    dt.setTimeSpec( Qt::LocalTime );
+  }
+  else if ( nTZFlag == 100 )
+  {
+    dt.setTimeSpec( Qt::UTC );
+  }
+  else
+  {
+    // TZFlag = 101 ==> UTC+00:15
+    // TZFlag = 99 ==> UTC-00:15
+    dt.setOffsetFromUtc( ( nTZFlag - 100 ) * 15 * 60 );
+  }
 }
 
 QVariant QgsOgrUtils::OGRFieldtoVariant( const OGRField *value, OGRFieldType type )
@@ -127,15 +168,17 @@ QVariant QgsOgrUtils::OGRFieldtoVariant( const OGRField *value, OGRFieldType typ
     {
       float secondsPart = 0;
       float millisecondPart = std::modf( value->Date.Second, &secondsPart );
-      return QTime( value->Date.Hour, value->Date.Minute, static_cast< int >( secondsPart ), static_cast< int >( 1000 * millisecondPart ) );
+      return QTime( value->Date.Hour, value->Date.Minute, static_cast< int >( secondsPart ), static_cast< int >( std::round( 1000 * millisecondPart ) ) );
     }
 
     case OFTDateTime:
     {
       float secondsPart = 0;
       float millisecondPart = std::modf( value->Date.Second, &secondsPart );
-      return QDateTime( QDate( value->Date.Year, value->Date.Month, value->Date.Day ),
-                        QTime( value->Date.Hour, value->Date.Minute, static_cast< int >( secondsPart ), static_cast< int >( 1000 * millisecondPart ) ) );
+      QDateTime dt = QDateTime( QDate( value->Date.Year, value->Date.Month, value->Date.Day ),
+                                QTime( value->Date.Hour, value->Date.Minute, static_cast< int >( secondsPart ), static_cast< int >( std::round( 1000 * millisecondPart ) ) ) );
+      setQTTimeZoneFromOGRTZFlag( dt, value->Date.TZFlag );
+      return dt;
     }
 
     case OFTBinary:
@@ -183,6 +226,201 @@ QVariant QgsOgrUtils::OGRFieldtoVariant( const OGRField *value, OGRFieldType typ
   return QVariant();
 }
 
+int QgsOgrUtils::OGRTZFlagFromQt( const QDateTime &datetime )
+{
+  if ( datetime.timeSpec() == Qt::LocalTime )
+    return 1;
+  return 100 + datetime.offsetFromUtc() / ( 60 * 15 );
+}
+
+std::unique_ptr< OGRField > QgsOgrUtils::variantToOGRField( const QVariant &value, OGRFieldType type )
+{
+  auto res = std::make_unique< OGRField >();
+
+  switch ( value.userType() )
+  {
+    case QMetaType::Type::UnknownType:
+      OGR_RawField_SetUnset( res.get() );
+      break;
+    case QMetaType::Type::Bool:
+    {
+      const int val = value.toBool() ? 1 : 0;
+      if ( type == OFTInteger )
+        res->Integer = val;
+      else if ( type == OFTInteger64 )
+        res->Integer64 = val;
+      else if ( type == OFTReal )
+        res->Real = val;
+      else
+      {
+        QgsDebugError( "Unsupported output data type for Bool" );
+        return nullptr;
+      }
+      break;
+    }
+    case QMetaType::Type::Int:
+    {
+      const int val = value.toInt();
+      if ( type == OFTInteger )
+        res->Integer = val;
+      else if ( type == OFTInteger64 )
+        res->Integer64 = val;
+      else if ( type == OFTReal )
+        res->Real = val;
+      else
+      {
+        QgsDebugError( "Unsupported output data type for Int" );
+        return nullptr;
+      }
+      break;
+    }
+    case QMetaType::Type::LongLong:
+    {
+      const qint64 val = value.toLongLong();
+      if ( type == OFTInteger )
+      {
+        if ( val <= std::numeric_limits<int>::max() &&
+             val >= std::numeric_limits<int>::min() )
+        {
+          res->Integer = static_cast<int>( val );
+        }
+        else
+        {
+          QgsDebugError( "Value does not fit on Integer" );
+          return nullptr;
+        }
+      }
+      else if ( type == OFTInteger64 )
+        res->Integer64 = val;
+      else if ( type == OFTReal )
+      {
+        res->Real = static_cast<double>( val );
+      }
+      else
+      {
+        QgsDebugError( "Unsupported output data type for LongLong" );
+        return nullptr;
+      }
+      break;
+    }
+    case QMetaType::Type::Double:
+    {
+      double val = value.toDouble();
+      if ( type == OFTInteger )
+      {
+        if ( val <= std::numeric_limits<int>::max() &&
+             val >= std::numeric_limits<int>::min() )
+        {
+          res->Integer = static_cast<int>( val );
+        }
+        else
+        {
+          QgsDebugError( "Value does not fit on Integer" );
+          return nullptr;
+        }
+      }
+      else if ( type == OFTInteger64 )
+      {
+        if ( val <= static_cast<double>( std::numeric_limits<qint64>::max() ) &&
+             val >= static_cast<double>( std::numeric_limits<qint64>::min() ) )
+        {
+          res->Integer64 = static_cast<qint64>( val );
+        }
+        else
+        {
+          QgsDebugError( "Value does not fit on Integer64" );
+          return nullptr;
+        }
+      }
+      else if ( type == OFTReal )
+      {
+        res->Real = val;
+      }
+      else
+      {
+        QgsDebugError( "Unsupported output data type for LongLong" );
+        return nullptr;
+      }
+      break;
+    }
+    case QMetaType::Type::QChar:
+    case QMetaType::Type::QString:
+    {
+      if ( type == OFTString )
+        res->String = CPLStrdup( value.toString().toUtf8().constData() );
+      else
+      {
+        QgsDebugError( "Unsupported output data type for String" );
+        return nullptr;
+      }
+      break;
+    }
+    case QMetaType::Type::QDate:
+    {
+      if ( type == OFTDate )
+      {
+        const QDate date = value.toDate();
+        res->Date.Day = date.day();
+        res->Date.Month = date.month();
+        res->Date.Year = static_cast<GInt16>( date.year() );
+        res->Date.TZFlag = 0;
+      }
+      else
+      {
+        QgsDebugError( "Unsupported output data type for Date" );
+        return nullptr;
+      }
+      break;
+    }
+    case QMetaType::Type::QTime:
+    {
+      if ( type == OFTTime )
+      {
+        const QTime time = value.toTime();
+        res->Date.Hour = time.hour();
+        res->Date.Minute = time.minute();
+        res->Date.Second = static_cast<float>( time.second() + static_cast< double >( time.msec() ) / 1000 );
+        res->Date.TZFlag = 0;
+      }
+      else
+      {
+        QgsDebugError( "Unsupported output data type for Time" );
+        return nullptr;
+      }
+      break;
+    }
+    case QMetaType::Type::QDateTime:
+    {
+      if ( type == OFTDateTime )
+      {
+        const QDateTime dt = value.toDateTime();
+        const QDate date = dt.date();
+        res->Date.Day = date.day();
+        res->Date.Month = date.month();
+        res->Date.Year = static_cast<GInt16>( date.year() );
+        const QTime time = dt.time();
+        res->Date.Hour = time.hour();
+        res->Date.Minute = time.minute();
+        res->Date.Second = static_cast<float>( time.second() + static_cast< double >( time.msec() ) / 1000 );
+        res->Date.TZFlag = OGRTZFlagFromQt( dt );
+      }
+      else
+      {
+        QgsDebugError( "Unsupported output data type for DateTime" );
+        return nullptr;
+      }
+      break;
+    }
+
+    default:
+      QgsDebugError( "Unhandled variant type in variantToOGRField" );
+      OGR_RawField_SetUnset( res.get() );
+      break;
+  }
+
+  return res;
+}
+
 QgsFeature QgsOgrUtils::readOgrFeature( OGRFeatureH ogrFet, const QgsFields &fields, QTextCodec *encoding )
 {
   QgsFeature feature;
@@ -226,38 +464,38 @@ QgsFields QgsOgrUtils::readOgrFields( OGRFeatureH ogrFet, QTextCodec *encoding )
     }
 
     QString name = encoding ? encoding->toUnicode( OGR_Fld_GetNameRef( fldDef ) ) : QString::fromUtf8( OGR_Fld_GetNameRef( fldDef ) );
-    QVariant::Type varType;
+    QMetaType::Type varType;
     switch ( OGR_Fld_GetType( fldDef ) )
     {
       case OFTInteger:
         if ( OGR_Fld_GetSubType( fldDef ) == OFSTBoolean )
-          varType = QVariant::Bool;
+          varType = QMetaType::Type::Bool;
         else
-          varType = QVariant::Int;
+          varType = QMetaType::Type::Int;
         break;
       case OFTInteger64:
-        varType = QVariant::LongLong;
+        varType = QMetaType::Type::LongLong;
         break;
       case OFTReal:
-        varType = QVariant::Double;
+        varType = QMetaType::Type::Double;
         break;
       case OFTDate:
-        varType = QVariant::Date;
+        varType = QMetaType::Type::QDate;
         break;
       case OFTTime:
-        varType = QVariant::Time;
+        varType = QMetaType::Type::QTime;
         break;
       case OFTDateTime:
-        varType = QVariant::DateTime;
+        varType = QMetaType::Type::QDateTime;
         break;
       case OFTString:
         if ( OGR_Fld_GetSubType( fldDef ) == OFSTJSON )
-          varType = QVariant::Map;
+          varType = QMetaType::Type::QVariantMap;
         else
-          varType = QVariant::String;
+          varType = QMetaType::Type::QString;
         break;
       default:
-        varType = QVariant::String; // other unsupported, leave it as a string
+        varType = QMetaType::Type::QString; // other unsupported, leave it as a string
     }
     fields.append( QgsField( name, varType ) );
   }
@@ -294,7 +532,7 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
     if ( ok )
       *ok = false;
 
-    QgsDebugMsg( QStringLiteral( "ogrFet->GetFieldDefnRef(attindex) returns NULL" ) );
+    QgsDebugError( QStringLiteral( "ogrFet->GetFieldDefnRef(attindex) returns NULL" ) );
     return QVariant();
   }
 
@@ -307,7 +545,7 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
   {
     switch ( field.type() )
     {
-      case QVariant::String:
+      case QMetaType::Type::QString:
       {
         if ( encoding )
           value = QVariant( encoding->toUnicode( OGR_F_GetFieldAsString( ogrFet, attIndex ) ) );
@@ -323,21 +561,21 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
 
         break;
       }
-      case QVariant::Int:
+      case QMetaType::Type::Int:
         value = QVariant( OGR_F_GetFieldAsInteger( ogrFet, attIndex ) );
         break;
-      case QVariant::Bool:
+      case QMetaType::Type::Bool:
         value = QVariant( bool( OGR_F_GetFieldAsInteger( ogrFet, attIndex ) ) );
         break;
-      case QVariant::LongLong:
+      case QMetaType::Type::LongLong:
         value = QVariant( OGR_F_GetFieldAsInteger64( ogrFet, attIndex ) );
         break;
-      case QVariant::Double:
+      case QMetaType::Type::Double:
         value = QVariant( OGR_F_GetFieldAsDouble( ogrFet, attIndex ) );
         break;
-      case QVariant::Date:
-      case QVariant::DateTime:
-      case QVariant::Time:
+      case QMetaType::Type::QDate:
+      case QMetaType::Type::QDateTime:
+      case QMetaType::Type::QTime:
       {
         int year, month, day, hour, minute, tzf;
         float second;
@@ -346,17 +584,21 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
         OGR_F_GetFieldAsDateTimeEx( ogrFet, attIndex, &year, &month, &day, &hour, &minute, &second, &tzf );
         float millisecondPart = std::modf( second, &secondsPart );
 
-        if ( field.type() == QVariant::Date )
+        if ( field.type() == QMetaType::Type::QDate )
           value = QDate( year, month, day );
-        else if ( field.type() == QVariant::Time )
-          value = QTime( hour, minute, static_cast< int >( secondsPart ), static_cast< int >( 1000 * millisecondPart ) );
+        else if ( field.type() == QMetaType::Type::QTime )
+          value = QTime( hour, minute, static_cast< int >( secondsPart ), static_cast< int >( std::round( 1000 * millisecondPart ) ) );
         else
-          value = QDateTime( QDate( year, month, day ),
-                             QTime( hour, minute, static_cast< int >( secondsPart ), static_cast< int >( 1000 * millisecondPart ) ) );
+        {
+          QDateTime dt = QDateTime( QDate( year, month, day ),
+                                    QTime( hour, minute, static_cast< int >( secondsPart ), static_cast< int >( std::round( 1000 * millisecondPart ) ) ) );
+          setQTTimeZoneFromOGRTZFlag( dt, tzf );
+          value = dt;
+        }
       }
       break;
 
-      case QVariant::ByteArray:
+      case QMetaType::Type::QByteArray:
       {
         int size = 0;
         const GByte *b = OGR_F_GetFieldAsBinary( ogrFet, attIndex, &size );
@@ -370,7 +612,7 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
         break;
       }
 
-      case QVariant::StringList:
+      case QMetaType::Type::QStringList:
       {
         QStringList list;
         char **lst = OGR_F_GetFieldAsStringList( ogrFet, attIndex );
@@ -390,11 +632,11 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
         break;
       }
 
-      case QVariant::List:
+      case QMetaType::Type::QVariantList:
       {
         switch ( field.subType() )
         {
-          case QVariant::String:
+          case QMetaType::Type::QString:
           {
             QStringList list;
             char **lst = OGR_F_GetFieldAsStringList( ogrFet, attIndex );
@@ -414,7 +656,7 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
             break;
           }
 
-          case QVariant::Int:
+          case QMetaType::Type::Int:
           {
             QVariantList list;
             int count = 0;
@@ -431,7 +673,7 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
             break;
           }
 
-          case QVariant::Double:
+          case QMetaType::Type::Double:
           {
             QVariantList list;
             int count = 0;
@@ -448,7 +690,7 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
             break;
           }
 
-          case QVariant::LongLong:
+          case QMetaType::Type::LongLong:
           {
             QVariantList list;
             int count = 0;
@@ -476,7 +718,7 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
         break;
       }
 
-      case QVariant::Map:
+      case QMetaType::Type::QVariantMap:
       {
         //it has to be JSON
         //it's null if no json format
@@ -494,7 +736,7 @@ QVariant QgsOgrUtils::getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField
   }
   else
   {
-    value = QVariant( field.type() );
+    value = QgsVariantUtils::createNullVariant( field.type() );
   }
 
   return value;
@@ -537,7 +779,7 @@ bool QgsOgrUtils::readOgrFeatureGeometry( OGRFeatureH ogrFet, QgsFeature &featur
 
 std::unique_ptr< QgsPoint > ogrGeometryToQgsPoint( OGRGeometryH geom )
 {
-  QgsWkbTypes::Type wkbType = static_cast<QgsWkbTypes::Type>( OGR_G_GetGeometryType( geom ) );
+  Qgis::WkbType wkbType = QgsOgrUtils::ogrGeometryTypeToQgsWkbType( OGR_G_GetGeometryType( geom ) );
 
   double x, y, z, m;
   OGR_G_GetPointZM( geom, 0, &x, &y, &z, &m );
@@ -546,7 +788,7 @@ std::unique_ptr< QgsPoint > ogrGeometryToQgsPoint( OGRGeometryH geom )
 
 std::unique_ptr< QgsMultiPoint > ogrGeometryToQgsMultiPoint( OGRGeometryH geom )
 {
-  std::unique_ptr< QgsMultiPoint > mp = std::make_unique< QgsMultiPoint >();
+  auto mp = std::make_unique< QgsMultiPoint >();
 
   const int count = OGR_G_GetGeometryCount( geom );
   mp->reserve( count );
@@ -560,7 +802,7 @@ std::unique_ptr< QgsMultiPoint > ogrGeometryToQgsMultiPoint( OGRGeometryH geom )
 
 std::unique_ptr< QgsLineString > ogrGeometryToQgsLineString( OGRGeometryH geom )
 {
-  QgsWkbTypes::Type wkbType = static_cast<QgsWkbTypes::Type>( OGR_G_GetGeometryType( geom ) );
+  Qgis::WkbType wkbType = QgsOgrUtils::ogrGeometryTypeToQgsWkbType( OGR_G_GetGeometryType( geom ) );
 
   int count = OGR_G_GetPointCount( geom );
   QVector< double > x( count );
@@ -581,12 +823,12 @@ std::unique_ptr< QgsLineString > ogrGeometryToQgsLineString( OGRGeometryH geom )
   }
   OGR_G_GetPointsZM( geom, x.data(), sizeof( double ), y.data(), sizeof( double ), pz, sizeof( double ), pm, sizeof( double ) );
 
-  return std::make_unique< QgsLineString>( x, y, z, m, wkbType == QgsWkbTypes::LineString25D );
+  return std::make_unique< QgsLineString>( x, y, z, m, wkbType == Qgis::WkbType::LineString25D );
 }
 
 std::unique_ptr< QgsMultiLineString > ogrGeometryToQgsMultiLineString( OGRGeometryH geom )
 {
-  std::unique_ptr< QgsMultiLineString > mp = std::make_unique< QgsMultiLineString >();
+  auto mp = std::make_unique< QgsMultiLineString >();
 
   const int count = OGR_G_GetGeometryCount( geom );
   mp->reserve( count );
@@ -600,7 +842,7 @@ std::unique_ptr< QgsMultiLineString > ogrGeometryToQgsMultiLineString( OGRGeomet
 
 std::unique_ptr< QgsPolygon > ogrGeometryToQgsPolygon( OGRGeometryH geom )
 {
-  std::unique_ptr< QgsPolygon > polygon = std::make_unique< QgsPolygon >();
+  auto polygon = std::make_unique< QgsPolygon >();
 
   const int count = OGR_G_GetGeometryCount( geom );
   if ( count >= 1 )
@@ -618,7 +860,7 @@ std::unique_ptr< QgsPolygon > ogrGeometryToQgsPolygon( OGRGeometryH geom )
 
 std::unique_ptr< QgsMultiPolygon > ogrGeometryToQgsMultiPolygon( OGRGeometryH geom )
 {
-  std::unique_ptr< QgsMultiPolygon > polygon = std::make_unique< QgsMultiPolygon >();
+  auto polygon = std::make_unique< QgsMultiPolygon >();
 
   const int count = OGR_G_GetGeometryCount( geom );
   polygon->reserve( count );
@@ -630,90 +872,90 @@ std::unique_ptr< QgsMultiPolygon > ogrGeometryToQgsMultiPolygon( OGRGeometryH ge
   return polygon;
 }
 
-QgsWkbTypes::Type QgsOgrUtils::ogrGeometryTypeToQgsWkbType( OGRwkbGeometryType ogrGeomType )
+Qgis::WkbType QgsOgrUtils::ogrGeometryTypeToQgsWkbType( OGRwkbGeometryType ogrGeomType )
 {
   switch ( ogrGeomType )
   {
-    case wkbUnknown: return QgsWkbTypes::Type::Unknown;
-    case wkbPoint: return QgsWkbTypes::Type::Point;
-    case wkbLineString: return QgsWkbTypes::Type::LineString;
-    case wkbPolygon: return QgsWkbTypes::Type::Polygon;
-    case wkbMultiPoint: return QgsWkbTypes::Type::MultiPoint;
-    case wkbMultiLineString: return QgsWkbTypes::Type::MultiLineString;
-    case wkbMultiPolygon: return QgsWkbTypes::Type::MultiPolygon;
-    case wkbGeometryCollection: return QgsWkbTypes::Type::GeometryCollection;
-    case wkbCircularString: return QgsWkbTypes::Type::CircularString;
-    case wkbCompoundCurve: return QgsWkbTypes::Type::CompoundCurve;
-    case wkbCurvePolygon: return QgsWkbTypes::Type::CurvePolygon;
-    case wkbMultiCurve: return QgsWkbTypes::Type::MultiCurve;
-    case wkbMultiSurface: return QgsWkbTypes::Type::MultiSurface;
-    case wkbCurve: return QgsWkbTypes::Type::Unknown; // not an actual concrete type
-    case wkbSurface: return QgsWkbTypes::Type::Unknown; // not an actual concrete type
-    case wkbPolyhedralSurface: return QgsWkbTypes::Type::Unknown; // no actual matching
-    case wkbTIN: return QgsWkbTypes::Type::Unknown; // no actual matching
-    case wkbTriangle: return QgsWkbTypes::Type::Triangle;
+    case wkbUnknown: return Qgis::WkbType::Unknown;
+    case wkbPoint: return Qgis::WkbType::Point;
+    case wkbLineString: return Qgis::WkbType::LineString;
+    case wkbPolygon: return Qgis::WkbType::Polygon;
+    case wkbMultiPoint: return Qgis::WkbType::MultiPoint;
+    case wkbMultiLineString: return Qgis::WkbType::MultiLineString;
+    case wkbMultiPolygon: return Qgis::WkbType::MultiPolygon;
+    case wkbGeometryCollection: return Qgis::WkbType::GeometryCollection;
+    case wkbCircularString: return Qgis::WkbType::CircularString;
+    case wkbCompoundCurve: return Qgis::WkbType::CompoundCurve;
+    case wkbCurvePolygon: return Qgis::WkbType::CurvePolygon;
+    case wkbMultiCurve: return Qgis::WkbType::MultiCurve;
+    case wkbMultiSurface: return Qgis::WkbType::MultiSurface;
+    case wkbCurve: return Qgis::WkbType::Unknown; // not an actual concrete type
+    case wkbSurface: return Qgis::WkbType::Unknown; // not an actual concrete type
+    case wkbPolyhedralSurface: return Qgis::WkbType::PolyhedralSurface;
+    case wkbTIN: return Qgis::WkbType::TIN;
+    case wkbTriangle: return Qgis::WkbType::Triangle;
 
-    case wkbNone: return QgsWkbTypes::Type::NoGeometry;
-    case wkbLinearRing: return QgsWkbTypes::Type::LineString; // approximate match
+    case wkbNone: return Qgis::WkbType::NoGeometry;
+    case wkbLinearRing: return Qgis::WkbType::LineString; // approximate match
 
-    case wkbCircularStringZ: return QgsWkbTypes::Type::CircularStringZ;
-    case wkbCompoundCurveZ: return QgsWkbTypes::Type::CompoundCurveZ;
-    case wkbCurvePolygonZ: return QgsWkbTypes::Type::CurvePolygonZ;
-    case wkbMultiCurveZ: return QgsWkbTypes::Type::MultiCurveZ;
-    case wkbMultiSurfaceZ: return QgsWkbTypes::Type::MultiSurfaceZ;
-    case wkbCurveZ: return QgsWkbTypes::Type::Unknown; // not an actual concrete type
-    case wkbSurfaceZ: return QgsWkbTypes::Type::Unknown; // not an actual concrete type
-    case wkbPolyhedralSurfaceZ: return QgsWkbTypes::Type::Unknown; // no actual matching
-    case wkbTINZ: return QgsWkbTypes::Type::Unknown; // no actual matching
-    case wkbTriangleZ: return QgsWkbTypes::Type::TriangleZ;
+    case wkbCircularStringZ: return Qgis::WkbType::CircularStringZ;
+    case wkbCompoundCurveZ: return Qgis::WkbType::CompoundCurveZ;
+    case wkbCurvePolygonZ: return Qgis::WkbType::CurvePolygonZ;
+    case wkbMultiCurveZ: return Qgis::WkbType::MultiCurveZ;
+    case wkbMultiSurfaceZ: return Qgis::WkbType::MultiSurfaceZ;
+    case wkbCurveZ: return Qgis::WkbType::Unknown; // not an actual concrete type
+    case wkbSurfaceZ: return Qgis::WkbType::Unknown; // not an actual concrete type
+    case wkbPolyhedralSurfaceZ: return Qgis::WkbType::PolyhedralSurfaceZ;
+    case wkbTINZ: return Qgis::WkbType::TINZ;
+    case wkbTriangleZ: return Qgis::WkbType::TriangleZ;
 
-    case wkbPointM: return QgsWkbTypes::Type::PointM;
-    case wkbLineStringM: return QgsWkbTypes::Type::LineStringM;
-    case wkbPolygonM: return QgsWkbTypes::Type::PolygonM;
-    case wkbMultiPointM: return QgsWkbTypes::Type::MultiPointM;
-    case wkbMultiLineStringM: return QgsWkbTypes::Type::MultiLineStringM;
-    case wkbMultiPolygonM: return QgsWkbTypes::Type::MultiPolygonM;
-    case wkbGeometryCollectionM: return QgsWkbTypes::Type::GeometryCollectionM;
-    case wkbCircularStringM: return QgsWkbTypes::Type::CircularStringM;
-    case wkbCompoundCurveM: return QgsWkbTypes::Type::CompoundCurveM;
-    case wkbCurvePolygonM: return QgsWkbTypes::Type::CurvePolygonM;
-    case wkbMultiCurveM: return QgsWkbTypes::Type::MultiCurveM;
-    case wkbMultiSurfaceM: return QgsWkbTypes::Type::MultiSurfaceM;
-    case wkbCurveM: return QgsWkbTypes::Type::Unknown; // not an actual concrete type
-    case wkbSurfaceM: return QgsWkbTypes::Type::Unknown; // not an actual concrete type
-    case wkbPolyhedralSurfaceM: return QgsWkbTypes::Type::Unknown; // no actual matching
-    case wkbTINM: return QgsWkbTypes::Type::Unknown; // no actual matching
-    case wkbTriangleM: return QgsWkbTypes::Type::TriangleM;
+    case wkbPointM: return Qgis::WkbType::PointM;
+    case wkbLineStringM: return Qgis::WkbType::LineStringM;
+    case wkbPolygonM: return Qgis::WkbType::PolygonM;
+    case wkbMultiPointM: return Qgis::WkbType::MultiPointM;
+    case wkbMultiLineStringM: return Qgis::WkbType::MultiLineStringM;
+    case wkbMultiPolygonM: return Qgis::WkbType::MultiPolygonM;
+    case wkbGeometryCollectionM: return Qgis::WkbType::GeometryCollectionM;
+    case wkbCircularStringM: return Qgis::WkbType::CircularStringM;
+    case wkbCompoundCurveM: return Qgis::WkbType::CompoundCurveM;
+    case wkbCurvePolygonM: return Qgis::WkbType::CurvePolygonM;
+    case wkbMultiCurveM: return Qgis::WkbType::MultiCurveM;
+    case wkbMultiSurfaceM: return Qgis::WkbType::MultiSurfaceM;
+    case wkbCurveM: return Qgis::WkbType::Unknown; // not an actual concrete type
+    case wkbSurfaceM: return Qgis::WkbType::Unknown; // not an actual concrete type
+    case wkbPolyhedralSurfaceM: return Qgis::WkbType::PolyhedralSurfaceM;
+    case wkbTINM: return Qgis::WkbType::TINM;
+    case wkbTriangleM: return Qgis::WkbType::TriangleM;
 
-    case wkbPointZM: return QgsWkbTypes::Type::PointZM;
-    case wkbLineStringZM: return QgsWkbTypes::Type::LineStringZM;
-    case wkbPolygonZM: return QgsWkbTypes::Type::PolygonZM;
-    case wkbMultiPointZM: return QgsWkbTypes::Type::MultiPointZM;
-    case wkbMultiLineStringZM: return QgsWkbTypes::Type::MultiLineStringZM;
-    case wkbMultiPolygonZM: return QgsWkbTypes::Type::MultiPolygonZM;
-    case wkbGeometryCollectionZM: return QgsWkbTypes::Type::GeometryCollectionZM;
-    case wkbCircularStringZM: return QgsWkbTypes::Type::CircularStringZM;
-    case wkbCompoundCurveZM: return QgsWkbTypes::Type::CompoundCurveZM;
-    case wkbCurvePolygonZM: return QgsWkbTypes::Type::CurvePolygonZM;
-    case wkbMultiCurveZM: return QgsWkbTypes::Type::MultiCurveZM;
-    case wkbMultiSurfaceZM: return QgsWkbTypes::Type::MultiSurfaceZM;
-    case wkbCurveZM: return QgsWkbTypes::Type::Unknown; // not an actual concrete type
-    case wkbSurfaceZM: return QgsWkbTypes::Type::Unknown; // not an actual concrete type
-    case wkbPolyhedralSurfaceZM: return QgsWkbTypes::Type::Unknown; // no actual matching
-    case wkbTINZM: return QgsWkbTypes::Type::Unknown; // no actual matching
-    case wkbTriangleZM: return QgsWkbTypes::Type::TriangleZM;
+    case wkbPointZM: return Qgis::WkbType::PointZM;
+    case wkbLineStringZM: return Qgis::WkbType::LineStringZM;
+    case wkbPolygonZM: return Qgis::WkbType::PolygonZM;
+    case wkbMultiPointZM: return Qgis::WkbType::MultiPointZM;
+    case wkbMultiLineStringZM: return Qgis::WkbType::MultiLineStringZM;
+    case wkbMultiPolygonZM: return Qgis::WkbType::MultiPolygonZM;
+    case wkbGeometryCollectionZM: return Qgis::WkbType::GeometryCollectionZM;
+    case wkbCircularStringZM: return Qgis::WkbType::CircularStringZM;
+    case wkbCompoundCurveZM: return Qgis::WkbType::CompoundCurveZM;
+    case wkbCurvePolygonZM: return Qgis::WkbType::CurvePolygonZM;
+    case wkbMultiCurveZM: return Qgis::WkbType::MultiCurveZM;
+    case wkbMultiSurfaceZM: return Qgis::WkbType::MultiSurfaceZM;
+    case wkbCurveZM: return Qgis::WkbType::Unknown; // not an actual concrete type
+    case wkbSurfaceZM: return Qgis::WkbType::Unknown; // not an actual concrete type
+    case wkbPolyhedralSurfaceZM: return Qgis::WkbType::PolyhedralSurfaceZM;
+    case wkbTINZM: return Qgis::WkbType::TINZM;
+    case wkbTriangleZM: return Qgis::WkbType::TriangleZM;
 
-    case wkbPoint25D: return QgsWkbTypes::Type::PointZ;
-    case wkbLineString25D: return QgsWkbTypes::Type::LineStringZ;
-    case wkbPolygon25D: return QgsWkbTypes::Type::PolygonZ;
-    case wkbMultiPoint25D: return QgsWkbTypes::Type::MultiPointZ;
-    case wkbMultiLineString25D: return QgsWkbTypes::Type::MultiLineStringZ;
-    case wkbMultiPolygon25D: return QgsWkbTypes::Type::MultiPolygonZ;
-    case wkbGeometryCollection25D: return QgsWkbTypes::Type::GeometryCollectionZ;
+    case wkbPoint25D: return Qgis::WkbType::PointZ;
+    case wkbLineString25D: return Qgis::WkbType::LineStringZ;
+    case wkbPolygon25D: return Qgis::WkbType::PolygonZ;
+    case wkbMultiPoint25D: return Qgis::WkbType::MultiPointZ;
+    case wkbMultiLineString25D: return Qgis::WkbType::MultiLineStringZ;
+    case wkbMultiPolygon25D: return Qgis::WkbType::MultiPolygonZ;
+    case wkbGeometryCollection25D: return Qgis::WkbType::GeometryCollectionZ;
   }
 
   // should not reach that point normally
-  return QgsWkbTypes::Type::Unknown;
+  return Qgis::WkbType::Unknown;
 }
 
 QgsGeometry QgsOgrUtils::ogrGeometryToQgsGeometry( OGRGeometryH geom )
@@ -722,38 +964,38 @@ QgsGeometry QgsOgrUtils::ogrGeometryToQgsGeometry( OGRGeometryH geom )
     return QgsGeometry();
 
   const auto ogrGeomType = OGR_G_GetGeometryType( geom );
-  QgsWkbTypes::Type wkbType = ogrGeometryTypeToQgsWkbType( ogrGeomType );
+  Qgis::WkbType wkbType = ogrGeometryTypeToQgsWkbType( ogrGeomType );
 
   // optimised case for some geometry classes, avoiding wkb conversion on OGR/QGIS sides
   // TODO - extend to other classes!
   switch ( QgsWkbTypes::flatType( wkbType ) )
   {
-    case QgsWkbTypes::Point:
+    case Qgis::WkbType::Point:
     {
       return QgsGeometry( ogrGeometryToQgsPoint( geom ) );
     }
 
-    case QgsWkbTypes::MultiPoint:
+    case Qgis::WkbType::MultiPoint:
     {
       return QgsGeometry( ogrGeometryToQgsMultiPoint( geom ) );
     }
 
-    case QgsWkbTypes::LineString:
+    case Qgis::WkbType::LineString:
     {
       return QgsGeometry( ogrGeometryToQgsLineString( geom ) );
     }
 
-    case QgsWkbTypes::MultiLineString:
+    case Qgis::WkbType::MultiLineString:
     {
       return QgsGeometry( ogrGeometryToQgsMultiLineString( geom ) );
     }
 
-    case QgsWkbTypes::Polygon:
+    case Qgis::WkbType::Polygon:
     {
       return QgsGeometry( ogrGeometryToQgsPolygon( geom ) );
     }
 
-    case QgsWkbTypes::MultiPolygon:
+    case Qgis::WkbType::MultiPolygon:
     {
       return QgsGeometry( ogrGeometryToQgsMultiPolygon( geom ) );
     }
@@ -781,64 +1023,6 @@ QgsGeometry QgsOgrUtils::ogrGeometryToQgsGeometry( OGRGeometryH geom )
   int memorySize = OGR_G_WkbSize( geom );
   unsigned char *wkb = new unsigned char[memorySize];
   OGR_G_ExportToWkb( geom, static_cast<OGRwkbByteOrder>( QgsApplication::endian() ), wkb );
-
-  // Read original geometry type
-  uint32_t origGeomType;
-  memcpy( &origGeomType, wkb + 1, sizeof( uint32_t ) );
-  bool hasZ = ( origGeomType >= 1000 && origGeomType < 2000 ) || ( origGeomType >= 3000 && origGeomType < 4000 );
-  bool hasM = ( origGeomType >= 2000 && origGeomType < 3000 ) || ( origGeomType >= 3000 && origGeomType < 4000 );
-
-  // PolyhedralSurface and TINs are not supported, map them to multipolygons...
-  if ( origGeomType % 1000 == 16 ) // is TIN, TINZ, TINM or TINZM
-  {
-    // TIN has the same wkb layout as a multipolygon, just need to overwrite the geom types...
-    int nDims = 2 + hasZ + hasM;
-    uint32_t newMultiType = static_cast<uint32_t>( QgsWkbTypes::zmType( QgsWkbTypes::MultiPolygon, hasZ, hasM ) );
-    uint32_t newSingleType = static_cast<uint32_t>( QgsWkbTypes::zmType( QgsWkbTypes::Polygon, hasZ, hasM ) );
-    unsigned char *wkbptr = wkb;
-
-    // Endianness
-    wkbptr += 1;
-
-    // Overwrite geom type
-    memcpy( wkbptr, &newMultiType, sizeof( uint32_t ) );
-    wkbptr += 4;
-
-    // Geom count
-    uint32_t numGeoms;
-    memcpy( &numGeoms, wkb + 5, sizeof( uint32_t ) );
-    wkbptr += 4;
-
-    // For each part, overwrite the geometry type to polygon (Z|M)
-    for ( uint32_t i = 0; i < numGeoms; ++i )
-    {
-      // Endianness
-      wkbptr += 1;
-
-      // Overwrite geom type
-      memcpy( wkbptr, &newSingleType, sizeof( uint32_t ) );
-      wkbptr += sizeof( uint32_t );
-
-      // skip coordinates
-      uint32_t nRings;
-      memcpy( &nRings, wkbptr, sizeof( uint32_t ) );
-      wkbptr += sizeof( uint32_t );
-
-      for ( uint32_t j = 0; j < nRings; ++j )
-      {
-        uint32_t nPoints;
-        memcpy( &nPoints, wkbptr, sizeof( uint32_t ) );
-        wkbptr += sizeof( uint32_t ) + sizeof( double ) * nDims * nPoints;
-      }
-    }
-  }
-  else if ( origGeomType % 1000 == 15 ) // PolyhedralSurface, PolyhedralSurfaceZ, PolyhedralSurfaceM or PolyhedralSurfaceZM
-  {
-    // PolyhedralSurface has the same wkb layout as a MultiPolygon, just need to overwrite the geom type...
-    uint32_t newType = static_cast<uint32_t>( QgsWkbTypes::zmType( QgsWkbTypes::MultiPolygon, hasZ, hasM ) );
-    // Overwrite geom type
-    memcpy( wkb + 1, &newType, sizeof( uint32_t ) );
-  }
 
   QgsGeometry g;
   g.fromWkb( wkb, memorySize );
@@ -929,8 +1113,10 @@ QgsFields QgsOgrUtils::stringToFields( const QString &string, QTextCodec *encodi
 
 QStringList QgsOgrUtils::cStringListToQStringList( char **stringList )
 {
-  QStringList strings;
+  if ( !stringList )
+    return {};
 
+  QStringList strings;
   // presume null terminated string list
   for ( qgssize i = 0; stringList[i]; ++i )
   {
@@ -962,24 +1148,76 @@ QgsCoordinateReferenceSystem QgsOgrUtils::OGRSpatialReferenceToCrs( OGRSpatialRe
   if ( wkt.isEmpty() )
     return QgsCoordinateReferenceSystem();
 
+  const char *authorityName = OSRGetAuthorityName( srs, nullptr );
+  const char *authorityCode = OSRGetAuthorityCode( srs, nullptr );
+  QgsCoordinateReferenceSystem res;
+  if ( authorityName && authorityCode )
+  {
+    QString authId = QString( authorityName ) + ':' + QString( authorityCode );
+    OGRSpatialReferenceH ogrSrsTmp = OSRNewSpatialReference( nullptr );
+    // Check that the CRS build from authId and the input one are the "same".
+    if ( OSRSetFromUserInput( ogrSrsTmp, authId.toUtf8().constData() ) != OGRERR_NONE &&
+         OSRIsSame( srs, ogrSrsTmp ) )
+    {
+      res = QgsCoordinateReferenceSystem();
+      res.createFromUserInput( authId );
+    }
+    OSRDestroySpatialReference( ogrSrsTmp );
+  }
+  if ( !res.isValid() )
+    res = QgsCoordinateReferenceSystem::fromWkt( wkt );
+
 #if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,4,0)
-  QgsCoordinateReferenceSystem res = QgsCoordinateReferenceSystem::fromWkt( wkt );
   const double coordinateEpoch = OSRGetCoordinateEpoch( srs );
   if ( coordinateEpoch > 0 )
     res.setCoordinateEpoch( coordinateEpoch );
-  return res;
-#else
-  return QgsCoordinateReferenceSystem::fromWkt( wkt );
 #endif
+  return res;
 }
 
 OGRSpatialReferenceH QgsOgrUtils::crsToOGRSpatialReference( const QgsCoordinateReferenceSystem &crs )
 {
   if ( crs.isValid() )
   {
-    const QString srsWkt = crs.toWkt( QgsCoordinateReferenceSystem::WKT_PREFERRED_GDAL );
+    OGRSpatialReferenceH ogrSrs = nullptr;
 
-    if ( OGRSpatialReferenceH ogrSrs = OSRNewSpatialReference( srsWkt.toLocal8Bit().constData() ) )
+    // First try instantiating the CRS from its authId. This will give a
+    // more complete representation of the CRS for GDAL. In particular it might
+    // help a few drivers to get the datum code, that would be missing in WKT-2.
+    // See https://github.com/OSGeo/gdal/pull/5218
+    const QString authId = crs.authid();
+    const QString srsWkt = crs.toWkt( Qgis::CrsWktVariant::PreferredGdal );
+    if ( !authId.isEmpty() )
+    {
+      ogrSrs = OSRNewSpatialReference( nullptr );
+      if ( OSRSetFromUserInput( ogrSrs, authId.toUtf8().constData() ) == OGRERR_NONE )
+      {
+        // Check that the CRS build from WKT and authId are the "same".
+        OGRSpatialReferenceH ogrSrsFromWkt = OSRNewSpatialReference( srsWkt.toUtf8().constData() );
+        if ( ogrSrsFromWkt )
+        {
+          if ( !OSRIsSame( ogrSrs, ogrSrsFromWkt ) )
+          {
+            OSRDestroySpatialReference( ogrSrs );
+            ogrSrs = ogrSrsFromWkt;
+          }
+          else
+          {
+            OSRDestroySpatialReference( ogrSrsFromWkt );
+          }
+        }
+      }
+      else
+      {
+        OSRDestroySpatialReference( ogrSrs );
+        ogrSrs = nullptr;
+      }
+    }
+    if ( !ogrSrs )
+    {
+      ogrSrs = OSRNewSpatialReference( srsWkt.toUtf8().constData() );
+    }
+    if ( ogrSrs )
     {
       OSRSetAxisMappingStrategy( ogrSrs, OAMS_TRADITIONAL_GIS_ORDER );
 #if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,4,0)
@@ -1006,170 +1244,16 @@ QString QgsOgrUtils::readShapefileEncoding( const QString &path )
 
 QString QgsOgrUtils::readShapefileEncodingFromCpg( const QString &path )
 {
-#if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,1,0)
   QString errCause;
   QgsOgrLayerUniquePtr layer = QgsOgrProviderUtils::getLayer( path, false, QStringList(), 0, errCause, false );
   return layer ? layer->GetMetadataItem( QStringLiteral( "ENCODING_FROM_CPG" ), QStringLiteral( "SHAPEFILE" ) ) : QString();
-#else
-  if ( !QFileInfo::exists( path ) )
-    return QString();
-
-  // first try to read cpg file, if present
-  const QFileInfo fi( path );
-  const QString baseName = fi.completeBaseName();
-  const QString cpgPath = fi.dir().filePath( QStringLiteral( "%1.%2" ).arg( baseName, fi.suffix() == QLatin1String( "SHP" ) ? QStringLiteral( "CPG" ) : QStringLiteral( "cpg" ) ) );
-  if ( QFile::exists( cpgPath ) )
-  {
-    QFile cpgFile( cpgPath );
-    if ( cpgFile.open( QIODevice::ReadOnly ) )
-    {
-      QTextStream cpgStream( &cpgFile );
-      const QString cpgString = cpgStream.readLine();
-      cpgFile.close();
-
-      if ( !cpgString.isEmpty() )
-      {
-        // from OGRShapeLayer::ConvertCodePage
-        // https://github.com/OSGeo/gdal/blob/master/gdal/ogr/ogrsf_frmts/shape/ogrshapelayer.cpp#L342
-        bool ok = false;
-        int cpgCodePage = cpgString.toInt( &ok );
-        if ( ok && ( ( cpgCodePage >= 437 && cpgCodePage <= 950 )
-                     || ( cpgCodePage >= 1250 && cpgCodePage <= 1258 ) ) )
-        {
-          return QStringLiteral( "CP%1" ).arg( cpgCodePage );
-        }
-        else if ( cpgString.startsWith( QLatin1String( "8859" ) ) )
-        {
-          if ( cpgString.length() > 4 && cpgString.at( 4 ) == '-' )
-            return QStringLiteral( "ISO-8859-%1" ).arg( cpgString.mid( 5 ) );
-          else
-            return QStringLiteral( "ISO-8859-%1" ).arg( cpgString.mid( 4 ) );
-        }
-        else if ( cpgString.startsWith( QLatin1String( "UTF-8" ), Qt::CaseInsensitive ) ||
-                  cpgString.startsWith( QLatin1String( "UTF8" ), Qt::CaseInsensitive ) )
-          return QStringLiteral( "UTF-8" );
-        else if ( cpgString.startsWith( QLatin1String( "ANSI 1251" ), Qt::CaseInsensitive ) )
-          return QStringLiteral( "CP1251" );
-
-        return cpgString;
-      }
-    }
-  }
-
-  return QString();
-#endif
 }
 
 QString QgsOgrUtils::readShapefileEncodingFromLdid( const QString &path )
 {
-#if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,1,0)
   QString errCause;
   QgsOgrLayerUniquePtr layer = QgsOgrProviderUtils::getLayer( path, false, QStringList(), 0, errCause, false );
   return layer ? layer->GetMetadataItem( QStringLiteral( "ENCODING_FROM_LDID" ), QStringLiteral( "SHAPEFILE" ) ) : QString();
-#else
-  // from OGRShapeLayer::ConvertCodePage
-  // https://github.com/OSGeo/gdal/blob/master/gdal/ogr/ogrsf_frmts/shape/ogrshapelayer.cpp#L342
-
-  if ( !QFileInfo::exists( path ) )
-    return QString();
-
-  // first try to read cpg file, if present
-  const QFileInfo fi( path );
-  const QString baseName = fi.completeBaseName();
-
-  // fallback to LDID value, read from DBF file
-  const QString dbfPath = fi.dir().filePath( QStringLiteral( "%1.%2" ).arg( baseName, fi.suffix() == QLatin1String( "SHP" ) ? QStringLiteral( "DBF" ) : QStringLiteral( "dbf" ) ) );
-  if ( QFile::exists( dbfPath ) )
-  {
-    QFile dbfFile( dbfPath );
-    if ( dbfFile.open( QIODevice::ReadOnly ) )
-    {
-      dbfFile.read( 29 );
-      QDataStream dbfIn( &dbfFile );
-      dbfIn.setByteOrder( QDataStream::LittleEndian );
-      quint8 ldid;
-      dbfIn >> ldid;
-      dbfFile.close();
-
-      int nCP = -1;  // Windows code page.
-
-      // http://www.autopark.ru/ASBProgrammerGuide/DBFSTRUC.HTM
-      switch ( ldid )
-      {
-        case 1: nCP = 437;      break;
-        case 2: nCP = 850;      break;
-        case 3: nCP = 1252;     break;
-        case 4: nCP = 10000;    break;
-        case 8: nCP = 865;      break;
-        case 10: nCP = 850;     break;
-        case 11: nCP = 437;     break;
-        case 13: nCP = 437;     break;
-        case 14: nCP = 850;     break;
-        case 15: nCP = 437;     break;
-        case 16: nCP = 850;     break;
-        case 17: nCP = 437;     break;
-        case 18: nCP = 850;     break;
-        case 19: nCP = 932;     break;
-        case 20: nCP = 850;     break;
-        case 21: nCP = 437;     break;
-        case 22: nCP = 850;     break;
-        case 23: nCP = 865;     break;
-        case 24: nCP = 437;     break;
-        case 25: nCP = 437;     break;
-        case 26: nCP = 850;     break;
-        case 27: nCP = 437;     break;
-        case 28: nCP = 863;     break;
-        case 29: nCP = 850;     break;
-        case 31: nCP = 852;     break;
-        case 34: nCP = 852;     break;
-        case 35: nCP = 852;     break;
-        case 36: nCP = 860;     break;
-        case 37: nCP = 850;     break;
-        case 38: nCP = 866;     break;
-        case 55: nCP = 850;     break;
-        case 64: nCP = 852;     break;
-        case 77: nCP = 936;     break;
-        case 78: nCP = 949;     break;
-        case 79: nCP = 950;     break;
-        case 80: nCP = 874;     break;
-        case 87: return QStringLiteral( "ISO-8859-1" );
-        case 88: nCP = 1252;     break;
-        case 89: nCP = 1252;     break;
-        case 100: nCP = 852;     break;
-        case 101: nCP = 866;     break;
-        case 102: nCP = 865;     break;
-        case 103: nCP = 861;     break;
-        case 104: nCP = 895;     break;
-        case 105: nCP = 620;     break;
-        case 106: nCP = 737;     break;
-        case 107: nCP = 857;     break;
-        case 108: nCP = 863;     break;
-        case 120: nCP = 950;     break;
-        case 121: nCP = 949;     break;
-        case 122: nCP = 936;     break;
-        case 123: nCP = 932;     break;
-        case 124: nCP = 874;     break;
-        case 134: nCP = 737;     break;
-        case 135: nCP = 852;     break;
-        case 136: nCP = 857;     break;
-        case 150: nCP = 10007;   break;
-        case 151: nCP = 10029;   break;
-        case 200: nCP = 1250;    break;
-        case 201: nCP = 1251;    break;
-        case 202: nCP = 1254;    break;
-        case 203: nCP = 1253;    break;
-        case 204: nCP = 1257;    break;
-        default: break;
-      }
-
-      if ( nCP != -1 )
-      {
-        return QStringLiteral( "CP%1" ).arg( nCP );
-      }
-    }
-  }
-  return QString();
-#endif
 }
 
 QVariantMap QgsOgrUtils::parseStyleString( const QString &string )
@@ -1223,7 +1307,7 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
 {
   const QVariantMap styles = parseStyleString( string );
 
-  auto convertSize = []( const QString & size, double & value, QgsUnitTypes::RenderUnit & unit )->bool
+  auto convertSize = []( const QString & size, double & value, Qgis::RenderUnit & unit )->bool
   {
     const thread_local QRegularExpression sUnitRx = QRegularExpression( QStringLiteral( "^([\\d\\.]+)(g|px|pt|mm|cm|in)$" ) );
     const QRegularExpressionMatch match = sUnitRx.match( size );
@@ -1237,41 +1321,41 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
         // a 96 dpi conversion
         static constexpr double PT_TO_INCHES_FACTOR = 1 / 72.0;
         static constexpr double PX_TO_PT_FACTOR = 1 / ( 96.0 * PT_TO_INCHES_FACTOR );
-        unit = QgsUnitTypes::RenderPoints;
+        unit = Qgis::RenderUnit::Points;
         value *= PX_TO_PT_FACTOR;
         return true;
       }
       else if ( unitString.compare( QLatin1String( "pt" ), Qt::CaseInsensitive ) == 0 )
       {
-        unit = QgsUnitTypes::RenderPoints;
+        unit = Qgis::RenderUnit::Points;
         return true;
       }
       else if ( unitString.compare( QLatin1String( "mm" ), Qt::CaseInsensitive ) == 0 )
       {
-        unit = QgsUnitTypes::RenderMillimeters;
+        unit = Qgis::RenderUnit::Millimeters;
         return true;
       }
       else if ( unitString.compare( QLatin1String( "cm" ), Qt::CaseInsensitive ) == 0 )
       {
         value *= 10;
-        unit = QgsUnitTypes::RenderMillimeters;
+        unit = Qgis::RenderUnit::Millimeters;
         return true;
       }
       else if ( unitString.compare( QLatin1String( "in" ), Qt::CaseInsensitive ) == 0 )
       {
-        unit = QgsUnitTypes::RenderInches;
+        unit = Qgis::RenderUnit::Inches;
         return true;
       }
       else if ( unitString.compare( QLatin1String( "g" ), Qt::CaseInsensitive ) == 0 )
       {
-        unit = QgsUnitTypes::RenderMapUnits;
+        unit = Qgis::RenderUnit::MapUnits;
         return true;
       }
-      QgsDebugMsg( QStringLiteral( "Unknown unit %1" ).arg( unitString ) );
+      QgsDebugError( QStringLiteral( "Unknown unit %1" ).arg( unitString ) );
     }
     else
     {
-      QgsDebugMsg( QStringLiteral( "Could not parse style size %1" ).arg( size ) );
+      QgsDebugError( QStringLiteral( "Could not parse style size %1" ).arg( size ) );
     }
     return false;
   };
@@ -1299,7 +1383,7 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
     QColor color = convertColor( lineStyle.value( QStringLiteral( "c" ), QStringLiteral( "#000000" ) ).toString() );
 
     double lineWidth = DEFAULT_SIMPLELINE_WIDTH;
-    QgsUnitTypes::RenderUnit lineWidthUnit = QgsUnitTypes::RenderMillimeters;
+    Qgis::RenderUnit lineWidthUnit = Qgis::RenderUnit::Millimeters;
     convertSize( lineStyle.value( QStringLiteral( "w" ) ).toString(), lineWidth, lineWidthUnit );
 
     // if the pen is a mapinfo pen, use dedicated converter for more accurate results
@@ -1314,7 +1398,7 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
         return res;
     }
 
-    std::unique_ptr< QgsSimpleLineSymbolLayer > simpleLine = std::make_unique< QgsSimpleLineSymbolLayer >( color, lineWidth );
+    auto simpleLine = std::make_unique< QgsSimpleLineSymbolLayer >( color, lineWidth );
     simpleLine->setWidthUnit( lineWidthUnit );
 
     // pattern
@@ -1327,7 +1411,7 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
       {
         const QStringList patternValues = match.captured( 1 ).split( ' ' );
         QVector< qreal > dashPattern;
-        QgsUnitTypes::RenderUnit patternUnits = QgsUnitTypes::RenderMillimeters;
+        Qgis::RenderUnit patternUnits = Qgis::RenderUnit::Millimeters;
         for ( const QString &val : patternValues )
         {
           double length;
@@ -1459,13 +1543,13 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
     QgsSymbolLayerList layers;
     if ( backColor.isValid() && style != Qt::SolidPattern && style != Qt::NoBrush )
     {
-      std::unique_ptr< QgsSimpleFillSymbolLayer > backgroundFill = std::make_unique< QgsSimpleFillSymbolLayer >( backColor );
+      auto backgroundFill = std::make_unique< QgsSimpleFillSymbolLayer >( backColor );
       backgroundFill->setLocked( true );
       backgroundFill->setStrokeStyle( Qt::NoPen );
       layers << backgroundFill.release();
     }
 
-    std::unique_ptr< QgsSimpleFillSymbolLayer > foregroundFill = std::make_unique< QgsSimpleFillSymbolLayer >( foreColor );
+    auto foregroundFill = std::make_unique< QgsSimpleFillSymbolLayer >( foreColor );
     foregroundFill->setBrushStyle( style );
     foregroundFill->setStrokeStyle( Qt::NoPen );
 
@@ -1483,7 +1567,7 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
     const QColor color = convertColor( symbolStyle.value( QStringLiteral( "c" ), QStringLiteral( "#000000" ) ).toString() );
 
     double symbolSize = DEFAULT_SIMPLEMARKER_SIZE;
-    QgsUnitTypes::RenderUnit symbolSizeUnit = QgsUnitTypes::RenderMillimeters;
+    Qgis::RenderUnit symbolSizeUnit = Qgis::RenderUnit::Millimeters;
     convertSize( symbolStyle.value( QStringLiteral( "s" ) ).toString(), symbolSize, symbolSizeUnit );
 
     const double angle = symbolStyle.value( QStringLiteral( "a" ), QStringLiteral( "0" ) ).toDouble();
@@ -1517,19 +1601,23 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
 
       bool familyFound = false;
       QString fontFamily;
+      QString matched;
       for ( const QString &family : std::as_const( families ) )
       {
-        if ( QgsFontUtils::fontFamilyMatchOnSystem( family ) )
+        const QString processedFamily = QgsApplication::fontManager()->processFontFamilyName( family );
+
+        if ( QgsFontUtils::fontFamilyMatchOnSystem( processedFamily ) ||
+             QgsApplication::fontManager()->tryToDownloadFontFamily( processedFamily, matched ) )
         {
           familyFound = true;
-          fontFamily = family;
+          fontFamily = processedFamily;
           break;
         }
       }
 
       if ( familyFound )
       {
-        std::unique_ptr< QgsFontMarkerSymbolLayer > fontMarker = std::make_unique< QgsFontMarkerSymbolLayer >( fontFamily, QChar( symId ), symbolSize );
+        auto fontMarker = std::make_unique< QgsFontMarkerSymbolLayer >( fontFamily, QChar( symId ), symbolSize );
         fontMarker->setSizeUnit( symbolSizeUnit );
         fontMarker->setAngle( -angle );
 
@@ -1540,7 +1628,7 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
         {
           fontMarker->setStrokeColor( strokeColor );
           fontMarker->setStrokeWidth( 1 );
-          fontMarker->setStrokeWidthUnit( QgsUnitTypes::RenderPoints );
+          fontMarker->setStrokeWidthUnit( Qgis::RenderUnit::Points );
         }
         else
         {
@@ -1628,8 +1716,10 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
         shape = Qgis::MarkerShape::Square; // to initialize the variable
       }
 
-      std::unique_ptr< QgsSimpleMarkerSymbolLayer > simpleMarker = std::make_unique< QgsSimpleMarkerSymbolLayer >( shape, symbolSize, -angle );
+      auto simpleMarker = std::make_unique< QgsSimpleMarkerSymbolLayer >( shape, symbolSize, -angle );
       simpleMarker->setSizeUnit( symbolSizeUnit );
+      simpleMarker->setStrokeWidth( 1.0 );
+      simpleMarker->setStrokeWidthUnit( Qgis::RenderUnit::Points );
 
       if ( isFilled && QgsSimpleMarkerSymbolLayer::shapeIsFilled( shape ) )
       {
@@ -1690,7 +1780,7 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
       }
       else
       {
-        std::unique_ptr< QgsSimpleFillSymbolLayer > emptyFill = std::make_unique< QgsSimpleFillSymbolLayer >();
+        auto emptyFill = std::make_unique< QgsSimpleFillSymbolLayer >();
         emptyFill->setBrushStyle( Qt::NoBrush );
         fillSymbol = std::make_unique< QgsFillSymbol >( QgsSymbolLayerList() << emptyFill.release() );
       }
@@ -1730,4 +1820,1213 @@ std::unique_ptr<QgsSymbol> QgsOgrUtils::symbolFromStyleString( const QString &st
   }
 
   return nullptr;
+}
+
+void QgsOgrUtils::ogrFieldTypeToQVariantType( OGRFieldType ogrType, OGRFieldSubType ogrSubType, QMetaType::Type &variantType, QMetaType::Type &variantSubType )
+{
+  variantType = QMetaType::Type::UnknownType;
+  variantSubType = QMetaType::Type::UnknownType;
+
+  switch ( ogrType )
+  {
+    case OFTInteger:
+      if ( ogrSubType == OFSTBoolean )
+      {
+        variantType = QMetaType::Type::Bool;
+        ogrSubType = OFSTBoolean;
+      }
+      else
+        variantType = QMetaType::Type::Int;
+      break;
+    case OFTInteger64:
+      variantType = QMetaType::Type::LongLong;
+      break;
+    case OFTReal:
+      variantType = QMetaType::Type::Double;
+      break;
+    case OFTDate:
+      variantType = QMetaType::Type::QDate;
+      break;
+    case OFTTime:
+      variantType = QMetaType::Type::QTime;
+      break;
+    case OFTDateTime:
+      variantType = QMetaType::Type::QDateTime;
+      break;
+
+    case OFTBinary:
+      variantType = QMetaType::Type::QByteArray;
+      break;
+
+    case OFTString:
+    case OFTWideString:
+      if ( ogrSubType == OFSTJSON )
+      {
+        ogrSubType = OFSTJSON;
+        variantType = QMetaType::Type::QVariantMap;
+        variantSubType = QMetaType::Type::QString;
+      }
+      else
+      {
+        variantType = QMetaType::Type::QString;
+      }
+      break;
+
+    case OFTStringList:
+    case OFTWideStringList:
+      variantType = QMetaType::Type::QStringList;
+      variantSubType = QMetaType::Type::QString;
+      break;
+
+    case OFTIntegerList:
+      variantType = QMetaType::Type::QVariantList;
+      variantSubType = QMetaType::Type::Int;
+      break;
+
+    case OFTRealList:
+      variantType = QMetaType::Type::QVariantList;
+      variantSubType = QMetaType::Type::Double;
+      break;
+
+    case OFTInteger64List:
+      variantType = QMetaType::Type::QVariantList;
+      variantSubType = QMetaType::Type::LongLong;
+      break;
+  }
+}
+
+void QgsOgrUtils::variantTypeToOgrFieldType( QMetaType::Type variantType, OGRFieldType &ogrType, OGRFieldSubType &ogrSubType )
+{
+  ogrSubType = OFSTNone;
+  switch ( variantType )
+  {
+    case QMetaType::Type::Bool:
+      ogrType = OFTInteger;
+      ogrSubType = OFSTBoolean;
+      break;
+
+    case QMetaType::Type::Int:
+      ogrType = OFTInteger;
+      break;
+
+    case QMetaType::Type::LongLong:
+      ogrType = OFTInteger64;
+      break;
+
+    case QMetaType::Type::Double:
+      ogrType = OFTReal;
+      break;
+
+    case QMetaType::Type::QChar:
+    case QMetaType::Type::QString:
+      ogrType = OFTString;
+      break;
+
+    case QMetaType::Type::QStringList:
+      ogrType = OFTStringList;
+      break;
+
+    case QMetaType::Type::QByteArray:
+      ogrType = OFTBinary;
+      break;
+
+    case QMetaType::Type::QDate:
+      ogrType = OFTDate;
+      break;
+
+    case QMetaType::Type::QTime:
+      ogrType = OFTTime;
+      break;
+    case QMetaType::Type::QDateTime:
+      ogrType = OFTDateTime;
+      break;
+
+    default:
+      ogrType = OFTString;
+      break;
+  }
+}
+
+QVariant QgsOgrUtils::stringToVariant( OGRFieldType type, OGRFieldSubType, const QString &string )
+{
+  if ( string.isEmpty() )
+    return QVariant();
+
+  bool ok = false;
+  QVariant res;
+  switch ( type )
+  {
+    case OFTInteger:
+      res = string.toInt( &ok );
+      break;
+
+    case OFTInteger64:
+      res = string.toLongLong( &ok );
+      break;
+
+    case OFTReal:
+      res = string.toDouble( &ok );
+      break;
+
+    case OFTString:
+    case OFTWideString:
+      res = string;
+      ok = true;
+      break;
+
+    case OFTDate:
+      res = QDate::fromString( string, Qt::ISODate );
+      ok = res.isValid();
+      break;
+
+    case OFTTime:
+      res = QTime::fromString( string, Qt::ISODate );
+      ok = res.isValid();
+      break;
+
+    case OFTDateTime:
+      res = QDateTime::fromString( string, Qt::ISODate );
+      ok = res.isValid();
+      break;
+
+    default:
+      res = string;
+      ok = true;
+      break;
+  }
+
+  return ok ? res : QVariant();
+}
+
+QList<QgsVectorDataProvider::NativeType> QgsOgrUtils::nativeFieldTypesForDriver( GDALDriverH driver )
+{
+  if ( !driver )
+    return {};
+
+  const QString driverName = QString::fromUtf8( GDALGetDriverShortName( driver ) );
+
+  int nMaxIntLen = 11;
+  int nMaxInt64Len = 21;
+  int nMaxDoubleLen = 20;
+  int nMaxDoublePrec = 15;
+  int nDateLen = 8;
+  if ( driverName == QLatin1String( "GPKG" ) )
+  {
+    // GPKG only supports field length for text (and binary)
+    nMaxIntLen = 0;
+    nMaxInt64Len = 0;
+    nMaxDoubleLen = 0;
+    nMaxDoublePrec = 0;
+    nDateLen = 0;
+  }
+
+  QList<QgsVectorDataProvider::NativeType> nativeTypes;
+  nativeTypes
+      << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::Int ), QStringLiteral( "integer" ), QMetaType::Type::Int, 0, nMaxIntLen )
+      << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::LongLong ), QStringLiteral( "integer64" ), QMetaType::Type::LongLong, 0, nMaxInt64Len )
+      << QgsVectorDataProvider::NativeType( QObject::tr( "Decimal number (real)" ), QStringLiteral( "double" ), QMetaType::Type::Double, 0, nMaxDoubleLen, 0, nMaxDoublePrec )
+      << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QString ), QStringLiteral( "string" ), QMetaType::Type::QString, 0, 65535 );
+
+  if ( driverName == QLatin1String( "GPKG" ) )
+    nativeTypes << QgsVectorDataProvider::NativeType( QObject::tr( "JSON (string)" ), QStringLiteral( "JSON" ), QMetaType::Type::QVariantMap, 0, 0, 0, 0, QMetaType::Type::QString );
+
+  bool supportsDate = true;
+  bool supportsTime = true;
+  bool supportsDateTime = true;
+  bool supportsBinary = false;
+  bool supportIntegerList = false;
+  bool supportInteger64List = false;
+  bool supportRealList = false;
+  bool supportsStringList = false;
+
+  // For drivers that advertise their data type, use that instead of the
+  // above hardcoded defaults.
+  if ( const char *pszDataTypes = GDALGetMetadataItem( driver, GDAL_DMD_CREATIONFIELDDATATYPES, nullptr ) )
+  {
+    char **papszTokens = CSLTokenizeString2( pszDataTypes, " ", 0 );
+    supportsDate = CSLFindString( papszTokens, "Date" ) >= 0;
+    supportsTime = CSLFindString( papszTokens, "Time" ) >= 0;
+    supportsDateTime = CSLFindString( papszTokens, "DateTime" ) >= 0;
+    supportsBinary = CSLFindString( papszTokens, "Binary" ) >= 0;
+    supportIntegerList = CSLFindString( papszTokens, "IntegerList" ) >= 0;
+    supportInteger64List = CSLFindString( papszTokens, "Integer64List" ) >= 0;
+    supportRealList = CSLFindString( papszTokens, "RealList" ) >= 0;
+    supportsStringList = CSLFindString( papszTokens, "StringList" ) >= 0;
+    CSLDestroy( papszTokens );
+  }
+
+  // Older versions of GDAL incorrectly report that shapefiles support
+  // DateTime.
+#if GDAL_VERSION_NUM < GDAL_COMPUTE_VERSION(3,2,0)
+  if ( driverName == QLatin1String( "ESRI Shapefile" ) )
+  {
+    supportsDateTime = false;
+  }
+#endif
+
+  if ( supportsDate )
+  {
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QDate ), QStringLiteral( "date" ), QMetaType::Type::QDate, nDateLen, nDateLen );
+  }
+  if ( supportsTime )
+  {
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QTime ), QStringLiteral( "time" ), QMetaType::Type::QTime );
+  }
+  if ( supportsDateTime )
+  {
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QDateTime ), QStringLiteral( "datetime" ), QMetaType::Type::QDateTime );
+  }
+  if ( supportsBinary )
+  {
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QByteArray ), QStringLiteral( "binary" ), QMetaType::Type::QByteArray );
+  }
+  if ( supportIntegerList )
+  {
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QVariantList, QMetaType::Type::Int ), QStringLiteral( "integerlist" ), QMetaType::Type::QVariantList, 0, 0, 0, 0, QMetaType::Type::Int );
+  }
+  if ( supportInteger64List )
+  {
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QVariantList, QMetaType::Type::LongLong ), QStringLiteral( "integer64list" ), QMetaType::Type::QVariantList, 0, 0, 0, 0, QMetaType::Type::LongLong );
+  }
+  if ( supportRealList )
+  {
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QVariantList, QMetaType::Type::Double ), QStringLiteral( "doublelist" ), QMetaType::Type::QVariantList, 0, 0, 0, 0, QMetaType::Type::Double );
+  }
+  if ( supportsStringList )
+  {
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QgsVariantUtils::typeToDisplayString( QMetaType::Type::QStringList ), QStringLiteral( "stringlist" ), QMetaType::Type::QVariantList, 0, 0, 0, 0, QMetaType::Type::QString );
+  }
+
+  const char *pszDataSubTypes = GDALGetMetadataItem( driver, GDAL_DMD_CREATIONFIELDDATASUBTYPES, nullptr );
+  if ( pszDataSubTypes && strstr( pszDataSubTypes, "Boolean" ) )
+  {
+    // boolean data type
+    nativeTypes
+        << QgsVectorDataProvider::NativeType( QObject::tr( "Boolean" ), QStringLiteral( "bool" ), QMetaType::Type::Bool );
+  }
+
+  return nativeTypes;
+}
+
+
+#if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,3,0)
+std::unique_ptr< QgsFieldDomain > QgsOgrUtils::convertFieldDomain( OGRFieldDomainH domain )
+{
+  if ( !domain )
+    return nullptr;
+
+  const QString name{ OGR_FldDomain_GetName( domain ) };
+  const QString description{ OGR_FldDomain_GetDescription( domain ) };
+
+  QMetaType::Type fieldType = QMetaType::Type::UnknownType;
+  QMetaType::Type fieldSubType = QMetaType::Type::UnknownType;
+  const OGRFieldType domainFieldType = OGR_FldDomain_GetFieldType( domain );
+  const OGRFieldSubType domainFieldSubType = OGR_FldDomain_GetFieldSubType( domain );
+  ogrFieldTypeToQVariantType( domainFieldType, domainFieldSubType, fieldType, fieldSubType );
+
+  std::unique_ptr< QgsFieldDomain > res;
+  switch ( OGR_FldDomain_GetDomainType( domain ) )
+  {
+    case OFDT_CODED:
+    {
+      QList< QgsCodedValue > values;
+      const OGRCodedValue *codedValue = OGR_CodedFldDomain_GetEnumeration( domain );
+      while ( codedValue && codedValue->pszCode )
+      {
+        const QString code( codedValue->pszCode );
+
+        // if pszValue is null then it indicates we are working with a set of acceptable values which aren't
+        // coded. In this case we copy the code as the value so that QGIS exposes the domain as a choice of
+        // the valid code values.
+        const QString value( codedValue->pszValue ? codedValue->pszValue : codedValue->pszCode );
+        values.append( QgsCodedValue( stringToVariant( domainFieldType, domainFieldSubType, code ), value ) );
+
+        codedValue++;
+      }
+
+      res = std::make_unique< QgsCodedFieldDomain >( name, description, fieldType, values );
+      break;
+    }
+
+    case OFDT_RANGE:
+    {
+      QVariant minValue;
+      bool minIsInclusive = false;
+      if ( const OGRField *min = OGR_RangeFldDomain_GetMin( domain, &minIsInclusive ) )
+      {
+        minValue = QgsOgrUtils::OGRFieldtoVariant( min, domainFieldType );
+      }
+      QVariant maxValue;
+      bool maxIsInclusive = false;
+      if ( const OGRField *max = OGR_RangeFldDomain_GetMax( domain, &maxIsInclusive ) )
+      {
+        maxValue = QgsOgrUtils::OGRFieldtoVariant( max, domainFieldType );
+      }
+
+      res = std::make_unique< QgsRangeFieldDomain >( name, description, fieldType,
+            minValue, minIsInclusive,
+            maxValue, maxIsInclusive );
+      break;
+    }
+
+    case OFDT_GLOB:
+      res = std::make_unique< QgsGlobFieldDomain >( name, description, fieldType,
+            QString( OGR_GlobFldDomain_GetGlob( domain ) ) );
+      break;
+  }
+
+  switch ( OGR_FldDomain_GetMergePolicy( domain ) )
+  {
+    case OFDMP_DEFAULT_VALUE:
+      res->setMergePolicy( Qgis::FieldDomainMergePolicy::DefaultValue );
+      break;
+    case OFDMP_SUM:
+      res->setMergePolicy( Qgis::FieldDomainMergePolicy::Sum );
+      break;
+    case OFDMP_GEOMETRY_WEIGHTED:
+      res->setMergePolicy( Qgis::FieldDomainMergePolicy::GeometryWeighted );
+      break;
+  }
+
+  switch ( OGR_FldDomain_GetSplitPolicy( domain ) )
+  {
+    case OFDSP_DEFAULT_VALUE:
+      res->setSplitPolicy( Qgis::FieldDomainSplitPolicy::DefaultValue );
+      break;
+    case OFDSP_DUPLICATE:
+      res->setSplitPolicy( Qgis::FieldDomainSplitPolicy::Duplicate );
+      break;
+    case OFDSP_GEOMETRY_RATIO:
+      res->setSplitPolicy( Qgis::FieldDomainSplitPolicy::GeometryRatio );
+      break;
+  }
+  return res;
+}
+
+OGRFieldDomainH QgsOgrUtils::convertFieldDomain( const QgsFieldDomain *domain )
+{
+  if ( !domain )
+    return nullptr;
+
+  OGRFieldType domainFieldType = OFTInteger;
+  OGRFieldSubType domainFieldSubType = OFSTNone;
+  variantTypeToOgrFieldType( domain->fieldType(), domainFieldType, domainFieldSubType );
+
+  OGRFieldDomainH res = nullptr;
+  switch ( domain->type() )
+  {
+    case Qgis::FieldDomainType::Coded:
+    {
+      std::vector< OGRCodedValue > enumeration;
+      const QList< QgsCodedValue> values = qgis::down_cast< const QgsCodedFieldDomain * >( domain )->values();
+      enumeration.reserve( values.size() );
+      for ( const QgsCodedValue &value : values )
+      {
+        OGRCodedValue codedValue;
+        codedValue.pszCode = CPLStrdup( value.code().toString().toUtf8().constData() );
+        codedValue.pszValue = CPLStrdup( value.value().toUtf8().constData() );
+        enumeration.push_back( codedValue );
+      }
+      OGRCodedValue last;
+      last.pszCode = nullptr;
+      last.pszValue = nullptr;
+      enumeration.push_back( last );
+      res = OGR_CodedFldDomain_Create(
+              domain->name().toUtf8().constData(),
+              domain->description().toUtf8().constData(),
+              domainFieldType,
+              domainFieldSubType,
+              enumeration.data()
+            );
+
+      for ( const OGRCodedValue &value : std::as_const( enumeration ) )
+      {
+        CPLFree( value.pszCode );
+        CPLFree( value.pszValue );
+      }
+      break;
+    }
+
+    case Qgis::FieldDomainType::Range:
+    {
+      std::unique_ptr< OGRField > min = variantToOGRField( qgis::down_cast< const QgsRangeFieldDomain * >( domain )->minimum(), domainFieldType );
+      std::unique_ptr< OGRField > max = variantToOGRField( qgis::down_cast< const QgsRangeFieldDomain * >( domain )->maximum(), domainFieldType );
+      if ( !min || !max )
+        return nullptr;
+      res = OGR_RangeFldDomain_Create(
+              domain->name().toUtf8().constData(),
+              domain->description().toUtf8().constData(),
+              domainFieldType,
+              domainFieldSubType,
+              min.get(),
+              qgis::down_cast< const QgsRangeFieldDomain * >( domain )->minimumIsInclusive(),
+              max.get(),
+              qgis::down_cast< const QgsRangeFieldDomain * >( domain )->maximumIsInclusive()
+            );
+      break;
+    }
+
+    case Qgis::FieldDomainType::Glob:
+    {
+      res = OGR_GlobFldDomain_Create(
+              domain->name().toUtf8().constData(),
+              domain->description().toUtf8().constData(),
+              domainFieldType,
+              domainFieldSubType,
+              qgis::down_cast< const QgsGlobFieldDomain * >( domain )->glob().toUtf8().constData()
+            );
+      break;
+    }
+  }
+
+  switch ( domain->mergePolicy() )
+  {
+    case Qgis::FieldDomainMergePolicy::DefaultValue:
+      OGR_FldDomain_SetMergePolicy( res, OFDMP_DEFAULT_VALUE );
+      break;
+    case Qgis::FieldDomainMergePolicy::GeometryWeighted:
+      OGR_FldDomain_SetMergePolicy( res, OFDMP_GEOMETRY_WEIGHTED );
+      break;
+    case Qgis::FieldDomainMergePolicy::Sum:
+      OGR_FldDomain_SetMergePolicy( res, OFDMP_SUM );
+      break;
+  }
+
+  switch ( domain->splitPolicy() )
+  {
+    case Qgis::FieldDomainSplitPolicy::DefaultValue:
+      OGR_FldDomain_SetSplitPolicy( res, OFDSP_DEFAULT_VALUE );
+      break;
+    case Qgis::FieldDomainSplitPolicy::GeometryRatio:
+      OGR_FldDomain_SetSplitPolicy( res, OFDSP_GEOMETRY_RATIO );
+      break;
+    case Qgis::FieldDomainSplitPolicy::Duplicate:
+      OGR_FldDomain_SetSplitPolicy( res, OFDSP_DUPLICATE );
+      break;
+
+    case Qgis::FieldDomainSplitPolicy::UnsetField:
+      // not supported
+      break;
+  }
+
+  return res;
+}
+
+#endif
+
+#if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,6,0)
+QgsWeakRelation QgsOgrUtils::convertRelationship( GDALRelationshipH relationship, const QString &datasetUri )
+{
+  QgsProviderMetadata *ogrProviderMetadata = QgsProviderRegistry::instance()->providerMetadata( QStringLiteral( "ogr" ) );
+  const QVariantMap datasetUriParts = ogrProviderMetadata->decodeUri( datasetUri );
+
+  const QString leftTableName( GDALRelationshipGetLeftTableName( relationship ) );
+
+  QVariantMap leftTableUriParts = datasetUriParts;
+  leftTableUriParts.insert( QStringLiteral( "layerName" ), leftTableName );
+  const QString leftTableSource = ogrProviderMetadata->encodeUri( leftTableUriParts );
+
+  const QString rightTableName( GDALRelationshipGetRightTableName( relationship ) );
+  QVariantMap rightTableUriParts = datasetUriParts;
+  rightTableUriParts.insert( QStringLiteral( "layerName" ), rightTableName );
+  const QString rightTableSource = ogrProviderMetadata->encodeUri( rightTableUriParts );
+
+  const QString mappingTableName( GDALRelationshipGetMappingTableName( relationship ) );
+  QString mappingTableSource;
+  if ( !mappingTableName.isEmpty() )
+  {
+    QVariantMap mappingTableUriParts = datasetUriParts;
+    mappingTableUriParts.insert( QStringLiteral( "layerName" ), mappingTableName );
+    mappingTableSource = ogrProviderMetadata->encodeUri( mappingTableUriParts );
+  }
+
+  const QString relationshipName( GDALRelationshipGetName( relationship ) );
+
+  char **cslLeftTableFieldNames = GDALRelationshipGetLeftTableFields( relationship );
+  const QStringList leftTableFieldNames = QgsOgrUtils::cStringListToQStringList( cslLeftTableFieldNames );
+  CSLDestroy( cslLeftTableFieldNames );
+
+  char **cslRightTableFieldNames = GDALRelationshipGetRightTableFields( relationship );
+  const QStringList rightTableFieldNames = QgsOgrUtils::cStringListToQStringList( cslRightTableFieldNames );
+  CSLDestroy( cslRightTableFieldNames );
+
+  char **cslLeftMappingTableFieldNames = GDALRelationshipGetLeftMappingTableFields( relationship );
+  const QStringList leftMappingTableFieldNames = QgsOgrUtils::cStringListToQStringList( cslLeftMappingTableFieldNames );
+  CSLDestroy( cslLeftMappingTableFieldNames );
+
+  char **cslRightMappingTableFieldNames = GDALRelationshipGetRightMappingTableFields( relationship );
+  const QStringList rightMappingTableFieldNames = QgsOgrUtils::cStringListToQStringList( cslRightMappingTableFieldNames );
+  CSLDestroy( cslRightMappingTableFieldNames );
+
+  const QString forwardPathLabel( GDALRelationshipGetForwardPathLabel( relationship ) );
+  const QString backwardPathLabel( GDALRelationshipGetBackwardPathLabel( relationship ) );
+  const QString relatedTableType( GDALRelationshipGetRelatedTableType( relationship ) );
+
+  const GDALRelationshipType relationshipType = GDALRelationshipGetType( relationship );
+  Qgis::RelationshipStrength strength = Qgis::RelationshipStrength::Association;
+  switch ( relationshipType )
+  {
+    case GRT_COMPOSITE:
+      strength = Qgis::RelationshipStrength::Composition;
+      break;
+
+    case GRT_ASSOCIATION:
+      strength = Qgis::RelationshipStrength::Association;
+      break;
+
+    case GRT_AGGREGATION:
+      QgsLogger::warning( "Aggregation relationships are not supported, treating as association instead" );
+      break;
+  }
+
+  const GDALRelationshipCardinality eCardinality = GDALRelationshipGetCardinality( relationship );
+  Qgis::RelationshipCardinality cardinality = Qgis::RelationshipCardinality::OneToOne;
+  switch ( eCardinality )
+  {
+    case GRC_ONE_TO_ONE:
+      cardinality = Qgis::RelationshipCardinality::OneToOne;
+      break;
+    case GRC_ONE_TO_MANY:
+      cardinality = Qgis::RelationshipCardinality::OneToMany;
+      break;
+    case GRC_MANY_TO_ONE:
+      cardinality = Qgis::RelationshipCardinality::ManyToOne;
+      break;
+    case GRC_MANY_TO_MANY:
+      cardinality = Qgis::RelationshipCardinality::ManyToMany;
+      break;
+  }
+
+  switch ( cardinality )
+  {
+    case Qgis::RelationshipCardinality::OneToOne:
+    case Qgis::RelationshipCardinality::OneToMany:
+    case Qgis::RelationshipCardinality::ManyToOne:
+    {
+      QgsWeakRelation rel( relationshipName,
+                           relationshipName,
+                           strength,
+                           QString(), QString(), rightTableSource, QStringLiteral( "ogr" ),
+                           QString(), QString(), leftTableSource, QStringLiteral( "ogr" ) );
+      rel.setCardinality( cardinality );
+      rel.setForwardPathLabel( forwardPathLabel );
+      rel.setBackwardPathLabel( backwardPathLabel );
+      rel.setRelatedTableType( relatedTableType );
+      rel.setReferencedLayerFields( leftTableFieldNames );
+      rel.setReferencingLayerFields( rightTableFieldNames );
+      return rel;
+    }
+
+    case Qgis::RelationshipCardinality::ManyToMany:
+    {
+      QgsWeakRelation rel( relationshipName,
+                           relationshipName,
+                           strength,
+                           QString(), QString(), rightTableSource, QStringLiteral( "ogr" ),
+                           QString(), QString(), leftTableSource, QStringLiteral( "ogr" ) );
+      rel.setCardinality( cardinality );
+      rel.setForwardPathLabel( forwardPathLabel );
+      rel.setBackwardPathLabel( backwardPathLabel );
+      rel.setRelatedTableType( relatedTableType );
+      rel.setMappingTable( QgsVectorLayerRef( QString(), QString(), mappingTableSource, QStringLiteral( "ogr" ) ) );
+      rel.setReferencedLayerFields( leftTableFieldNames );
+      rel.setMappingReferencedLayerFields( leftMappingTableFieldNames );
+      rel.setReferencingLayerFields( rightTableFieldNames );
+      rel.setMappingReferencingLayerFields( rightMappingTableFieldNames );
+      return rel;
+    }
+  }
+  return QgsWeakRelation();
+}
+
+gdal::relationship_unique_ptr QgsOgrUtils::convertRelationship( const QgsWeakRelation &relationship, QString &error )
+{
+  GDALRelationshipCardinality gCardinality = GDALRelationshipCardinality::GRC_ONE_TO_MANY;
+  switch ( relationship.cardinality() )
+  {
+    case Qgis::RelationshipCardinality::OneToOne:
+      gCardinality = GDALRelationshipCardinality::GRC_ONE_TO_ONE;
+      break;
+    case Qgis::RelationshipCardinality::OneToMany:
+      gCardinality = GDALRelationshipCardinality::GRC_ONE_TO_MANY;
+      break;
+    case Qgis::RelationshipCardinality::ManyToOne:
+      gCardinality = GDALRelationshipCardinality::GRC_MANY_TO_ONE;
+      break;
+    case Qgis::RelationshipCardinality::ManyToMany:
+      gCardinality = GDALRelationshipCardinality::GRC_MANY_TO_MANY;
+      break;
+  }
+
+  QgsProviderMetadata *ogrProviderMetadata = QgsProviderRegistry::instance()->providerMetadata( QStringLiteral( "ogr" ) );
+
+  const QVariantMap leftParts = ogrProviderMetadata->decodeUri( relationship.referencedLayerSource() );
+  const QString leftTableName = leftParts.value( QStringLiteral( "layerName" ) ).toString();
+  if ( leftTableName.isEmpty() )
+  {
+    error = QObject::tr( "Parent table name was not set" );
+    return nullptr;
+  }
+
+  const QVariantMap rightParts = ogrProviderMetadata->decodeUri( relationship.referencingLayerSource() );
+  const QString rightTableName = rightParts.value( QStringLiteral( "layerName" ) ).toString();
+  if ( rightTableName.isEmpty() )
+  {
+    error = QObject::tr( "Child table name was not set" );
+    return nullptr;
+  }
+
+  if ( leftParts.value( QStringLiteral( "path" ) ).toString() != rightParts.value( QStringLiteral( "path" ) ).toString() )
+  {
+    error = QObject::tr( "Parent and child table must be from the same dataset" );
+    return nullptr;
+  }
+
+  QString mappingTableName;
+  if ( !relationship.mappingTableSource().isEmpty() )
+  {
+    const QVariantMap mappingParts = ogrProviderMetadata->decodeUri( relationship.mappingTableSource() );
+    mappingTableName = mappingParts.value( QStringLiteral( "layerName" ) ).toString();
+    if ( leftParts.value( QStringLiteral( "path" ) ).toString() != mappingParts.value( QStringLiteral( "path" ) ).toString() )
+    {
+      error = QObject::tr( "Parent and mapping table must be from the same dataset" );
+      return nullptr;
+    }
+  }
+
+  gdal::relationship_unique_ptr relationH( GDALRelationshipCreate( relationship.name().toLocal8Bit().constData(),
+      leftTableName.toLocal8Bit().constData(),
+      rightTableName.toLocal8Bit().constData(),
+      gCardinality ) );
+
+  // set left table fields
+  const QStringList leftFieldNames = relationship.referencedLayerFields();
+  int count = leftFieldNames.count();
+  char **lst = new char *[count + 1];
+  if ( count > 0 )
+  {
+    int pos = 0;
+    for ( const QString &string : leftFieldNames )
+    {
+      lst[pos] = CPLStrdup( string.toLocal8Bit().constData() );
+      pos++;
+    }
+  }
+  lst[count] = nullptr;
+  GDALRelationshipSetLeftTableFields( relationH.get(), lst );
+  CSLDestroy( lst );
+
+  // set right table fields
+  const QStringList rightFieldNames = relationship.referencingLayerFields();
+  count = rightFieldNames.count();
+  lst = new char *[count + 1];
+  if ( count > 0 )
+  {
+    int pos = 0;
+    for ( const QString &string : rightFieldNames )
+    {
+      lst[pos] = CPLStrdup( string.toLocal8Bit().constData() );
+      pos++;
+    }
+  }
+  lst[count] = nullptr;
+  GDALRelationshipSetRightTableFields( relationH.get(), lst );
+  CSLDestroy( lst );
+
+  if ( !mappingTableName.isEmpty() )
+  {
+    GDALRelationshipSetMappingTableName( relationH.get(), mappingTableName.toLocal8Bit().constData() );
+
+    // set left mapping table fields
+    const QStringList leftFieldNames = relationship.mappingReferencedLayerFields();
+    int count = leftFieldNames.count();
+    char **lst = new char *[count + 1];
+    if ( count > 0 )
+    {
+      int pos = 0;
+      for ( const QString &string : leftFieldNames )
+      {
+        lst[pos] = CPLStrdup( string.toLocal8Bit().constData() );
+        pos++;
+      }
+    }
+    lst[count] = nullptr;
+    GDALRelationshipSetLeftMappingTableFields( relationH.get(), lst );
+    CSLDestroy( lst );
+
+    // set right table fields
+    const QStringList rightFieldNames = relationship.mappingReferencingLayerFields();
+    count = rightFieldNames.count();
+    lst = new char *[count + 1];
+    if ( count > 0 )
+    {
+      int pos = 0;
+      for ( const QString &string : rightFieldNames )
+      {
+        lst[pos] = CPLStrdup( string.toLocal8Bit().constData() );
+        pos++;
+      }
+    }
+    lst[count] = nullptr;
+    GDALRelationshipSetRightMappingTableFields( relationH.get(), lst );
+    CSLDestroy( lst );
+  }
+
+  // set type
+  switch ( relationship.strength() )
+  {
+    case Qgis::RelationshipStrength::Association:
+      GDALRelationshipSetType( relationH.get(), GDALRelationshipType::GRT_ASSOCIATION );
+      break;
+
+    case Qgis::RelationshipStrength::Composition:
+      GDALRelationshipSetType( relationH.get(), GDALRelationshipType::GRT_COMPOSITE );
+      break;
+  }
+
+  // set labels
+  if ( !relationship.forwardPathLabel().isEmpty() )
+    GDALRelationshipSetForwardPathLabel( relationH.get(), relationship.forwardPathLabel().toLocal8Bit().constData() );
+  if ( !relationship.backwardPathLabel().isEmpty() )
+    GDALRelationshipSetBackwardPathLabel( relationH.get(), relationship.backwardPathLabel().toLocal8Bit().constData() );
+
+  // set table type
+  if ( !relationship.relatedTableType().isEmpty() )
+    GDALRelationshipSetRelatedTableType( relationH.get(), relationship.relatedTableType().toLocal8Bit().constData() );
+
+  return relationH;
+}
+#endif
+
+int QgsOgrUtils::listStyles( GDALDatasetH hDS, const QString &layerName, const QString &geomColumn, QStringList &ids, QStringList &names, QStringList &descriptions, QString &errCause )
+{
+  OGRLayerH hLayer = GDALDatasetGetLayerByName( hDS, "layer_styles" );
+  if ( !hLayer )
+  {
+    QgsDebugMsgLevel( QStringLiteral( "No styles available on DB" ), 2 );
+    errCause = QObject::tr( "No styles available on DB" );
+    return 0;
+  }
+
+  if ( OGR_L_GetFeatureCount( hLayer, TRUE ) == 0 )
+  {
+    QgsDebugMsgLevel( QStringLiteral( "No styles available on DB" ), 2 );
+    errCause = QObject::tr( "No styles available on DB" );
+    return 0;
+  }
+
+  OGRFeatureDefnH hLayerDefn = OGR_L_GetLayerDefn( hLayer );
+
+  OGR_L_ResetReading( hLayer );
+
+  QList<qlonglong> listTimestamp;
+  QMap<int, QString> mapIdToStyleName;
+  QMap<int, QString> mapIdToDescription;
+  QMap<qlonglong, QList<int> > mapTimestampToId;
+  int numberOfRelatedStyles = 0;
+
+  while ( true )
+  {
+    gdal::ogr_feature_unique_ptr hFeature( OGR_L_GetNextFeature( hLayer ) );
+    if ( !hFeature )
+      break;
+
+    QString tableName( QString::fromUtf8(
+                         OGR_F_GetFieldAsString( hFeature.get(),
+                             OGR_FD_GetFieldIndex( hLayerDefn, "f_table_name" ) ) ) );
+    QString geometryColumn( QString::fromUtf8(
+                              OGR_F_GetFieldAsString( hFeature.get(),
+                                  OGR_FD_GetFieldIndex( hLayerDefn, "f_geometry_column" ) ) ) );
+    QString styleName( QString::fromUtf8(
+                         OGR_F_GetFieldAsString( hFeature.get(),
+                             OGR_FD_GetFieldIndex( hLayerDefn, "styleName" ) ) ) );
+    QString description( QString::fromUtf8(
+                           OGR_F_GetFieldAsString( hFeature.get(),
+                               OGR_FD_GetFieldIndex( hLayerDefn, "description" ) ) ) );
+    int fid = static_cast<int>( OGR_F_GetFID( hFeature.get() ) );
+    if ( tableName == layerName &&
+         geometryColumn == geomColumn )
+    {
+      // Append first all related styles
+      QString id( QString::number( fid ) );
+      ids.append( id );
+      names.append( styleName );
+      descriptions.append( description );
+      ++ numberOfRelatedStyles;
+    }
+    else
+    {
+      int  year, month, day, hour, minute, second, TZ;
+      OGR_F_GetFieldAsDateTime( hFeature.get(), OGR_FD_GetFieldIndex( hLayerDefn, "update_time" ),
+                                &year, &month, &day, &hour, &minute, &second, &TZ );
+      const qlonglong ts = second + minute * 60 + hour * 3600 + day * 24 * 3600 +
+                           static_cast<qlonglong>( month ) * 31 * 24 * 3600 + static_cast<qlonglong>( year ) * 12 * 31 * 24 * 3600;
+
+      listTimestamp.append( ts );
+      mapIdToStyleName[fid] = styleName;
+      mapIdToDescription[fid] = description;
+      mapTimestampToId[ts].append( fid );
+    }
+  }
+
+  std::sort( listTimestamp.begin(), listTimestamp.end() );
+  // Sort from most recent to least recent
+  for ( int i = listTimestamp.size() - 1; i >= 0; i-- )
+  {
+    const QList<int> &listId = mapTimestampToId[listTimestamp[i]];
+    for ( int j = 0; j < listId.size(); j++ )
+    {
+      int fid = listId[j];
+      QString id( QString::number( fid ) );
+      ids.append( id );
+      names.append( mapIdToStyleName[fid] );
+      descriptions.append( mapIdToDescription[fid] );
+    }
+  }
+
+  return numberOfRelatedStyles;
+}
+
+bool QgsOgrUtils::styleExists( GDALDatasetH hDS, const QString &layerName, const QString &geomColumn, const QString &styleId, QString &errorCause )
+{
+  errorCause.clear();
+
+  // check if layer_styles table exists
+  OGRLayerH hLayer = GDALDatasetGetLayerByName( hDS, "layer_styles" );
+  if ( !hLayer )
+    return false;
+
+  const QString realStyleId = styleId.isEmpty() ? layerName : styleId;
+
+  const QString checkQuery = QStringLiteral( "f_table_schema=''"
+                             " AND f_table_name=%1"
+                             " AND f_geometry_column=%2"
+                             " AND styleName=%3" )
+                             .arg( QgsOgrProviderUtils::quotedValue( layerName ),
+                                   QgsOgrProviderUtils::quotedValue( geomColumn ),
+                                   QgsOgrProviderUtils::quotedValue( realStyleId ) );
+  OGR_L_SetAttributeFilter( hLayer, checkQuery.toUtf8().constData() );
+  OGR_L_ResetReading( hLayer );
+  gdal::ogr_feature_unique_ptr hFeature( OGR_L_GetNextFeature( hLayer ) );
+  OGR_L_ResetReading( hLayer );
+
+  if ( hFeature )
+    return true;
+
+  return false;
+}
+
+QString QgsOgrUtils::getStyleById( GDALDatasetH hDS, const QString &styleId, QString &errCause )
+{
+  OGRLayerH hLayer = GDALDatasetGetLayerByName( hDS, "layer_styles" );
+  if ( !hLayer )
+  {
+    QgsDebugMsgLevel( QStringLiteral( "No styles available on DB" ), 2 );
+    errCause = QObject::tr( "No styles available on DB" );
+    return QString();
+  }
+
+  bool ok;
+  int id = styleId.toInt( &ok );
+  if ( !ok )
+  {
+    errCause = QObject::tr( "Invalid style identifier" );
+    return QString();
+  }
+
+  gdal::ogr_feature_unique_ptr hFeature( OGR_L_GetFeature( hLayer, id ) );
+  if ( !hFeature )
+  {
+    errCause = QObject::tr( "No style corresponding to style identifier" );
+    return QString();
+  }
+
+  OGRFeatureDefnH hLayerDefn = OGR_L_GetLayerDefn( hLayer );
+  QString styleQML( QString::fromUtf8(
+                      OGR_F_GetFieldAsString( hFeature.get(),
+                          OGR_FD_GetFieldIndex( hLayerDefn, "styleQML" ) ) ) );
+  OGR_L_ResetReading( hLayer );
+
+  return styleQML;
+}
+
+bool QgsOgrUtils::deleteStyleById( GDALDatasetH hDS, const QString &styleId, QString &errCause )
+{
+  bool deleted;
+
+  OGRLayerH hLayer = GDALDatasetGetLayerByName( hDS, "layer_styles" );
+
+  // check if layer_styles table already exist
+  if ( !hLayer )
+  {
+    errCause = QObject::tr( "Connection to database failed" );
+    deleted = false;
+  }
+  else
+  {
+    if ( OGR_L_DeleteFeature( hLayer, styleId.toInt() ) != OGRERR_NONE )
+    {
+      errCause = QObject::tr( "Error executing the delete query." );
+      deleted = false;
+    }
+    else
+    {
+      deleted = true;
+    }
+  }
+  return deleted;
+}
+
+QString QgsOgrUtils::loadStoredStyle( GDALDatasetH hDS, const QString &layerName, const QString &geomColumn, QString &styleName, QString &errCause )
+{
+  OGRLayerH hLayer = GDALDatasetGetLayerByName( hDS, "layer_styles" );
+  if ( !hLayer )
+  {
+    QgsDebugMsgLevel( QStringLiteral( "No styles available on DB" ), 2 );
+    errCause = QObject::tr( "No styles available on DB" );
+    return QString();
+  }
+
+  QString selectQmlQuery = QStringLiteral( "f_table_schema=''"
+                           " AND f_table_name=%1"
+                           " AND f_geometry_column=%2"
+                           " ORDER BY CASE WHEN useAsDefault THEN 1 ELSE 2 END"
+                           ",update_time DESC" )
+                           .arg( QgsOgrProviderUtils::quotedValue( layerName ),
+                                 QgsOgrProviderUtils::quotedValue( geomColumn ) );
+  OGR_L_SetAttributeFilter( hLayer, selectQmlQuery.toUtf8().constData() );
+  OGR_L_ResetReading( hLayer );
+  OGRFeatureDefnH hLayerDefn = OGR_L_GetLayerDefn( hLayer );
+  QString styleQML;
+  qlonglong moreRecentTimestamp = 0;
+  while ( true )
+  {
+    gdal::ogr_feature_unique_ptr hFeat( OGR_L_GetNextFeature( hLayer ) );
+    if ( !hFeat )
+      break;
+    if ( OGR_F_GetFieldAsInteger( hFeat.get(), OGR_FD_GetFieldIndex( hLayerDefn, "useAsDefault" ) ) )
+    {
+      styleQML = QString::fromUtf8(
+                   OGR_F_GetFieldAsString( hFeat.get(), OGR_FD_GetFieldIndex( hLayerDefn, "styleQML" ) ) );
+      styleName = QString::fromUtf8(
+                    OGR_F_GetFieldAsString( hFeat.get(), OGR_FD_GetFieldIndex( hLayerDefn, "styleName" ) ) );
+      break;
+    }
+
+    int  year, month, day, hour, minute, second, TZ;
+    OGR_F_GetFieldAsDateTime( hFeat.get(), OGR_FD_GetFieldIndex( hLayerDefn, "update_time" ),
+                              &year, &month, &day, &hour, &minute, &second, &TZ );
+    qlonglong ts = second + minute * 60 + hour * 3600 + day * 24 * 3600 +
+                   static_cast<qlonglong>( month ) * 31 * 24 * 3600 + static_cast<qlonglong>( year ) * 12 * 31 * 24 * 3600;
+    if ( ts > moreRecentTimestamp )
+    {
+      moreRecentTimestamp = ts;
+      styleQML = QString::fromUtf8(
+                   OGR_F_GetFieldAsString( hFeat.get(), OGR_FD_GetFieldIndex( hLayerDefn, "styleQML" ) ) );
+      styleName = QString::fromUtf8(
+                    OGR_F_GetFieldAsString( hFeat.get(), OGR_FD_GetFieldIndex( hLayerDefn, "styleName" ) ) );
+    }
+  }
+  OGR_L_ResetReading( hLayer );
+
+  return styleQML;
+}
+
+bool QgsOgrUtils::saveStyle(
+  GDALDatasetH hDS, const QString &layerName, const QString &geomColumn, const QString &qmlStyle, const QString &sldStyle,
+  const QString &styleName, const QString &styleDescription,
+  const QString &uiFileContent, bool useAsDefault, QString &errCause
+)
+{
+  // check if layer_styles table already exist
+  OGRLayerH hLayer = GDALDatasetGetLayerByName( hDS, "layer_styles" );
+  if ( !hLayer )
+  {
+    // if not create it
+    // Note: we use the same schema as in the SpatiaLite and postgres providers
+    //for cross interoperability
+
+    char **options = nullptr;
+    // TODO: might need change if other drivers than GPKG / SQLite
+    options = CSLSetNameValue( options, "FID", "id" );
+    hLayer = GDALDatasetCreateLayer( hDS, "layer_styles", nullptr, wkbNone, options );
+    QgsOgrProviderUtils::invalidateCachedDatasets( QString::fromUtf8( GDALGetDescription( hDS ) ) );
+    CSLDestroy( options );
+    if ( !hLayer )
+    {
+      errCause = QObject::tr( "Unable to save layer style. It's not possible to create the destination table on the database." );
+      return false;
+    }
+    bool ok = true;
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "f_table_catalog", OFTString ) );
+      OGR_Fld_SetWidth( fld.get(), 256 );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "f_table_schema", OFTString ) );
+      OGR_Fld_SetWidth( fld.get(), 256 );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "f_table_name", OFTString ) );
+      OGR_Fld_SetWidth( fld.get(), 256 );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "f_geometry_column", OFTString ) );
+      OGR_Fld_SetWidth( fld.get(), 256 );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "styleName", OFTString ) );
+      OGR_Fld_SetWidth( fld.get(), 30 );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "styleQML", OFTString ) );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "styleSLD", OFTString ) );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "useAsDefault", OFTInteger ) );
+      OGR_Fld_SetSubType( fld.get(), OFSTBoolean );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "description", OFTString ) );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "owner", OFTString ) );
+      OGR_Fld_SetWidth( fld.get(), 30 );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "ui", OFTString ) );
+      OGR_Fld_SetWidth( fld.get(), 30 );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    {
+      gdal::ogr_field_def_unique_ptr fld( OGR_Fld_Create( "update_time", OFTDateTime ) );
+      OGR_Fld_SetDefault( fld.get(), "CURRENT_TIMESTAMP" );
+      ok &= OGR_L_CreateField( hLayer, fld.get(), true ) == OGRERR_NONE;
+    }
+    if ( !ok )
+    {
+      errCause = QObject::tr( "Unable to save layer style. It's not possible to create the destination table on the database." );
+      return false;
+    }
+  }
+
+  QString realStyleName =
+    styleName.isEmpty() ? layerName : styleName;
+
+  OGRFeatureDefnH hLayerDefn = OGR_L_GetLayerDefn( hLayer );
+
+  if ( useAsDefault )
+  {
+    QString oldDefaultQuery = QStringLiteral( "useAsDefault = 1 AND f_table_schema=''"
+                              " AND f_table_name=%1"
+                              " AND f_geometry_column=%2" )
+                              .arg( QgsOgrProviderUtils::quotedValue( layerName ) )
+                              .arg( QgsOgrProviderUtils::quotedValue( geomColumn ) );
+    OGR_L_SetAttributeFilter( hLayer, oldDefaultQuery.toUtf8().constData() );
+    gdal::ogr_feature_unique_ptr hFeature( OGR_L_GetNextFeature( hLayer ) );
+    if ( hFeature )
+    {
+      OGR_F_SetFieldInteger( hFeature.get(),
+                             OGR_FD_GetFieldIndex( hLayerDefn, "useAsDefault" ),
+                             0 );
+      bool ok = OGR_L_SetFeature( hLayer, hFeature.get() ) == 0;
+      if ( !ok )
+      {
+        QgsDebugError( QStringLiteral( "Could not unset previous useAsDefault style" ) );
+      }
+    }
+  }
+
+  QString checkQuery = QStringLiteral( "f_table_schema=''"
+                                       " AND f_table_name=%1"
+                                       " AND f_geometry_column=%2"
+                                       " AND styleName=%3" )
+                       .arg( QgsOgrProviderUtils::quotedValue( layerName ) )
+                       .arg( QgsOgrProviderUtils::quotedValue( geomColumn ) )
+                       .arg( QgsOgrProviderUtils::quotedValue( realStyleName ) );
+  OGR_L_SetAttributeFilter( hLayer, checkQuery.toUtf8().constData() );
+  OGR_L_ResetReading( hLayer );
+  gdal::ogr_feature_unique_ptr hFeature( OGR_L_GetNextFeature( hLayer ) );
+  OGR_L_ResetReading( hLayer );
+  bool bNew = true;
+
+  if ( hFeature )
+  {
+    bNew = false;
+  }
+  else
+  {
+    hFeature.reset( OGR_F_Create( hLayerDefn ) );
+    OGR_F_SetFieldString( hFeature.get(),
+                          OGR_FD_GetFieldIndex( hLayerDefn, "f_table_catalog" ),
+                          "" );
+    OGR_F_SetFieldString( hFeature.get(),
+                          OGR_FD_GetFieldIndex( hLayerDefn, "f_table_schema" ),
+                          "" );
+    OGR_F_SetFieldString( hFeature.get(),
+                          OGR_FD_GetFieldIndex( hLayerDefn, "f_table_name" ),
+                          layerName.toUtf8().constData() );
+    OGR_F_SetFieldString( hFeature.get(),
+                          OGR_FD_GetFieldIndex( hLayerDefn, "f_geometry_column" ),
+                          geomColumn.toUtf8().constData() );
+    OGR_F_SetFieldString( hFeature.get(),
+                          OGR_FD_GetFieldIndex( hLayerDefn, "styleName" ),
+                          realStyleName.toUtf8().constData() );
+    if ( !uiFileContent.isEmpty() )
+    {
+      OGR_F_SetFieldString( hFeature.get(),
+                            OGR_FD_GetFieldIndex( hLayerDefn, "ui" ),
+                            uiFileContent.toUtf8().constData() );
+    }
+  }
+  OGR_F_SetFieldString( hFeature.get(),
+                        OGR_FD_GetFieldIndex( hLayerDefn, "styleQML" ),
+                        qmlStyle.toUtf8().constData() );
+  OGR_F_SetFieldString( hFeature.get(),
+                        OGR_FD_GetFieldIndex( hLayerDefn, "styleSLD" ),
+                        sldStyle.toUtf8().constData() );
+  OGR_F_SetFieldInteger( hFeature.get(),
+                         OGR_FD_GetFieldIndex( hLayerDefn, "useAsDefault" ),
+                         useAsDefault ? 1 : 0 );
+  OGR_F_SetFieldString( hFeature.get(),
+                        OGR_FD_GetFieldIndex( hLayerDefn, "description" ),
+                        ( styleDescription.isEmpty() ? QDateTime::currentDateTime().toString() : styleDescription ).toUtf8().constData() );
+  OGR_F_SetFieldString( hFeature.get(),
+                        OGR_FD_GetFieldIndex( hLayerDefn, "owner" ),
+                        "" );
+
+  bool bFeatureOK;
+  if ( bNew )
+    bFeatureOK = OGR_L_CreateFeature( hLayer, hFeature.get() ) == OGRERR_NONE;
+  else
+    bFeatureOK = OGR_L_SetFeature( hLayer, hFeature.get() ) == OGRERR_NONE;
+
+  if ( !bFeatureOK )
+  {
+    QgsMessageLog::logMessage( QObject::tr( "Error updating style" ) );
+    errCause = QObject::tr( "Error looking for style. The query was logged" );
+    return false;
+  }
+
+  return true;
 }

@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/auth/qgsauthsettingswidget.h                                 *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -17,26 +17,19 @@ and by using QGIS Authentication Database and its authentication configurations.
 
 The widget also offers the functionality to convert username/password credentials
 to an authentication configuration.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgsauthsettingswidget.h"
 %End
   public:
-
     enum WarningType
     {
       ProjectFile,
       UserSettings
     };
 
-    explicit QgsAuthSettingsWidget( QWidget *parent /TransferThis/ = 0,
-                                    const QString &configId = QString(),
-                                    const QString &username = QString(),
-                                    const QString &password = QString(),
-                                    const QString &dataprovider = QString() );
+    explicit QgsAuthSettingsWidget( QWidget *parent /TransferThis/ = 0, const QString &configId = QString(), const QString &username = QString(), const QString &password = QString(), const QString &dataprovider = QString() );
 %Docstring
 Create a dialog for setting an associated authentication config, either
 from existing configs, or creating/removing them from auth database
@@ -46,6 +39,13 @@ from existing configs, or creating/removing them from auth database
 :param username:
 :param password:
 :param dataprovider: The key of the calling layer provider, if applicable
+%End
+
+    void removeBasicSettings();
+%Docstring
+Removes the basic authentication tab from the widget.
+
+.. versionadded:: 3.42
 %End
 
     void setWarningText( const QString &warningText );
@@ -156,7 +156,7 @@ setStoreUsernameChecked check the "Store" checkbox for the username
 
     void setStorePasswordChecked( bool checked );
 %Docstring
-setStorePasswordCheched check the "Store" checkbox for the password
+setStorePasswordChecked check the "Store" checkbox for the password
 
 :param checked:
 
@@ -225,5 +225,5 @@ Emitted when the auth configuration ID selected in the dialog is changed.
  *                                                                      *
  * src/gui/auth/qgsauthsettingswidget.h                                 *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

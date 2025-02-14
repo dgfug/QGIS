@@ -27,90 +27,12 @@
 #include <nlohmann/json.hpp>
 
 //
-// QgsNetworkLoggerNode
-//
-
-QgsNetworkLoggerNode::QgsNetworkLoggerNode() = default;
-QgsNetworkLoggerNode::~QgsNetworkLoggerNode() = default;
-
-
-//
-// QgsNetworkLoggerGroup
-//
-
-QgsNetworkLoggerGroup::QgsNetworkLoggerGroup( const QString &title )
-  : mGroupTitle( title )
-{
-}
-
-void QgsNetworkLoggerGroup::addChild( std::unique_ptr<QgsNetworkLoggerNode> child )
-{
-  if ( !child )
-    return;
-
-  Q_ASSERT( !child->mParent );
-  child->mParent = this;
-
-  mChildren.emplace_back( std::move( child ) );
-}
-
-int QgsNetworkLoggerGroup::indexOf( QgsNetworkLoggerNode *child ) const
-{
-  Q_ASSERT( child->mParent == this );
-  auto it = std::find_if( mChildren.begin(), mChildren.end(), [&]( const std::unique_ptr<QgsNetworkLoggerNode> &p )
-  {
-    return p.get() == child;
-  } );
-  if ( it != mChildren.end() )
-    return std::distance( mChildren.begin(), it );
-  return -1;
-}
-
-QgsNetworkLoggerNode *QgsNetworkLoggerGroup::childAt( int index )
-{
-  Q_ASSERT( static_cast< std::size_t >( index ) < mChildren.size() );
-  return mChildren[ index ].get();
-}
-
-void QgsNetworkLoggerGroup::clear()
-{
-  mChildren.clear();
-}
-
-QVariant QgsNetworkLoggerGroup::data( int role ) const
-{
-  switch ( role )
-  {
-    case Qt::DisplayRole:
-      return mGroupTitle;
-
-    default:
-      break;
-  }
-  return QVariant();
-}
-
-QVariant QgsNetworkLoggerGroup::toVariant() const
-{
-  QVariantMap res;
-  for ( const std::unique_ptr< QgsNetworkLoggerNode > &child : mChildren )
-  {
-    if ( const QgsNetworkLoggerValueNode *valueNode = dynamic_cast< const QgsNetworkLoggerValueNode *>( child.get() ) )
-    {
-      res.insert( valueNode->key(), valueNode->value() );
-    }
-  }
-  return res;
-}
-
-//
 // QgsNetworkLoggerRootNode
 //
 
 QgsNetworkLoggerRootNode::QgsNetworkLoggerRootNode()
-  : QgsNetworkLoggerGroup( QString() )
+  : QgsDevToolsModelGroup( QString() )
 {
-
 }
 
 QVariant QgsNetworkLoggerRootNode::data( int ) const
@@ -126,67 +48,9 @@ void QgsNetworkLoggerRootNode::removeRow( int row )
 QVariant QgsNetworkLoggerRootNode::toVariant() const
 {
   QVariantList res;
-  for ( const std::unique_ptr< QgsNetworkLoggerNode > &child : mChildren )
+  for ( const std::unique_ptr<QgsDevToolsModelNode> &child : mChildren )
     res << child->toVariant();
   return res;
-}
-
-
-//
-// QgsNetworkLoggerValueNode
-//
-QgsNetworkLoggerValueNode::QgsNetworkLoggerValueNode( const QString &key, const QString &value, const QColor &color )
-  : mKey( key )
-  , mValue( value )
-  , mColor( color )
-{
-
-}
-
-QVariant QgsNetworkLoggerValueNode::data( int role ) const
-{
-  switch ( role )
-  {
-    case Qt::DisplayRole:
-    case Qt::ToolTipRole:
-    {
-      return QStringLiteral( "%1: %2" ).arg( mKey.leftJustified( 30, ' ' ), mValue );
-    }
-
-    case Qt::ForegroundRole:
-    {
-      if ( mColor.isValid() )
-        return QBrush( mColor );
-      break;
-    }
-    default:
-      break;
-  }
-  return QVariant();
-}
-
-QList<QAction *> QgsNetworkLoggerValueNode::actions( QObject *parent )
-{
-  QList< QAction * > res;
-
-  QAction *copyAction = new QAction( QObject::tr( "Copy" ), parent );
-  QObject::connect( copyAction, &QAction::triggered, copyAction, [ = ]
-  {
-    QApplication::clipboard()->setText( QStringLiteral( "%1: %2" ).arg( mKey, mValue ) );
-  } );
-
-  res << copyAction;
-
-  return res;
-}
-
-//
-// QgsNetworkLoggerGroup
-//
-
-void QgsNetworkLoggerGroup::addKeyValueNode( const QString &key, const QString &value, const QColor &color )
-{
-  addChild( std::make_unique< QgsNetworkLoggerValueNode >( key, value, color ) );
 }
 
 
@@ -195,10 +59,11 @@ void QgsNetworkLoggerGroup::addKeyValueNode( const QString &key, const QString &
 //
 
 QgsNetworkLoggerRequestGroup::QgsNetworkLoggerRequestGroup( const QgsNetworkRequestParameters &request )
-  : QgsNetworkLoggerGroup( QString() )
+  : QgsDevToolsModelGroup( QString() )
   , mUrl( request.request().url() )
   , mRequestId( request.requestId() )
   , mOperation( request.operation() )
+  , mVerb( request.request().attribute( QNetworkRequest::CustomVerbAttribute ).toString() )
   , mData( request.content() )
 {
   const QList<QByteArray> headers = request.request().rawHeaderList();
@@ -207,9 +72,8 @@ QgsNetworkLoggerRequestGroup::QgsNetworkLoggerRequestGroup( const QgsNetworkRequ
     mHeaders.append( qMakePair( QString( header ), QString( request.request().rawHeader( header ) ) ) );
   }
 
-  std::unique_ptr< QgsNetworkLoggerRequestDetailsGroup > detailsGroup = std::make_unique< QgsNetworkLoggerRequestDetailsGroup >( request );
-  mDetailsGroup = detailsGroup.get();
-  addChild( std::move( detailsGroup ) );
+  auto detailsGroup = std::make_unique<QgsNetworkLoggerRequestDetailsGroup>( request );
+  mDetailsGroup = static_cast<QgsNetworkLoggerRequestDetailsGroup *>( addChild( std::move( detailsGroup ) ) );
 
   mTimer.start();
 }
@@ -219,9 +83,7 @@ QVariant QgsNetworkLoggerRequestGroup::data( int role ) const
   switch ( role )
   {
     case Qt::DisplayRole:
-      return QStringLiteral( "%1 %2 %3" ).arg( QString::number( mRequestId ),
-             operationToString( mOperation ),
-             mUrl.url() );
+      return QStringLiteral( "%1 %2 %3" ).arg( QString::number( mRequestId ), mOperation == QNetworkAccessManager::Operation::CustomOperation ? mVerb : operationToString( mOperation ), mUrl.url() );
 
     case Qt::ToolTipRole:
     {
@@ -236,17 +98,11 @@ QVariant QgsNetworkLoggerRequestGroup::data( int role ) const
       // ?? adding <br/> instead of \n after (very long) url seems to break url up
       // COMPLETE, Status: 200 - text/xml; charset=utf-8 - 2334 bytes - 657 milliseconds
       return QStringLiteral( "%1<br/>%2 - Status: %3 - %4 - %5 bytes - %6 msec - %7 replies" )
-             .arg( mUrl.url(),
-                   statusToString( mStatus ),
-                   QString::number( mHttpStatus ),
-                   mContentType,
-                   bytes,
-                   mStatus == Status::Pending ? QString::number( mTimer.elapsed() / 1000 ) : QString::number( mTotalTime ),
-                   QString::number( mReplies ) );
+        .arg( mUrl.url(), statusToString( mStatus ), QString::number( mHttpStatus ), mContentType, bytes, mStatus == Status::Pending ? QString::number( mTimer.elapsed() / 1000 ) : QString::number( mTotalTime ), QString::number( mReplies ) );
     }
 
     case RoleStatus:
-      return static_cast< int >( mStatus );
+      return static_cast<int>( mStatus );
 
     case RoleId:
       return mRequestId;
@@ -265,7 +121,12 @@ QVariant QgsNetworkLoggerRequestGroup::data( int role ) const
         case QgsNetworkLoggerRequestGroup::Status::TimeOut:
           return QBrush( QColor( 235, 10, 10 ) );
         case QgsNetworkLoggerRequestGroup::Status::Complete:
+        {
+          if ( mReplyFromCache )
+            return QBrush( QColor( 10, 40, 85, 150 ) );
+
           break;
+        }
       }
       break;
     }
@@ -289,47 +150,71 @@ QVariant QgsNetworkLoggerRequestGroup::data( int role ) const
 
 QList<QAction *> QgsNetworkLoggerRequestGroup::actions( QObject *parent )
 {
-  QList< QAction * > res;
+  QList<QAction *> res;
   QAction *openUrlAction = new QAction( QObject::tr( "Open URL" ), parent );
-  QObject::connect( openUrlAction, &QAction::triggered, openUrlAction, [ = ]
-  {
+  QObject::connect( openUrlAction, &QAction::triggered, openUrlAction, [=] {
     QDesktopServices::openUrl( mUrl );
   } );
   res << openUrlAction;
 
   QAction *copyUrlAction = new QAction( QObject::tr( "Copy URL" ), parent );
-  QObject::connect( copyUrlAction, &QAction::triggered, openUrlAction, [ = ]
-  {
+  QObject::connect( copyUrlAction, &QAction::triggered, openUrlAction, [=] {
     QApplication::clipboard()->setText( mUrl.url() );
   } );
   res << copyUrlAction;
 
   QAction *copyAsCurlAction = new QAction( QObject::tr( "Copy As cURL" ), parent );
-  QObject::connect( copyAsCurlAction, &QAction::triggered, copyAsCurlAction, [ = ]
-  {
+  QObject::connect( copyAsCurlAction, &QAction::triggered, copyAsCurlAction, [=] {
     QString curlHeaders;
-    for ( const QPair< QString, QString > &header : std::as_const( mHeaders ) )
+    for ( const QPair<QString, QString> &header : std::as_const( mHeaders ) )
       curlHeaders += QStringLiteral( "-H '%1: %2' " ).arg( header.first, header.second );
 
+    switch ( mOperation )
+    {
+      case QNetworkAccessManager::GetOperation:
+        break;
+
+      case QNetworkAccessManager::PutOperation:
+        curlHeaders += QLatin1String( "-X PUT" );
+        break;
+
+      case QNetworkAccessManager::PostOperation:
+        curlHeaders += QLatin1String( "-X POST" );
+        break;
+
+      case QNetworkAccessManager::HeadOperation:
+        curlHeaders += QLatin1String( "-X HEAD" );
+        break;
+
+      case QNetworkAccessManager::DeleteOperation:
+        curlHeaders += QLatin1String( "-X DELETE" );
+        break;
+
+      case QNetworkAccessManager::CustomOperation:
+        curlHeaders += QStringLiteral( "-X %1" ).arg( mVerb );
+        break;
+
+      case QNetworkAccessManager::UnknownOperation:
+        if ( !mVerb.isEmpty() )
+          curlHeaders += QStringLiteral( "-X %1" ).arg( mVerb );
+        break;
+    }
+
     QString curlData;
-    if ( mOperation == QNetworkAccessManager::PostOperation || mOperation == QNetworkAccessManager::PutOperation )
+    if ( mOperation == QNetworkAccessManager::PostOperation || mOperation == QNetworkAccessManager::PutOperation
+         || ( mOperation == QNetworkAccessManager::CustomOperation && !mData.isEmpty() ) )
       curlData = QStringLiteral( "--data '%1' " ).arg( QString( mData ) );
 
-    QString curlCmd = QStringLiteral( "curl '%1' %2 %3--compressed" ).arg(
-      mUrl.url(),
-      curlHeaders,
-      curlData );
+    QString curlCmd = QStringLiteral( "curl '%1' %2 %3--compressed" ).arg( mUrl.url(), curlHeaders, curlData );
     QApplication::clipboard()->setText( curlCmd );
   } );
   res << copyAsCurlAction;
 
   QAction *copyJsonAction = new QAction( QObject::tr( "Copy as JSON" ), parent );
-  QObject::connect( copyJsonAction, &QAction::triggered, openUrlAction, [ = ]
-  {
+  QObject::connect( copyJsonAction, &QAction::triggered, openUrlAction, [=] {
     const QVariant value = toVariant();
     const QString json = QString::fromStdString( QgsJsonUtils::jsonFromVariant( value ).dump( 2 ) );
     QApplication::clipboard()->setText( json );
-
   } );
   res << copyJsonAction;
 
@@ -361,6 +246,11 @@ QVariant QgsNetworkLoggerRequestGroup::toVariant() const
   return res;
 }
 
+void QgsNetworkLoggerRequestGroup::setUrl( const QUrl &url )
+{
+  mUrl = url;
+}
+
 void QgsNetworkLoggerRequestGroup::setReply( const QgsNetworkReplyContent &reply )
 {
   switch ( reply.error() )
@@ -381,10 +271,10 @@ void QgsNetworkLoggerRequestGroup::setReply( const QgsNetworkReplyContent &reply
   mTotalTime = mTimer.elapsed();
   mHttpStatus = reply.attribute( QNetworkRequest::HttpStatusCodeAttribute ).toInt();
   mContentType = reply.rawHeader( "Content - Type" );
+  mReplyFromCache = reply.attribute( QNetworkRequest::SourceIsFromCacheAttribute ).toBool();
 
-  std::unique_ptr< QgsNetworkLoggerReplyGroup > replyGroup = std::make_unique< QgsNetworkLoggerReplyGroup >( reply ) ;
-  mReplyGroup = replyGroup.get();
-  addChild( std::move( replyGroup ) );
+  auto replyGroup = std::make_unique<QgsNetworkLoggerReplyGroup>( reply );
+  mReplyGroup = static_cast<QgsNetworkLoggerReplyGroup *>( addChild( std::move( replyGroup ) ) );
 }
 
 void QgsNetworkLoggerRequestGroup::setTimedOut()
@@ -404,9 +294,8 @@ void QgsNetworkLoggerRequestGroup::setSslErrors( const QList<QSslError> &errors 
   mHasSslErrors = !errors.empty();
   if ( mHasSslErrors )
   {
-    std::unique_ptr< QgsNetworkLoggerSslErrorGroup > errorGroup =  std::make_unique< QgsNetworkLoggerSslErrorGroup >( errors );
-    mSslErrorsGroup = errorGroup.get();
-    addChild( std::move( errorGroup ) );
+    auto errorGroup = std::make_unique<QgsNetworkLoggerSslErrorGroup>( errors );
+    mSslErrorsGroup = static_cast<QgsNetworkLoggerSslErrorGroup *>( addChild( std::move( errorGroup ) ) );
   }
 }
 
@@ -472,50 +361,56 @@ QString QgsNetworkLoggerRequestGroup::cacheControlToString( QNetworkRequest::Cac
 //
 
 QgsNetworkLoggerRequestDetailsGroup::QgsNetworkLoggerRequestDetailsGroup( const QgsNetworkRequestParameters &request )
-  : QgsNetworkLoggerGroup( QObject::tr( "Request" ) )
+  : QgsDevToolsModelGroup( QObject::tr( "Request" ) )
 {
-  addKeyValueNode( QObject::tr( "Operation" ), QgsNetworkLoggerRequestGroup::operationToString( request.operation() ) );
+  addKeyValueNode( QObject::tr( "Operation" ), request.operation() == QNetworkAccessManager::Operation::CustomOperation ? request.request().attribute( QNetworkRequest::CustomVerbAttribute ).toString() : QgsNetworkLoggerRequestGroup::operationToString( request.operation() ) );
   addKeyValueNode( QObject::tr( "Thread" ), request.originatingThreadId() );
   addKeyValueNode( QObject::tr( "Initiator" ), request.initiatorClassName().isEmpty() ? QObject::tr( "unknown" ) : request.initiatorClassName() );
   if ( request.initiatorRequestId().isValid() )
     addKeyValueNode( QObject::tr( "ID" ), request.initiatorRequestId().toString() );
-  addKeyValueNode( QObject::tr( "Cache (control)" ), QgsNetworkLoggerRequestGroup::cacheControlToString( static_cast< QNetworkRequest::CacheLoadControl >( request.request().attribute( QNetworkRequest::CacheLoadControlAttribute ).toInt() ) ) );
+  addKeyValueNode( QObject::tr( "Cache (control)" ), QgsNetworkLoggerRequestGroup::cacheControlToString( static_cast<QNetworkRequest::CacheLoadControl>( request.request().attribute( QNetworkRequest::CacheLoadControlAttribute ).toInt() ) ) );
   addKeyValueNode( QObject::tr( "Cache (save)" ), request.request().attribute( QNetworkRequest::CacheSaveControlAttribute ).toBool() ? QObject::tr( "Can store result in cache" ) : QObject::tr( "Result cannot be stored in cache" ) );
 
   if ( !QUrlQuery( request.request().url() ).queryItems().isEmpty() )
   {
-    std::unique_ptr< QgsNetworkLoggerRequestQueryGroup > queryGroup = std::make_unique< QgsNetworkLoggerRequestQueryGroup >( request.request().url() );
-    mQueryGroup = queryGroup.get();
-    addChild( std::move( queryGroup ) );
+    auto queryGroup = std::make_unique<QgsNetworkLoggerRequestQueryGroup>( request.request().url() );
+    mQueryGroup = static_cast<QgsNetworkLoggerRequestQueryGroup *>( addChild( std::move( queryGroup ) ) );
   }
 
-  std::unique_ptr< QgsNetworkLoggerRequestHeadersGroup > requestHeadersGroup = std::make_unique< QgsNetworkLoggerRequestHeadersGroup >( request );
-  mRequestHeaders = requestHeadersGroup.get();
-  addChild( std::move( requestHeadersGroup ) );
+  auto requestHeadersGroup = std::make_unique<QgsNetworkLoggerRequestHeadersGroup>( request );
+  mRequestHeaders = static_cast<QgsNetworkLoggerRequestHeadersGroup *>( addChild( std::move( requestHeadersGroup ) ) );
 
   switch ( request.operation() )
   {
+    case QNetworkAccessManager::GetOperation:
+    case QNetworkAccessManager::HeadOperation:
+      break;
+
     case QNetworkAccessManager::PostOperation:
     case QNetworkAccessManager::PutOperation:
     {
-      std::unique_ptr< QgsNetworkLoggerPostContentGroup > postContentGroup = std::make_unique< QgsNetworkLoggerPostContentGroup >( request );
-      mPostContent = postContentGroup.get();
-      addChild( std::move( postContentGroup ) );
+      auto postContentGroup = std::make_unique<QgsNetworkLoggerPostContentGroup>( request );
+      mPostContent = static_cast<QgsNetworkLoggerPostContentGroup *>( addChild( std::move( postContentGroup ) ) );
       break;
     }
 
-    case QNetworkAccessManager::GetOperation:
-    case QNetworkAccessManager::HeadOperation:
     case QNetworkAccessManager::DeleteOperation:
     case QNetworkAccessManager::UnknownOperation:
     case QNetworkAccessManager::CustomOperation:
+    {
+      if ( !request.content().isEmpty() )
+      {
+        auto postContentGroup = std::make_unique<QgsNetworkLoggerPostContentGroup>( request );
+        mPostContent = static_cast<QgsNetworkLoggerPostContentGroup *>( addChild( std::move( postContentGroup ) ) );
+      }
       break;
+    }
   }
 }
 
 QVariant QgsNetworkLoggerRequestDetailsGroup::toVariant() const
 {
-  QVariantMap res = QgsNetworkLoggerGroup::toVariant().toMap();
+  QVariantMap res = QgsDevToolsModelGroup::toVariant().toMap();
   if ( mQueryGroup )
     res.insert( QObject::tr( "Query" ), mQueryGroup->toVariant() );
   if ( mRequestHeaders )
@@ -531,12 +426,12 @@ QVariant QgsNetworkLoggerRequestDetailsGroup::toVariant() const
 //
 
 QgsNetworkLoggerRequestQueryGroup::QgsNetworkLoggerRequestQueryGroup( const QUrl &url )
-  : QgsNetworkLoggerGroup( QObject::tr( "Query" ) )
+  : QgsDevToolsModelGroup( QObject::tr( "Query" ) )
 {
   QUrlQuery query( url );
-  const QList<QPair<QString, QString> > queryItems = query.queryItems();
+  const QList<QPair<QString, QString>> queryItems = query.queryItems();
 
-  for ( const QPair< QString, QString > &query : queryItems )
+  for ( const QPair<QString, QString> &query : queryItems )
   {
     addKeyValueNode( query.first, query.second );
   }
@@ -547,7 +442,7 @@ QgsNetworkLoggerRequestQueryGroup::QgsNetworkLoggerRequestQueryGroup( const QUrl
 // QgsNetworkLoggerRequestHeadersGroup
 //
 QgsNetworkLoggerRequestHeadersGroup::QgsNetworkLoggerRequestHeadersGroup( const QgsNetworkRequestParameters &request )
-  : QgsNetworkLoggerGroup( QObject::tr( "Headers" ) )
+  : QgsDevToolsModelGroup( QObject::tr( "Headers" ) )
 {
   const QList<QByteArray> headers = request.request().rawHeaderList();
   for ( const QByteArray &header : headers )
@@ -561,7 +456,7 @@ QgsNetworkLoggerRequestHeadersGroup::QgsNetworkLoggerRequestHeadersGroup( const 
 //
 
 QgsNetworkLoggerPostContentGroup::QgsNetworkLoggerPostContentGroup( const QgsNetworkRequestParameters &parameters )
-  : QgsNetworkLoggerGroup( QObject::tr( "Content" ) )
+  : QgsDevToolsModelGroup( QObject::tr( "Content" ) )
 {
   addKeyValueNode( QObject::tr( "Data" ), parameters.content() );
 }
@@ -572,24 +467,23 @@ QgsNetworkLoggerPostContentGroup::QgsNetworkLoggerPostContentGroup( const QgsNet
 //
 
 QgsNetworkLoggerReplyGroup::QgsNetworkLoggerReplyGroup( const QgsNetworkReplyContent &reply )
-  : QgsNetworkLoggerGroup( QObject::tr( "Reply" ) )
+  : QgsDevToolsModelGroup( QObject::tr( "Reply" ) )
 {
   addKeyValueNode( QObject::tr( "Status" ), reply.attribute( QNetworkRequest::HttpStatusCodeAttribute ).toString() );
   if ( reply.error() != QNetworkReply::NoError )
   {
-    addKeyValueNode( QObject::tr( "Error Code" ), QString::number( static_cast< int >( reply.error() ) ) );
+    addKeyValueNode( QObject::tr( "Error Code" ), QString::number( static_cast<int>( reply.error() ) ) );
     addKeyValueNode( QObject::tr( "Error" ), reply.errorString() );
   }
   addKeyValueNode( QObject::tr( "Cache (result)" ), reply.attribute( QNetworkRequest::SourceIsFromCacheAttribute ).toBool() ? QObject::tr( "Used entry from cache" ) : QObject::tr( "Read from network" ) );
 
-  std::unique_ptr< QgsNetworkLoggerReplyHeadersGroup > headersGroup = std::make_unique< QgsNetworkLoggerReplyHeadersGroup >( reply );
-  mReplyHeaders = headersGroup.get();
-  addChild( std::move( headersGroup ) );
+  auto headersGroup = std::make_unique<QgsNetworkLoggerReplyHeadersGroup>( reply );
+  mReplyHeaders = static_cast<QgsNetworkLoggerReplyHeadersGroup *>( addChild( std::move( headersGroup ) ) );
 }
 
 QVariant QgsNetworkLoggerReplyGroup::toVariant() const
 {
-  QVariantMap res = QgsNetworkLoggerGroup::toVariant().toMap();
+  QVariantMap res = QgsDevToolsModelGroup::toVariant().toMap();
   if ( mReplyHeaders )
   {
     res.insert( QObject::tr( "Headers" ), mReplyHeaders->toVariant() );
@@ -602,7 +496,7 @@ QVariant QgsNetworkLoggerReplyGroup::toVariant() const
 // QgsNetworkLoggerReplyHeadersGroup
 //
 QgsNetworkLoggerReplyHeadersGroup::QgsNetworkLoggerReplyHeadersGroup( const QgsNetworkReplyContent &reply )
-  : QgsNetworkLoggerGroup( QObject::tr( "Headers" ) )
+  : QgsDevToolsModelGroup( QObject::tr( "Headers" ) )
 {
   const QList<QByteArray> headers = reply.rawHeaderList();
   for ( const QByteArray &header : headers )
@@ -615,7 +509,7 @@ QgsNetworkLoggerReplyHeadersGroup::QgsNetworkLoggerReplyHeadersGroup( const QgsN
 // QgsNetworkLoggerSslErrorGroup
 //
 QgsNetworkLoggerSslErrorGroup::QgsNetworkLoggerSslErrorGroup( const QList<QSslError> &errors )
-  : QgsNetworkLoggerGroup( QObject::tr( "SSL errors" ) )
+  : QgsDevToolsModelGroup( QObject::tr( "SSL errors" ) )
 {
   for ( const QSslError &error : errors )
   {
@@ -628,15 +522,5 @@ QVariant QgsNetworkLoggerSslErrorGroup::data( int role ) const
   if ( role == Qt::ForegroundRole )
     return QBrush( QColor( 180, 65, 210 ) );
 
-  return QgsNetworkLoggerGroup::data( role );
-}
-
-QList<QAction *> QgsNetworkLoggerNode::actions( QObject * )
-{
-  return QList< QAction * >();
-}
-
-QVariant QgsNetworkLoggerNode::toVariant() const
-{
-  return QVariant();
+  return QgsDevToolsModelGroup::data( role );
 }

@@ -23,17 +23,16 @@
 class QgsMapLayer;
 class QgsMapLayerConfigWidget;
 class QgsMapCanvas;
+class QgsLayerTreeGroup;
 
 /**
  * \ingroup gui
  * \class QgsMapLayerConfigWidgetFactory
  * \brief Factory class for creating custom map layer property pages
- * \since QGIS 2.16
  */
 class GUI_EXPORT QgsMapLayerConfigWidgetFactory
 {
   public:
-
     /**
      * Available parent pages, for factories which create a widget which is a sub-component
      * of a standard page.
@@ -46,7 +45,6 @@ class GUI_EXPORT QgsMapLayerConfigWidgetFactory
       Temporal, //!< Factory creates sub-components of the temporal properties page (only supported for raster layer temporal properties)
     };
 
-    //! Constructor
     QgsMapLayerConfigWidgetFactory() = default;
 
     //! Constructor
@@ -126,6 +124,13 @@ class GUI_EXPORT QgsMapLayerConfigWidgetFactory
      * \returns TRUE if this layer is supported for this widget
      */
     virtual bool supportsLayer( QgsMapLayer *layer ) const;
+
+    /**
+     * \brief Check if a layer tree group is supported for this widget.
+     * \returns TRUE if the group is supported for this widget
+     * \since QGIS 3.24
+     */
+    virtual bool supportsLayerTreeGroup( QgsLayerTreeGroup *group ) const;
 
     /**
      * Returns the associated parent page, for factories which create sub-components of a standard page.

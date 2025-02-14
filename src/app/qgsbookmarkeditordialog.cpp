@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include "qgsbookmarkeditordialog.h"
+#include "moc_qgsbookmarkeditordialog.cpp"
 
 #include "qgis.h"
 #include "qgisapp.h"
@@ -35,11 +36,11 @@ QgsBookmarkEditorDialog::QgsBookmarkEditorDialog( QgsBookmark bookmark, bool inP
   , mMapCanvas( mapCanvas )
 {
   setupUi( this );
-  QgsGui::instance()->enableAutoGeometryRestore( this );
+  QgsGui::enableAutoGeometryRestore( this );
 
   mName->setText( mBookmark.name() );
 
-  const QSet<QString> groups = qgis::listToSet( QgsProject::instance()->bookmarkManager()->groups() << QgsApplication::instance()->bookmarkManager()->groups() );
+  const QSet<QString> groups = qgis::listToSet( QgsProject::instance()->bookmarkManager()->groups() << QgsApplication::bookmarkManager()->groups() );
   QStringList groupsList = qgis::setToList( groups );
   groupsList.removeOne( QString() );
   groupsList.sort();
@@ -48,9 +49,10 @@ QgsBookmarkEditorDialog::QgsBookmarkEditorDialog( QgsBookmark bookmark, bool inP
 
   mExtentGroupBox->setOutputCrs( mBookmark.extent().crs() );
   mExtentGroupBox->setCurrentExtent( mBookmark.extent(), mBookmark.extent().crs() );
-  mExtentGroupBox->setOutputExtentFromCurrent();
   mExtentGroupBox->setMapCanvas( mMapCanvas );
+  mExtentGroupBox->setOutputExtentFromCurrent();
   mCrsSelector->setCrs( mBookmark.extent().crs() );
+  mRotation->setValue( mBookmark.rotation() );
 
   mSaveLocation->addItem( tr( "User Bookmarks" ), ApplicationManager );
   mSaveLocation->addItem( tr( "Project Bookmarks" ), ProjectManager );
@@ -61,6 +63,7 @@ QgsBookmarkEditorDialog::QgsBookmarkEditorDialog( QgsBookmark bookmark, bool inP
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsBookmarkEditorDialog::showHelp );
 
   mName->setFocus();
+  mName->selectAll();
 }
 
 void QgsBookmarkEditorDialog::crsChanged( const QgsCoordinateReferenceSystem &crs )
@@ -70,7 +73,7 @@ void QgsBookmarkEditorDialog::crsChanged( const QgsCoordinateReferenceSystem &cr
 
 void QgsBookmarkEditorDialog::showHelp()
 {
-  QgsHelp::openHelp( QStringLiteral( "introduction/general_tools.html#spatial-bookmarks" ) );
+  QgsHelp::openHelp( QStringLiteral( "map_views/map_view.html#sec-bookmarks" ) );
 }
 
 void QgsBookmarkEditorDialog::onAccepted()
@@ -80,6 +83,7 @@ void QgsBookmarkEditorDialog::onAccepted()
   bookmark.setName( mName->text() );
   bookmark.setGroup( mGroup->currentText() );
   bookmark.setExtent( QgsReferencedRectangle( mExtentGroupBox->outputExtent(), mExtentGroupBox->outputCrs() ) );
+  bookmark.setRotation( mRotation->value() );
 
   if ( bookmark.id().isEmpty() )
   {
@@ -87,7 +91,7 @@ void QgsBookmarkEditorDialog::onAccepted()
     if ( mSaveLocation->currentData() == ProjectManager )
       QgsProject::instance()->bookmarkManager()->addBookmark( bookmark );
     else
-      QgsApplication::instance()->bookmarkManager()->addBookmark( bookmark );
+      QgsApplication::bookmarkManager()->addBookmark( bookmark );
   }
   else
   {
@@ -95,12 +99,11 @@ void QgsBookmarkEditorDialog::onAccepted()
     if ( mInProject )
       QgsProject::instance()->bookmarkManager()->updateBookmark( bookmark );
     else
-      QgsApplication::instance()->bookmarkManager()->updateBookmark( bookmark );
+      QgsApplication::bookmarkManager()->updateBookmark( bookmark );
 
     if ( !mInProject && mSaveLocation->currentData() == ProjectManager )
-      QgsApplication::instance()->bookmarkManager()->moveBookmark( bookmark.id(), QgsProject::instance()->bookmarkManager() );
+      QgsApplication::bookmarkManager()->moveBookmark( bookmark.id(), QgsProject::instance()->bookmarkManager() );
     else if ( mInProject && mSaveLocation->currentData() == ApplicationManager )
-      QgsProject::instance()->bookmarkManager()->moveBookmark( bookmark.id(), QgsApplication::instance()->bookmarkManager() );
+      QgsProject::instance()->bookmarkManager()->moveBookmark( bookmark.id(), QgsApplication::bookmarkManager() );
   }
 }
-

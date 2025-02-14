@@ -16,7 +16,6 @@
  ***************************************************************************/
 
 #include "qgsmeshvirtualdatasetgroup.h"
-#include "qgsmeshlayertemporalproperties.h"
 
 QgsMeshVirtualDatasetGroup::QgsMeshVirtualDatasetGroup(
   const QString &name,
@@ -80,7 +79,7 @@ void QgsMeshVirtualDatasetGroup::initialize()
   if ( times.isEmpty() )
     times.insert( 0 );
 
-  mDatasetTimes = qgis::setToList( times );
+  mDatasetTimes = QList<qint64>( times.constBegin(), times.constEnd() );
   std::sort( mDatasetTimes.begin(), mDatasetTimes.end() );
 
   mDatasetMetaData = QVector<QgsMeshDatasetMetadata>( mDatasetTimes.count() );
@@ -165,7 +164,7 @@ bool QgsMeshVirtualDatasetGroup::calculateDataset() const
     return false;
 
   //open output dataset
-  std::unique_ptr<QgsMeshMemoryDatasetGroup> outputGroup = std::make_unique<QgsMeshMemoryDatasetGroup> ( QString(), dsu.outputType() );
+  auto outputGroup = std::make_unique<QgsMeshMemoryDatasetGroup> ( QString(), dsu.outputType() );
   mCalcNode->calculate( dsu, *outputGroup );
 
   if ( outputGroup->memoryDatasets.isEmpty() )

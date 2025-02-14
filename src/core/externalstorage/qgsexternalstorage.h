@@ -37,9 +37,6 @@ class CORE_EXPORT QgsExternalStorage
 {
   public:
 
-    /**
-     * Destructor
-     */
     virtual ~QgsExternalStorage() = default;
 
     /**
@@ -157,8 +154,17 @@ class CORE_EXPORT QgsExternalStorageContent : public QObject
      */
     void reportError( const QString &errorMsg );
 
-    Qgis::ContentStatus mStatus = Qgis::ContentStatus::NotStarted;
+    /**
+     * Sets the external storage \a status
+     */
+    void setStatus( Qgis::ContentStatus status );
+
     QString mErrorString;
+
+
+  private:
+
+    Qgis::ContentStatus mStatus = Qgis::ContentStatus::NotStarted;
 };
 
 /**

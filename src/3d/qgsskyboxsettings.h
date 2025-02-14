@@ -36,11 +36,8 @@ class QDomElement;
 class _3D_EXPORT QgsSkyboxSettings
 {
   public:
-    //! default constructor
     QgsSkyboxSettings() = default;
-    //! copy constructor
     QgsSkyboxSettings( const QgsSkyboxSettings &other );
-    //! delete assignment operator
     QgsSkyboxSettings &operator=( QgsSkyboxSettings const &rhs );
 
     //! Reads settings from a DOM \a element
@@ -71,7 +68,7 @@ class _3D_EXPORT QgsSkyboxSettings
     void setCubeMapFace( const QString &face, const QString &path ) { mCubeMapFacesPaths[face] = path; }
 
   private:
-    QgsSkyboxEntity::SkyboxType mSkyboxType;
+    QgsSkyboxEntity::SkyboxType mSkyboxType = QgsSkyboxEntity::PanoramicSkybox;
     //
     QString mPanoramicTexturePath;
     //

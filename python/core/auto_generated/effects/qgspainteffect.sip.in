@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/effects/qgspainteffect.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -31,8 +31,6 @@ method. This will perform the paint effect on the intercepted drawing operations
 and render the result to the render context's paint device.
 
 .. seealso:: :py:class:`QgsPaintEffectRegistry`
-
-.. versionadded:: 2.9
 %End
 
 %TypeHeaderCode
@@ -86,9 +84,6 @@ and render the result to the render context's paint device.
     };
 
     QgsPaintEffect();
-%Docstring
-Constructor for QgsPaintEffect.
-%End
 
     QgsPaintEffect( const QgsPaintEffect &other );
     virtual ~QgsPaintEffect();
@@ -154,7 +149,7 @@ Restores the effect to the state described by a DOM element.
 .. seealso:: :py:func:`saveProperties`
 %End
 
-    virtual void render( QPicture &picture, QgsRenderContext &context );
+    virtual void render( const QPicture &picture, QgsRenderContext &context );
 %Docstring
 Renders a picture using the effect.
 
@@ -251,7 +246,7 @@ to account for the destination painter's DPI.
 .. seealso:: :py:func:`sourceAsImage`
 %End
 
-    const QPicture *source() const;
+    const QPicture &source() const;
 %Docstring
 Returns the source QPicture. The :py:func:`~QgsPaintEffect.draw` member can utilize this when
 drawing the effect.
@@ -263,14 +258,14 @@ drawing the effect.
 .. seealso:: :py:func:`sourceAsImage`
 %End
 
-    QImage *sourceAsImage( QgsRenderContext &context );
+    QImage sourceAsImage( QgsRenderContext &context );
 %Docstring
 Returns the source QPicture rendered to a new QImage. The :py:func:`~QgsPaintEffect.draw` member can
 utilize this when drawing the effect. The image will be padded or cropped from the original
 source QPicture by the results of the :py:func:`~QgsPaintEffect.boundingRect` method.
 The result is cached to speed up subsequent calls to sourceAsImage.
 
-:return: source QPicture rendered to an image
+:return: source QPicture rendered to an image, or a null image if source could not be rendered
 
 .. seealso:: :py:func:`drawSource`
 
@@ -307,13 +302,17 @@ effects.
 .. seealso:: :py:func:`sourceAsImage`
 %End
 
-    void fixQPictureDpi( QPainter *painter ) const;
+ void fixQPictureDpi( QPainter *painter ) const /Deprecated="Since 3.40. Use QgsPainting.drawPicture() or QgsPainting.applyScaleFixForQPictureDpi() instead."/;
 %Docstring
 Applies a workaround to a QPainter to avoid an issue with incorrect scaling
 when drawing QPictures. This may need to be called by derived classes prior
 to rendering results onto a painter.
 
 :param painter: destination painter
+
+.. deprecated:: 3.40
+
+   Use :py:func:`QgsPainting.drawPicture()` or :py:func:`QgsPainting.applyScaleFixForQPictureDpi()` instead.
 %End
 
 };
@@ -328,8 +327,6 @@ The draw source effect can be used to draw an unaltered copy of the original sou
 picture. Minor changes like lowering the opacity and applying a blend mode are
 supported, however these changes will force the resultant output to be rasterized.
 If no alterations are performed then the original picture will be rendered as a vector.
-
-.. versionadded:: 2.9
 %End
 
 %TypeHeaderCode
@@ -338,9 +335,6 @@ If no alterations are performed then the original picture will be rendered as a 
   public:
 
     QgsDrawSourceEffect();
-%Docstring
-Constructor for QgsDrawSourceEffect
-%End
 
     static QgsPaintEffect *create( const QVariantMap &map ) /Factory/;
 %Docstring
@@ -410,8 +404,6 @@ class QgsEffectPainter
 {
 %Docstring(signature="appended")
 A class to manager painter saving and restoring required for effect drawing
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -424,8 +416,6 @@ A class to manager painter saving and restoring required for effect drawing
 QgsEffectPainter constructor
 
 :param renderContext: the :py:class:`QgsRenderContext` object
-
-.. versionadded:: 3.0
 %End
 
     QgsEffectPainter( QgsRenderContext &renderContext, QgsPaintEffect *effect );
@@ -434,8 +424,6 @@ QgsEffectPainter constructor alternative if no painter translation is needed
 
 :param renderContext: the :py:class:`QgsRenderContext` object
 :param effect: the :py:class:`QgsPaintEffect` object
-
-.. versionadded:: 3.0
 %End
     ~QgsEffectPainter();
 
@@ -458,5 +446,5 @@ Sets the effect to be painted
  *                                                                      *
  * src/core/effects/qgspainteffect.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

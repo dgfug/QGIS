@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/qgsfontbutton.h                                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -23,15 +23,12 @@ The button can be used in two different :py:func:`~modes`. The default behavior 
 all settings used for configuring :py:class:`QgsTextFormat`/:py:class:`QgsTextRenderer` classes. A cut down
 mode (without settings for color) is also available when the resultant font is
 used only in a QFont object.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgsfontbutton.h"
 %End
   public:
-
     enum Mode
     {
       ModeTextRenderer,
@@ -279,7 +276,6 @@ Emitted when the widget's text format settings are changed.
 %End
 
   protected:
-
     virtual bool event( QEvent *e );
 
     virtual void changeEvent( QEvent *e );
@@ -313,5 +309,5 @@ Emitted when the widget's text format settings are changed.
  *                                                                      *
  * src/gui/qgsfontbutton.h                                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

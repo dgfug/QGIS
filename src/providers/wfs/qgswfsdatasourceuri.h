@@ -22,6 +22,7 @@
 #include "qgsauthorizationsettings.h"
 
 #include <QNetworkRequest>
+#include <QSet>
 #include <QString>
 
 /**
@@ -31,7 +32,6 @@
 class QgsWFSDataSourceURI
 {
   public:
-
     //! Http method for DCP URIs
     enum Method
     {
@@ -41,8 +41,14 @@ class QgsWFSDataSourceURI
 
     explicit QgsWFSDataSourceURI( const QString &uri );
 
-    //! Returns the URI, avoiding expansion of authentication configuration, which is handled during network access
-    const QString uri() const;
+    //! Copy constructor
+    QgsWFSDataSourceURI( const QgsWFSDataSourceURI &other );
+
+    //! Returns whether the URI is a valid one
+    bool isValid() const;
+
+    //! Returns the URI, optionally with the authentication configuration expanded
+    QString uri( bool expandAuthConfig = false ) const;
 
     //! Returns base URL (with SERVICE=WFS parameter if bIncludeServiceWFS=true)
     QUrl baseURL( bool bIncludeServiceWFS = true ) const;
@@ -62,8 +68,16 @@ class QgsWFSDataSourceURI
     //! Returns user defined limit page size. 0=server udefault
     long long pageSize() const;
 
+    //! Whether paging is enabled
+    enum class PagingStatus
+    {
+      DEFAULT, //! For WFS <= 1.1, no paging. For WFS 2.0, trust GetCapabilities "ImplementsResultPaging"
+      ENABLED, //! Enabled
+      DISABLED // Disabled
+    };
+
     //! Returns whether paging is enabled.
-    bool pagingEnabled() const;
+    PagingStatus pagingStatus() const;
 
     //! Gets typename (with prefix)
     QString typeName() const;
@@ -85,6 +99,12 @@ class QgsWFSDataSourceURI
 
     //! Sets OGC filter xml or a QGIS expression
     void setFilter( const QString &filterIn );
+
+    //! Returns whether there is a geometry type filter.
+    bool hasGeometryTypeFilter() const;
+
+    //! Gets the geometry type filter.
+    Qgis::WkbType geometryTypeFilter() const;
 
     //! Gets SQL query
     QString sql() const;
@@ -120,12 +140,7 @@ class QgsWFSDataSourceURI
     const QgsAuthorizationSettings &auth() const { return mAuth; }
 
     //! Builds a derived uri from a base uri
-    static QString build( const QString &uri,
-                          const QString &typeName,
-                          const QString &crsString = QString(),
-                          const QString &sql = QString(),
-                          const QString &filter = QString(),
-                          bool restrictToCurrentViewExtent = false );
+    static QString build( const QString &uri, const QString &typeName, const QString &crsString = QString(), const QString &sql = QString(), const QString &filter = QString(), bool restrictToCurrentViewExtent = false );
 
     //! Sets Get DCP endpoints
     void setGetEndpoints( const QgsStringMap &map );
@@ -133,11 +148,21 @@ class QgsWFSDataSourceURI
     //! Sets Post DCP endpoints
     void setPostEndpoints( const QgsStringMap &map );
 
+    //! Return set of unknown parameter keys in the URI.
+    QSet<QString> unknownParamKeys() const;
+
+    //! Whether the initial GetFeature request, used to determine if gml:description/name/identifiers are used, should be skipped
+    bool skipInitialGetFeature() const;
+
+    //! Assignment operator
+    QgsWFSDataSourceURI &operator=( const QgsWFSDataSourceURI &other );
+
   private:
-    QgsDataSourceUri    mURI;
+    QgsDataSourceUri mURI;
     QgsAuthorizationSettings mAuth;
     QgsStringMap mGetEndpoints;
     QgsStringMap mPostEndpoints;
+    bool mDeprecatedURI = false;
 };
 
 

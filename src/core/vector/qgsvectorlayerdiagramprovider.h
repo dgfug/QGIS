@@ -34,17 +34,12 @@ class QgsDiagramLabelFeature : public QgsLabelFeature
 {
   public:
     //! Create label feature, takes ownership of the geometry instance
-    QgsDiagramLabelFeature( QgsFeatureId id, geos::unique_ptr geometry, QSizeF size )
-      : QgsLabelFeature( id, std::move( geometry ), size ) {}
+    QgsDiagramLabelFeature( const QgsFeature &feature, geos::unique_ptr geometry, QSizeF size )
+      : QgsLabelFeature( feature.id(), std::move( geometry ), size )
+    {
+      setFeature( feature );
+    }
 
-    //! Store feature's attributes - used for rendering of diagrams
-    void setAttributes( const QgsAttributes &attrs ) { mAttributes = attrs; }
-    //! Gets feature's attributes - used for rendering of diagrams
-    const QgsAttributes &attributes() { return mAttributes; }
-
-  protected:
-    //! Stores attribute values for diagram rendering
-    QgsAttributes mAttributes;
 };
 
 
@@ -57,7 +52,6 @@ class QgsAbstractFeatureSource;
  *
  * \note this class is not a part of public API yet. See notes in QgsLabelingEngine
  * \note not available in Python bindings
- * \since QGIS 2.12
  */
 class CORE_EXPORT QgsVectorLayerDiagramProvider : public QgsAbstractLabelProvider
 {
@@ -108,7 +102,7 @@ class CORE_EXPORT QgsVectorLayerDiagramProvider : public QgsAbstractLabelProvide
     //! initialization method - called from constructors
     void init();
     //! helper method to register one diagram feature
-    QgsLabelFeature *registerDiagram( QgsFeature &feat, QgsRenderContext &context, const QgsGeometry &obstacleGeometry = QgsGeometry() );
+    QgsLabelFeature *registerDiagram( const QgsFeature &feat, QgsRenderContext &context, const QgsGeometry &obstacleGeometry = QgsGeometry() );
 
   protected:
 
@@ -130,6 +124,8 @@ class CORE_EXPORT QgsVectorLayerDiagramProvider : public QgsAbstractLabelProvide
 
     //! List of generated label features (owned by the provider)
     QList<QgsLabelFeature *> mFeatures;
+
+    std::unique_ptr< QgsExpressionContextScope > mLayerScope;
 
     QgsGeometry mLabelClipFeatureGeom;
 };

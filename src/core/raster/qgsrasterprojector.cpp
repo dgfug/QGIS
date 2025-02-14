@@ -19,6 +19,7 @@
 #include "qgsrasterdataprovider.h"
 #include "qgslogger.h"
 #include "qgsrasterprojector.h"
+#include "moc_qgsrasterprojector.cpp"
 #include "qgscoordinatetransform.h"
 #include "qgsexception.h"
 
@@ -123,8 +124,8 @@ ProjectorData::ProjectorData( const QgsRectangle &extent, int width, int height,
       // result by not requesting at the maximum resolution and then doing nearest
       // resampling here. A real fix would be to do resampling during reprojection
       // however.
-      if ( !( provider->providerCapabilities() & QgsRasterDataProvider::ProviderHintCanPerformProviderResampling ) &&
-           ( provider->capabilities() & QgsRasterDataProvider::Size ) )
+      if ( !( provider->providerCapabilities() & Qgis::RasterProviderCapability::ProviderHintCanPerformProviderResampling ) &&
+           ( provider->capabilities() & Qgis::RasterInterfaceCapability::Size ) )
       {
         mMaxSrcXRes = provider->extent().width() / provider->xSize();
         mMaxSrcYRes = provider->extent().height() / provider->ySize();
@@ -159,6 +160,16 @@ ProjectorData::ProjectorData( const QgsRectangle &extent, int width, int height,
   // Always try to calculate mCPMatrix, it is used in calcSrcExtent() for both Approximate and Exact
   // Initialize the matrix by corners and middle points
   mCPCols = mCPRows = 3;
+
+  // For WebMercator to geographic, if the bounding box is symmetric in Y,
+  // and we only use 3 sample points, we would believe that there is perfect
+  // linear approximation, resulting in wrong reprojection
+  // (see https://github.com/qgis/QGIS/issues/34518).
+  // But if we use 5 sample points, we will detect the non-linearity and will
+  // refine the CPMatrix appropriately.
+  if ( std::fabs( -mDestExtent.yMinimum() - mDestExtent.yMaximum() ) / height < 0.5 * mDestYRes )
+    mCPRows = 5;
+
   for ( int i = 0; i < mCPRows; i++ )
   {
     QList<QgsPointXY> myRow;
@@ -303,7 +314,7 @@ void ProjectorData::calcSrcExtent()
   QgsDebugMsgLevel( "mSrcExtent = " + mSrcExtent.toString(), 4 );
 }
 
-QString ProjectorData::cpToString()
+QString ProjectorData::cpToString() const
 {
   QString myString;
   for ( int i = 0; i < mCPRows; i++ )
@@ -340,6 +351,8 @@ void ProjectorData::calcSrcRowsCols()
 
   if ( mApproximate )
   {
+    double myMaxSize = 0;
+
     // For now, we take cell sizes projected to source but not to source axes
     const double myDestColsPerMatrixCell = static_cast< double >( mDestCols ) / mCPCols;
     const double myDestRowsPerMatrixCell = static_cast< double >( mDestRows ) / mCPRows;
@@ -356,13 +369,22 @@ void ProjectorData::calcSrcRowsCols()
           double mySize = std::sqrt( myPointA.sqrDist( myPointB ) ) / myDestColsPerMatrixCell;
           if ( mySize < myMinSize )
             myMinSize = mySize;
+          if ( mySize > myMaxSize )
+            myMaxSize = mySize;
 
           mySize = std::sqrt( myPointA.sqrDist( myPointC ) ) / myDestRowsPerMatrixCell;
           if ( mySize < myMinSize )
             myMinSize = mySize;
+          if ( mySize > myMaxSize )
+            myMaxSize = mySize;
         }
       }
     }
+    // Limit resolution to 1/10th of the maximum resolution to avoid issues
+    // with for example WebMercator at high northings that result in very small
+    // latitude differences.
+    if ( myMinSize < 0.1 * myMaxSize )
+      myMinSize = 0.1 * myMaxSize;
   }
   else
   {
@@ -378,7 +400,7 @@ void ProjectorData::calcSrcRowsCols()
     }
     else
     {
-      QgsDebugMsg( QStringLiteral( "Cannot get src extent/size" ) );
+      QgsDebugError( QStringLiteral( "Cannot get src extent/size" ) );
     }
   }
 
@@ -395,8 +417,19 @@ void ProjectorData::calcSrcRowsCols()
   QgsDebugMsgLevel( QStringLiteral( "mSrcExtent.width = %1 mSrcExtent.height = %2" ).arg( mSrcExtent.width() ).arg( mSrcExtent.height() ), 4 );
 
   // we have to round to keep alignment set in calcSrcExtent
-  mSrcRows = static_cast< int >( std::round( mSrcExtent.height() / myMinYSize ) );
-  mSrcCols = static_cast< int >( std::round( mSrcExtent.width() / myMinXSize ) );
+  // Limit to 10x the source dimensions to avoid excessive memory allocation
+  // and processing time.
+  double dblSrcRows = mSrcExtent.height() / myMinYSize;
+  if ( dblSrcRows > mDestRows * 10 )
+    mSrcRows = mDestRows * 10;
+  else
+    mSrcRows = static_cast< int >( std::round( dblSrcRows ) );
+
+  double dblSrcCols = mSrcExtent.width() / myMinXSize;
+  if ( dblSrcCols > mDestCols * 10 )
+    mSrcCols = mDestCols * 10;
+  else
+    mSrcCols = static_cast< int >( std::round( dblSrcCols ) );
 
   QgsDebugMsgLevel( QStringLiteral( "mSrcRows = %1 mSrcCols = %2" ).arg( mSrcRows ).arg( mSrcCols ), 4 );
 }
@@ -813,27 +846,30 @@ QgsRasterBlock *QgsRasterProjector::block( int bandNo, QgsRectangle  const &exte
   }
 
   std::unique_ptr< QgsRasterBlock > inputBlock( mInput->block( bandNo, pd.srcExtent(), pd.srcCols(), pd.srcRows(), feedback ) );
-  if ( !inputBlock || inputBlock->isEmpty() )
+  const QgsRasterBlock *input = inputBlock.get();
+  if ( !input || input->isEmpty() )
   {
-    QgsDebugMsg( QStringLiteral( "No raster data!" ) );
+    QgsDebugError( QStringLiteral( "No raster data!" ) );
     return new QgsRasterBlock();
   }
 
   const qgssize pixelSize = static_cast<qgssize>( QgsRasterBlock::typeSize( mInput->dataType( bandNo ) ) );
 
-  std::unique_ptr< QgsRasterBlock > outputBlock( new QgsRasterBlock( inputBlock->dataType(), width, height ) );
-  if ( inputBlock->hasNoDataValue() )
+  auto outputBlock = std::make_unique< QgsRasterBlock >( input->dataType(), width, height );
+  QgsRasterBlock *output = outputBlock.get();
+
+  if ( input->hasNoDataValue() )
   {
-    outputBlock->setNoDataValue( inputBlock->noDataValue() );
+    output->setNoDataValue( input->noDataValue() );
   }
-  if ( !outputBlock->isValid() )
+  if ( !output->isValid() )
   {
-    QgsDebugMsg( QStringLiteral( "Cannot create block" ) );
+    QgsDebugError( QStringLiteral( "Cannot create block" ) );
     return outputBlock.release();
   }
 
   // set output to no data, it should be fast
-  outputBlock->setIsNoData();
+  output->setIsNoData();
 
   // No data: because isNoData()/setIsNoData() is slow with respect to simple memcpy,
   // we use if only if necessary:
@@ -845,9 +881,7 @@ QgsRasterBlock *QgsRasterProjector::block( int bandNo, QgsRectangle  const &exte
 
   // To copy no data values stored in bitmaps we have to use isNoData()/setIsNoData(),
   // we cannot fill output block with no data because we use memcpy for data, not setValue().
-  const bool doNoData = !QgsRasterBlock::typeIsNumeric( inputBlock->dataType() ) && inputBlock->hasNoData() && !inputBlock->hasNoDataValue();
-
-  outputBlock->setIsNoData();
+  const bool doNoData = !QgsRasterBlock::typeIsNumeric( input->dataType() ) && input->hasNoData() && !input->hasNoDataValue();
 
   int srcRow, srcCol;
   for ( int i = 0; i < height; ++i )
@@ -859,30 +893,29 @@ QgsRasterBlock *QgsRasterProjector::block( int bandNo, QgsRectangle  const &exte
       const bool inside = pd.srcRowCol( i, j, &srcRow, &srcCol );
       if ( !inside ) continue; // we have everything set to no data
 
-      const qgssize srcIndex = static_cast< qgssize >( srcRow * pd.srcCols() + srcCol );
+      const qgssize srcIndex = static_cast< qgssize >( srcRow ) * pd.srcCols() + srcCol;
 
       // isNoData() may be slow so we check doNoData first
-      if ( doNoData && inputBlock->isNoData( srcRow, srcCol ) )
+      if ( doNoData && input->isNoData( srcRow, srcCol ) )
       {
-        outputBlock->setIsNoData( i, j );
         continue;
       }
 
-      const qgssize destIndex = static_cast< qgssize >( i * width + j );
-      char *srcBits = inputBlock->bits( srcIndex );
-      char *destBits = outputBlock->bits( destIndex );
+      const qgssize destIndex = static_cast< qgssize >( i ) * width + j;
+      const char *srcBits = input->constBits( srcIndex );
+      char *destBits = output->bits( destIndex );
       if ( !srcBits )
       {
-        // QgsDebugMsg( QStringLiteral( "Cannot get input block data: row = %1 col = %2" ).arg( i ).arg( j ) );
+        // QgsDebugError( QStringLiteral( "Cannot get input block data: row = %1 col = %2" ).arg( i ).arg( j ) );
         continue;
       }
       if ( !destBits )
       {
-        // QgsDebugMsg( QStringLiteral( "Cannot set output block data: srcRow = %1 srcCol = %2" ).arg( srcRow ).arg( srcCol ) );
+        // QgsDebugError( QStringLiteral( "Cannot set output block data: srcRow = %1 srcCol = %2" ).arg( srcRow ).arg( srcCol ) );
         continue;
       }
       memcpy( destBits, srcBits, pixelSize );
-      outputBlock->setIsData( i, j );
+      output->setIsData( i, j );
     }
   }
 
@@ -914,34 +947,44 @@ bool QgsRasterProjector::extentSize( const QgsCoordinateTransform &ct,
     return false;
   }
 
-  destExtent = ct.transformBoundingBox( srcExtent );
+  QgsCoordinateTransform extentTransform = ct;
+  extentTransform.setBallparkTransformsAreAppropriate( true );
+
+  destExtent = extentTransform.transformBoundingBox( srcExtent );
 
   // We reproject pixel rectangle from 9 points matrix of source extent, of course, it gives
   // bigger xRes,yRes than reprojected edges (envelope)
-  const double srcXStep = srcExtent.width() / 3;
-  const double srcYStep = srcExtent.height() / 3;
+  constexpr int steps = 3;
+  const double srcXStep = srcExtent.width() / steps;
+  const double srcYStep = srcExtent.height() / steps;
   const double srcXRes = srcExtent.width() / srcXSize;
   const double srcYRes = srcExtent.height() / srcYSize;
   double destXRes = std::numeric_limits<double>::max();
   double destYRes = std::numeric_limits<double>::max();
+  double maxXRes = 0;
+  double maxYRes = 0;
 
-  for ( int i = 0; i < 3; i++ )
+  for ( int i = 0; i < steps; i++ )
   {
     const double x = srcExtent.xMinimum() + i * srcXStep;
-    for ( int j = 0; j < 3; j++ )
+    for ( int j = 0; j < steps; j++ )
     {
       const double y = srcExtent.yMinimum() + j * srcYStep;
       const QgsRectangle srcRectangle( x - srcXRes / 2, y - srcYRes / 2, x + srcXRes / 2, y + srcYRes / 2 );
       try
       {
-        const QgsRectangle destRectangle = ct.transformBoundingBox( srcRectangle );
+        const QgsRectangle destRectangle = extentTransform.transformBoundingBox( srcRectangle );
         if ( destRectangle.width() > 0 )
         {
           destXRes = std::min( destXRes, destRectangle.width() );
+          if ( destRectangle.width() > maxXRes )
+            maxXRes = destRectangle.width();
         }
         if ( destRectangle.height() > 0 )
         {
           destYRes = std::min( destYRes, destRectangle.height() );
+          if ( destRectangle.height() > maxYRes )
+            maxYRes = destRectangle.height();
         }
       }
       catch ( QgsCsException & )
@@ -950,7 +993,24 @@ bool QgsRasterProjector::extentSize( const QgsCoordinateTransform &ct,
       }
     }
   }
-  destXSize = std::max( 1, static_cast< int >( destExtent.width() / destYRes ) );
+
+  // Limit resolution to 1/10th of the maximum resolution to avoid issues
+  // with for example WebMercator at high northings that result in very small
+  // latitude differences.
+  if ( destXRes < 0.1 * maxXRes )
+  {
+    destXRes = 0.1 * maxXRes;
+  }
+  if ( destYRes < 0.1 * maxYRes )
+  {
+    destYRes = 0.1 * maxYRes;
+  }
+  if ( destXRes == 0 || destExtent.width() / destXRes  > std::numeric_limits<int>::max() )
+    return false;
+  if ( destYRes == 0 || destExtent.height() / destYRes  > std::numeric_limits<int>::max() )
+    return false;
+
+  destXSize = std::max( 1, static_cast< int >( destExtent.width() / destXRes ) );
   destYSize = std::max( 1, static_cast< int >( destExtent.height() / destYRes ) );
 
   return true;

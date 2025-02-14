@@ -30,36 +30,32 @@
 #include <qgsproject.h>
 #include <qgssymbol.h>
 #include <qgs25drenderer.h>
-#include "qgslayout.h"
 #include "qgslayoutitemmap.h"
-#include "qgsmultirenderchecker.h"
 #include "qgsexpressioncontextutils.h"
+#include "qgslayout.h"
 
 /**
  * \ingroup UnitTests
  * This is a unit test for 25d renderer.
  */
-class TestQgs25DRenderer : public QObject
+class TestQgs25DRenderer : public QgsTest
 {
     Q_OBJECT
   public:
-    TestQgs25DRenderer() = default;
+    TestQgs25DRenderer()
+      : QgsTest( QStringLiteral( "25D Renderer Tests" ), QStringLiteral( "25d_renderer" ) )
+    {}
 
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init() {} // will be called before each testfunction is executed.
-    void cleanup() {} // will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
 
     void render();
     void renderLayout();
 
   private:
-    bool imageCheck( const QString &type );
-    QgsMapSettings mMapSettings;
     QgsVectorLayer *mpPolysLayer = nullptr;
     QString mTestDataDir;
-    QString mReport;
 };
 
 
@@ -79,32 +75,19 @@ void TestQgs25DRenderer::initTestCase()
   //
   const QString myPolysFileName = mTestDataDir + "polys.shp";
   const QFileInfo myPolyFileInfo( myPolysFileName );
-  mpPolysLayer = new QgsVectorLayer( myPolyFileInfo.filePath(),
-                                     myPolyFileInfo.completeBaseName(), QStringLiteral( "ogr" ) );
+  mpPolysLayer = new QgsVectorLayer( myPolyFileInfo.filePath(), myPolyFileInfo.completeBaseName(), QStringLiteral( "ogr" ) );
 
   QgsVectorSimplifyMethod simplifyMethod;
-  simplifyMethod.setSimplifyHints( QgsVectorSimplifyMethod::NoSimplification );
+  simplifyMethod.setSimplifyHints( Qgis::VectorRenderingSimplificationFlags() );
   mpPolysLayer->setSimplifyMethod( simplifyMethod );
 
   //need a very high height to check for stacking
   QgsExpressionContextUtils::setLayerVariable( mpPolysLayer, QStringLiteral( "qgis_25d_height" ), 8 );
   QgsExpressionContextUtils::setLayerVariable( mpPolysLayer, QStringLiteral( "qgis_25d_angle" ), 45 );
-
-  mMapSettings.setLayers( QList<QgsMapLayer *>() << mpPolysLayer );
-  mReport += QLatin1String( "<h1>25D Renderer Tests</h1>\n" );
-
 }
+
 void TestQgs25DRenderer::cleanupTestCase()
 {
-  const QString myReportFile = QDir::tempPath() + "/qgistest.html";
-  QFile myFile( myReportFile );
-  if ( myFile.open( QIODevice::WriteOnly | QIODevice::Append ) )
-  {
-    QTextStream myQTextStream( &myFile );
-    myQTextStream << mReport;
-    myFile.close();
-  }
-
   delete mpPolysLayer;
 
   QgsApplication::exitQgis();
@@ -112,8 +95,6 @@ void TestQgs25DRenderer::cleanupTestCase()
 
 void TestQgs25DRenderer::render()
 {
-  mReport += QLatin1String( "<h2>Render</h2>\n" );
-
   //setup 25d renderer
   Qgs25DRenderer *renderer = new Qgs25DRenderer();
   renderer->setShadowEnabled( false );
@@ -121,7 +102,15 @@ void TestQgs25DRenderer::render()
   renderer->setRoofColor( QColor( 253, 191, 111 ) );
   mpPolysLayer->setRenderer( renderer );
 
-  QVERIFY( imageCheck( "25d_render" ) );
+  QgsMapSettings mapSettings;
+  mapSettings.setLayers( QList<QgsMapLayer *>() << mpPolysLayer );
+  mapSettings.setExtent( mpPolysLayer->extent() );
+  mapSettings.setOutputSize( QSize( 400, 400 ) );
+  mapSettings.setOutputDpi( 96 );
+  QgsExpressionContext context;
+  context << QgsExpressionContextUtils::mapSettingsScope( mapSettings );
+  mapSettings.setExpressionContext( context );
+  QGSVERIFYRENDERMAPSETTINGSCHECK( "25d_render", "25d_render", mapSettings, 500, 20 );
 }
 
 void TestQgs25DRenderer::renderLayout()
@@ -131,34 +120,12 @@ void TestQgs25DRenderer::renderLayout()
   QgsLayoutItemMap *map = new QgsLayoutItemMap( &l );
   map->attemptSetSceneRect( QRectF( 20, 20, 200, 100 ) );
   map->setFrameEnabled( true );
-  map->setLayers( QList< QgsMapLayer * >() << mpPolysLayer );
+  map->setLayers( QList<QgsMapLayer *>() << mpPolysLayer );
   l.addLayoutItem( map );
 
   map->setExtent( mpPolysLayer->extent() );
-  QgsLayoutChecker checker( QStringLiteral( "25d_composer" ), &l );
-  checker.setControlPathPrefix( QStringLiteral( "25d_renderer" ) );
 
-  QVERIFY( checker.testLayout( mReport, 0, 100 ) );
-}
-
-bool TestQgs25DRenderer::imageCheck( const QString &testType )
-{
-  //use the QgsRenderChecker test utility class to
-  //ensure the rendered output matches our control image
-  mMapSettings.setExtent( mpPolysLayer->extent() );
-  mMapSettings.setOutputSize( QSize( 400, 400 ) );
-  mMapSettings.setOutputDpi( 96 );
-  QgsExpressionContext context;
-  context << QgsExpressionContextUtils::mapSettingsScope( mMapSettings );
-  mMapSettings.setExpressionContext( context );
-  QgsMultiRenderChecker myChecker;
-  myChecker.setControlPathPrefix( QStringLiteral( "25d_renderer" ) );
-  myChecker.setControlName( "expected_" + testType );
-  myChecker.setMapSettings( mMapSettings );
-  myChecker.setColorTolerance( 20 );
-  const bool myResultFlag = myChecker.runTest( testType, 500 );
-  mReport += myChecker.report();
-  return myResultFlag;
+  QGSVERIFYLAYOUTCHECK( QStringLiteral( "25d_composer" ), &l, 0, 100 );
 }
 
 QGSTEST_MAIN( TestQgs25DRenderer )

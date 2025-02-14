@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsexternalresourceconfigdlg.h"
+#include "moc_qgsexternalresourceconfigdlg.cpp"
 #include "qgsexternalresourcewidget.h"
 #include "qgsproject.h"
 #include "qgssettings.h"
@@ -45,7 +46,7 @@ QgsExternalResourceConfigDlg::QgsExternalResourceConfigDlg( QgsVectorLayer *vl, 
 
   mExternalStorageGroupBox->setVisible( false );
 
-  initializeDataDefinedButton( mStorageUrlPropertyOverrideButton, QgsEditorWidgetWrapper::StorageUrl );
+  initializeDataDefinedButton( mStorageUrlPropertyOverrideButton, QgsEditorWidgetWrapper::Property::StorageUrl );
   mStorageUrlPropertyOverrideButton->registerVisibleWidget( mStorageUrlExpression );
   mStorageUrlPropertyOverrideButton->registerExpressionWidget( mStorageUrlExpression );
   mStorageUrlPropertyOverrideButton->registerVisibleWidget( mStorageUrl, false );
@@ -61,13 +62,13 @@ QgsExternalResourceConfigDlg::QgsExternalResourceConfigDlg( QgsVectorLayer *vl, 
 
   connect( mRootPathButton, &QToolButton::clicked, this, &QgsExternalResourceConfigDlg::chooseDefaultPath );
 
-  initializeDataDefinedButton( mRootPathPropertyOverrideButton, QgsEditorWidgetWrapper::RootPath );
+  initializeDataDefinedButton( mRootPathPropertyOverrideButton, QgsEditorWidgetWrapper::Property::RootPath );
   mRootPathPropertyOverrideButton->registerVisibleWidget( mRootPathExpression );
   mRootPathPropertyOverrideButton->registerExpressionWidget( mRootPathExpression );
   mRootPathPropertyOverrideButton->registerVisibleWidget( mRootPath, false );
   mRootPathPropertyOverrideButton->registerEnabledWidget( mRootPathButton, false );
 
-  initializeDataDefinedButton( mDocumentViewerContentPropertyOverrideButton, QgsEditorWidgetWrapper::DocumentViewerContent );
+  initializeDataDefinedButton( mDocumentViewerContentPropertyOverrideButton, QgsEditorWidgetWrapper::Property::DocumentViewerContent );
   mDocumentViewerContentPropertyOverrideButton->registerVisibleWidget( mDocumentViewerContentExpression );
   mDocumentViewerContentPropertyOverrideButton->registerExpressionWidget( mDocumentViewerContentExpression );
   mDocumentViewerContentPropertyOverrideButton->registerEnabledWidget( mDocumentViewerContentComboBox, false );
@@ -96,14 +97,19 @@ QgsExternalResourceConfigDlg::QgsExternalResourceConfigDlg( QgsVectorLayer *vl, 
   connect( mStorageModeCbx, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsEditorConfigWidget::changed );
   connect( mStoragePathCbx, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, &QgsEditorConfigWidget::changed );
   connect( mDocumentViewerGroupBox, &QGroupBox::toggled, this, &QgsEditorConfigWidget::changed );
-  connect( mDocumentViewerContentComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ),  this, [ = ]( int idx )
-  { mDocumentViewerContentSettingsWidget->setEnabled( ( QgsExternalResourceWidget::DocumentViewerContent )idx != QgsExternalResourceWidget::NoContent ); } );
+  connect( mDocumentViewerContentComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, [=]( int ) {
+    const QgsExternalResourceWidget::DocumentViewerContent content = static_cast<QgsExternalResourceWidget::DocumentViewerContent>( mDocumentViewerContentComboBox->currentData().toInt() );
+    const bool hasSizeSettings = ( content != QgsExternalResourceWidget::NoContent && content != QgsExternalResourceWidget::Audio );
+    mDocumentViewerContentSettingsWidget->setEnabled( hasSizeSettings );
+  } );
   connect( mDocumentViewerHeight, static_cast<void ( QSpinBox::* )( int )>( &QSpinBox::valueChanged ), this, &QgsEditorConfigWidget::changed );
   connect( mDocumentViewerWidth, static_cast<void ( QSpinBox::* )( int )>( &QSpinBox::valueChanged ), this, &QgsEditorConfigWidget::changed );
   connect( mStorageUrlExpression, &QLineEdit::textChanged, this, &QgsEditorConfigWidget::changed );
 
   mDocumentViewerContentComboBox->addItem( tr( "No Content" ), QgsExternalResourceWidget::NoContent );
   mDocumentViewerContentComboBox->addItem( tr( "Image" ), QgsExternalResourceWidget::Image );
+  mDocumentViewerContentComboBox->addItem( tr( "Audio" ), QgsExternalResourceWidget::Audio );
+  mDocumentViewerContentComboBox->addItem( tr( "Video" ), QgsExternalResourceWidget::Video );
   mDocumentViewerContentComboBox->addItem( tr( "Web View" ), QgsExternalResourceWidget::Web );
 }
 
@@ -120,7 +126,7 @@ void QgsExternalResourceConfigDlg::chooseDefaultPath()
     dir = QgsSettings().value( QStringLiteral( "/UI/lastExternalResourceWidgetDefaultPath" ), QDir::toNativeSeparators( QDir::cleanPath( path ) ) ).toString();
   }
 
-  const QString rootName = QFileDialog::getExistingDirectory( this, tr( "Select a Directory" ), dir, QFileDialog::ShowDirsOnly );
+  const QString rootName = QFileDialog::getExistingDirectory( this, tr( "Select a Directory" ), dir, QFileDialog::Options() );
 
   if ( !rootName.isNull() )
     mRootPath->setText( rootName );
@@ -260,7 +266,7 @@ void QgsExternalResourceConfigDlg::setConfig( const QVariantMap &config )
   // Document viewer
   if ( config.contains( QStringLiteral( "DocumentViewer" ) ) )
   {
-    const QgsExternalResourceWidget::DocumentViewerContent content = ( QgsExternalResourceWidget::DocumentViewerContent )config.value( QStringLiteral( "DocumentViewer" ) ).toInt();
+    const QgsExternalResourceWidget::DocumentViewerContent content = ( QgsExternalResourceWidget::DocumentViewerContent ) config.value( QStringLiteral( "DocumentViewer" ) ).toInt();
     const int idx = mDocumentViewerContentComboBox->findData( content );
     if ( idx >= 0 )
     {
@@ -280,8 +286,8 @@ void QgsExternalResourceConfigDlg::setConfig( const QVariantMap &config )
 QgsExpressionContext QgsExternalResourceConfigDlg::createExpressionContext() const
 {
   QgsExpressionContext context = QgsEditorConfigWidget::createExpressionContext();
-  context << QgsExpressionContextUtils::formScope( );
-  context << QgsExpressionContextUtils::parentFormScope( );
+  context << QgsExpressionContextUtils::formScope();
+  context << QgsExpressionContextUtils::parentFormScope();
 
   QgsExpressionContextScope *fileWidgetScope = QgsExternalStorageFileWidget::createFileWidgetScope();
   context << fileWidgetScope;

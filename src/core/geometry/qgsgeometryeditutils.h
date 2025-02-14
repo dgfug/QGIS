@@ -33,7 +33,6 @@ class QgsVectorLayer;
  * \class QgsGeometryEditUtils
  * \brief Convenience functions for geometry editing
  * \note not available in Python bindings
- * \since QGIS 2.10
  */
 class QgsGeometryEditUtils
 {
@@ -73,6 +72,7 @@ class QgsGeometryEditUtils
      * \param avoidIntersectionsLayers list of layers to check for intersections
      * \param haveInvalidGeometry returns true if at least one geometry intersected is invalid. In this case, the algorithm may not work and return the same geometry as the input. You must fix your intersecting geometries.
      * \param ignoreFeatures map of layer to feature id of features to ignore
+     * \return the modified geometry or a null unique_ptr if the \a geom polygon doesn't intersect any geometry in \a avoidIntersectionsLayers
      */
     static std::unique_ptr< QgsAbstractGeometry > avoidIntersections( const QgsAbstractGeometry &geom,
         const QList<QgsVectorLayer *> &avoidIntersectionsLayers,

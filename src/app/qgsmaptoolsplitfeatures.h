@@ -20,12 +20,12 @@
 #include "qgis_app.h"
 
 //! A map tool that draws a line and splits the features cut by the line
-class APP_EXPORT QgsMapToolSplitFeatures: public QgsMapToolCapture
+class APP_EXPORT QgsMapToolSplitFeatures : public QgsMapToolCapture
 {
     Q_OBJECT
   public:
     QgsMapToolSplitFeatures( QgsMapCanvas *canvas );
-    bool supportsTechnique( CaptureTechnique technique ) const override;
+    bool supportsTechnique( Qgis::CaptureTechnique technique ) const override;
     void cadCanvasReleaseEvent( QgsMapMouseEvent *e ) override;
 };
 

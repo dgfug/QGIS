@@ -33,7 +33,6 @@ class APP_EXPORT QgsMeasureTool : public QgsMapTool
     Q_OBJECT
 
   public:
-
     QgsMeasureTool( QgsMapCanvas *canvas, bool measureArea );
 
     ~QgsMeasureTool() override;
@@ -62,6 +61,7 @@ class APP_EXPORT QgsMeasureTool : public QgsMapTool
     void canvasReleaseEvent( QgsMapMouseEvent *e ) override;
     void activate() override;
     void deactivate() override;
+    void reactivate() override;
     void keyPressEvent( QKeyEvent *e ) override;
 
   public slots:
@@ -69,7 +69,6 @@ class APP_EXPORT QgsMeasureTool : public QgsMapTool
     void updateSettings();
 
   protected:
-
     QVector<QgsPointXY> mPoints;
 
     QgsMeasureDialog *mDialog = nullptr;
@@ -99,6 +98,8 @@ class APP_EXPORT QgsMeasureTool : public QgsMapTool
 
     //! Removes the last vertex from mRubberBand
     void undo();
+
+    friend class TestQgsMeasureTool;
 };
 
 #endif

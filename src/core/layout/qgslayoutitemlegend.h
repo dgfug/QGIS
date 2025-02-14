@@ -23,7 +23,7 @@
 #include "qgslayoutitem.h"
 #include "qgslayertreemodel.h"
 #include "qgslegendsettings.h"
-#include "qgslayertreegroup.h"
+#include "qgslayertree.h"
 #include "qgsexpressioncontext.h"
 
 class QgsLayerTreeModel;
@@ -38,7 +38,6 @@ class QgsLayoutItemLegend;
  *
  * Overrides some functionality of QgsLayerTreeModel to better fit the needs of layout legends.
  *
- * \since QGIS 2.6
  */
 class CORE_EXPORT QgsLegendModel : public QgsLayerTreeModel
 {
@@ -108,7 +107,6 @@ class CORE_EXPORT QgsLegendModel : public QgsLayerTreeModel
 /**
  * \ingroup core
  * \brief A layout item subclass for map legends.
- * \since QGIS 3.0
  */
 class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
 {
@@ -133,6 +131,8 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
     QgsLayoutItem::Flags itemFlags() const override;
     //Overridden to show legend title
     QString displayName() const override;
+    bool requiresRasterization() const override;
+    bool containsAdvancedEffects() const override;
 
     /**
      * Sets the legend's item bounds to fit the whole legend content.
@@ -156,7 +156,14 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
     /**
      * Returns the legend model.
      */
-    QgsLegendModel *model() { return mLegendModel.get(); }
+    QgsLegendModel *model();
+
+    /**
+     * Returns the legend model.
+     *
+     * \note Not available in Python bindings
+     */
+    const QgsLegendModel *model() const SIP_SKIP;
 
     /**
      * Sets whether the legend content should auto update to reflect changes in the project's
@@ -239,14 +246,18 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
     /**
      * Returns the font settings for a legend \a component.
      * \see setStyleFont()
+     *
+     * \deprecated QGIS 3.40. Use QgsLegendStyle::textFormat() from style() instead.
      */
-    QFont styleFont( QgsLegendStyle::Style component ) const;
+    Q_DECL_DEPRECATED QFont styleFont( QgsLegendStyle::Style component ) const SIP_DEPRECATED;
 
     /**
      * Sets the style \a font for a legend \a component.
      * \see styleFont()
+     *
+     * \deprecated QGIS 3.40. Use QgsLegendStyle::setTextFormat() from style() instead.
      */
-    void setStyleFont( QgsLegendStyle::Style component, const QFont &font );
+    Q_DECL_DEPRECATED void setStyleFont( QgsLegendStyle::Style component, const QFont &font ) SIP_DEPRECATED;
 
     /**
      * Set the \a margin for a legend \a component.
@@ -261,14 +272,18 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
     /**
      * Returns the spacing in-between lines in layout units.
      * \see setLineSpacing()
+     *
+     * \deprecated QGIS 3.40. Use QgsLegendStyle::textFormat() from style() instead.
      */
-    double lineSpacing() const;
+    Q_DECL_DEPRECATED double lineSpacing() const SIP_DEPRECATED;
 
     /**
      * Sets the \a spacing in-between multiple lines.
      * \see lineSpacing()
+     *
+     * \deprecated QGIS 3.40. Use QgsLegendStyle::setTextFormat() from style() instead.
      */
-    void setLineSpacing( double spacing );
+    Q_DECL_DEPRECATED void setLineSpacing( double spacing ) SIP_DEPRECATED;
 
     /**
      * Returns the legend box space.
@@ -297,14 +312,18 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
     /**
      * Returns the legend font color.
      * \see setFontColor()
+     *
+     * \deprecated QGIS 3.40. Use QgsLegendStyle::setTextFormat() from style() instead.
      */
-    QColor fontColor() const;
+    Q_DECL_DEPRECATED QColor fontColor() const SIP_DEPRECATED;
 
     /**
      * Sets the legend font \a color.
      * \see fontColor()
+     *
+     * \deprecated QGIS 3.40. Use QgsLegendStyle::setTextFormat() from style() instead.
      */
-    void setFontColor( const QColor &color );
+    Q_DECL_DEPRECATED void setFontColor( const QColor &color ) SIP_DEPRECATED;
 
     /**
      * Returns the legend symbol width.
@@ -332,7 +351,7 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
      * A symbol size of 0.0 indicates no maximum is set.
      *
      * \see maximumSymbolSize()
-     * \since QGIS 3.16
+     * \since QGIS 3.16:
      */
     void setMaximumSymbolSize( double size );
 
@@ -516,6 +535,7 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
     /**
      * Sets the \a map to associate with the legend.
      * \see linkedMap()
+     * \see setFilterByMapItems()
      */
     void setLinkedMap( QgsLayoutItemMap *map );
 
@@ -524,6 +544,26 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
      * \see setLinkedMap()
      */
     QgsLayoutItemMap *linkedMap() const { return mMap; }
+
+    /**
+     * Sets the \a maps to use when filtering legend content by map extents.
+     *
+     * \see filterByMapItems()
+     * \see setLinkedMap()
+     *
+     * \since QGIS 3.32
+     */
+    void setFilterByMapItems( const QList< QgsLayoutItemMap * > &maps );
+
+    /**
+     * Returns the maps to use when filtering legend content by map extents.
+     *
+     * \see setFilterByMapItems()
+     * \see setLinkedMap()
+     *
+     * \since QGIS 3.32
+     */
+    QList< QgsLayoutItemMap * > filterByMapItems() const;
 
     /**
      * Returns the name of the theme currently linked to the legend.
@@ -556,11 +596,13 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
     QgsExpressionContext createExpressionContext() const override;
     ExportLayerBehavior exportLayerBehavior() const override;
     bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
+    bool isRefreshing() const override;
 
   public slots:
 
     void refresh() override;
-    void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::AllProperties ) override;
+    void invalidateCache() override;
+    void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::DataDefinedProperty::AllProperties ) override;
 
   protected:
     void draw( QgsLayoutItemRenderContext &context ) override;
@@ -599,8 +641,13 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
 
     void setModelStyleOverrides( const QMap<QString, QString> &overrides );
 
+    void ensureModelIsInitialized() const;
+
+    QgsLegendRenderer createRenderer() const;
+
     std::unique_ptr< QgsLegendModel > mLegendModel;
-    std::unique_ptr< QgsLayerTreeGroup > mCustomLayerTree;
+    std::unique_ptr< QgsLayerTree > mCustomLayerTree;
+    bool mDeferLegendModelInitialization = true;
 
     QgsLegendSettings mSettings;
 
@@ -609,6 +656,9 @@ class CORE_EXPORT QgsLayoutItemLegend : public QgsLayoutItem
 
     QString mMapUuid;
     QgsLayoutItemMap *mMap = nullptr;
+
+    QList< QString > mFilterByMapUuids;
+    QList< QPointer< QgsLayoutItemMap >> mFilterByMapItems;
 
     bool mLegendFilterByMap = false;
     bool mLegendFilterByExpression = false;

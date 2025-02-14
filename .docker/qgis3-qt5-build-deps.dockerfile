@@ -1,5 +1,5 @@
 
-ARG DISTRO_VERSION=20.04
+ARG DISTRO_VERSION=24.04
 
 # Oracle Docker image is too large, so we add as less dependencies as possible
 # so there is enough space on GitHub runner
@@ -14,27 +14,34 @@ LABEL Description="Docker container with QGIS dependencies" Vendor="QGIS.org" Ve
 
 RUN  apt-get update \
   && apt-get install -y software-properties-common \
+  && add-apt-repository -y ppa:ubuntugis/ubuntugis-unstable \
   && apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     apt-transport-https \
     ca-certificates \
+    clazy \
     cmake \
     curl \
     dh-python \
+    git \
     gdal-bin \
+    gnupg \
     gpsbabel \
     graphviz \
-    libaio1 \
+    'libaio1|libaio1t64' \
+    'libdraco4|libdraco8' \
     libexiv2-27 \
-    libfcgi0ldbl \
-    'libgsl23|libgsl23' \
-    'libprotobuf-lite17|libprotobuf-lite23' \
+    'libfcgi0ldbl|libfcgi0t64' \
+    libgsl27 \
+    'libprotobuf-lite17|libprotobuf-lite23|libprotobuf-lite32t64' \
     libqca-qt5-2-plugins \
     libqt53dextras5 \
     libqt53drender5 \
-    libqt5concurrent5 \
+    'libqt5concurrent5|libqt5concurrent5t64' \
     libqt5keychain1 \
     libqt5positioning5 \
+    libqt5multimedia5 \
+    libqt5multimediawidgets5 \
     libqt5qml5 \
     libqt5quick5 \
     libqt5quickcontrols2-5 \
@@ -42,12 +49,12 @@ RUN  apt-get update \
     libqt5serialport5 \
     libqt5sql5-odbc \
     libqt5sql5-sqlite \
-    libqt5xml5 \
+    'libqt5xml5|libqt5xml5t64' \
     libqt5webkit5 \
     libqwt-qt5-6 \
     libspatialindex6 \
     libsqlite3-mod-spatialite \
-    'libzip4|libzip5' \
+    'libzip4|libzip5|libzip4t64' \
     lighttpd \
     locales \
     pdal \
@@ -56,6 +63,7 @@ RUN  apt-get update \
     python3-gdal \
     python3-mock \
     python3-nose2 \
+    python3-numpy \
     python3-owslib \
     python3-pip \
     python3-psycopg2 \
@@ -66,9 +74,12 @@ RUN  apt-get update \
     python3-pyqt5.qtsvg \
     python3-pyqt5.qtwebkit \
     python3-pyqt5.qtpositioning \
+    python3-pyqt5.qtmultimedia \
+    python3-pyqt5.qtserialport \
     python3-sip \
     python3-termcolor \
     python3-yaml \
+    qpdf \
     qt3d-assimpsceneimport-plugin \
     qt3d-defaultgeometryloader-plugin \
     qt3d-gltfsceneio-plugin \
@@ -84,7 +95,7 @@ RUN  apt-get update \
     xfonts-scalable \
     xvfb \
     ocl-icd-libopencl1 \
-  && pip3 install \
+  && pip3 install --break-system-packages \
     numpy \
     nose2 \
     pyyaml \
@@ -102,17 +113,27 @@ RUN  apt-get update \
     hdbcli \
   && apt-get clean
 
+# Node.js and Yarn for server landingpage webapp
+RUN mkdir -p /etc/apt/keyrings
+RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
+RUN apt-get update
+RUN apt-get install -y nodejs
+RUN corepack enable
+
 # Oracle : client side
-RUN curl https://download.oracle.com/otn_software/linux/instantclient/199000/instantclient-basic-linux.x64-19.9.0.0.0dbru.zip > instantclient-basic-linux.x64-19.9.0.0.0dbru.zip
-RUN curl https://download.oracle.com/otn_software/linux/instantclient/199000/instantclient-sdk-linux.x64-19.9.0.0.0dbru.zip > instantclient-sdk-linux.x64-19.9.0.0.0dbru.zip
-RUN curl https://download.oracle.com/otn_software/linux/instantclient/199000/instantclient-sqlplus-linux.x64-19.9.0.0.0dbru.zip > instantclient-sqlplus-linux.x64-19.9.0.0.0dbru.zip
+RUN curl https://download.oracle.com/otn_software/linux/instantclient/2116000/instantclient-basic-linux.x64-21.16.0.0.0dbru.zip > instantclient-basic-linux.x64-21.16.0.0.0dbru.zip
+RUN curl https://download.oracle.com/otn_software/linux/instantclient/2116000/instantclient-sdk-linux.x64-21.16.0.0.0dbru.zip > instantclient-sdk-linux.x64-21.16.0.0.0dbru.zip
+RUN curl https://download.oracle.com/otn_software/linux/instantclient/2116000/instantclient-sqlplus-linux.x64-21.16.0.0.0dbru.zip > instantclient-sqlplus-linux.x64-21.16.0.0.0dbru.zip
 
-RUN unzip instantclient-basic-linux.x64-19.9.0.0.0dbru.zip
-RUN unzip instantclient-sdk-linux.x64-19.9.0.0.0dbru.zip
-RUN unzip instantclient-sqlplus-linux.x64-19.9.0.0.0dbru.zip
+RUN unzip -n instantclient-basic-linux.x64-21.16.0.0.0dbru.zip
+RUN unzip -n instantclient-sdk-linux.x64-21.16.0.0.0dbru.zip
+RUN unzip -n instantclient-sqlplus-linux.x64-21.16.0.0.0dbru.zip
 
-ENV PATH="/instantclient_19_9:${PATH}"
-ENV LD_LIBRARY_PATH="/instantclient_19_9:${LD_LIBRARY_PATH}"
+ENV PATH="/instantclient_21_16:${PATH}"
+ENV LD_LIBRARY_PATH="/instantclient_21_16:${LD_LIBRARY_PATH}"
+# workaround noble libaio SONAME issue -- see https://bugs.launchpad.net/ubuntu/+source/libaio/+bug/2067501
+RUN if [ -e /usr/lib/x86_64-linux-gnu/libaio.so.1t64 ] ; then ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1 ; fi
 
 # Avoid sqlcmd termination due to locale -- see https://github.com/Microsoft/mssql-docker/issues/163
 RUN echo "nb_NO.UTF-8 UTF-8" > /etc/locale.gen
@@ -129,13 +150,13 @@ RUN  apt-get update \
     iproute2 \
     postgresql-client \
     spawn-fcgi \
-  && pip3 install \
+  && pip3 install --break-system-packages \
     psycopg2 \
   && apt-get clean
 
 # HANA: client side
 # Install hdbsql tool
-RUN curl -v -j -k -L -H "Cookie: eula_3_1_agreed=tools.hana.ondemand.com/developer-license-3_1.txt" https://tools.hana.ondemand.com/additional/hanaclient-latest-linux-x64.tar.gz --output hanaclient-latest-linux-x64.tar.gz \
+RUN curl -j -k -L -H "Cookie: eula_3_2_agreed=tools.hana.ondemand.com/developer-license-3_2.txt" https://tools.hana.ondemand.com/additional/hanaclient-latest-linux-x64.tar.gz --output hanaclient-latest-linux-x64.tar.gz \
   && tar -xvf hanaclient-latest-linux-x64.tar.gz \
   && mkdir /usr/sap \
   && ./client/hdbinst -a client --sapmnt=/usr/sap \
@@ -144,15 +165,10 @@ RUN curl -v -j -k -L -H "Cookie: eula_3_1_agreed=tools.hana.ondemand.com/develop
 ENV PATH="/usr/sap/hdbclient:${PATH}"
 
 # MSSQL: client side
-RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
-RUN curl https://packages.microsoft.com/config/ubuntu/19.04/prod.list | tee /etc/apt/sources.list.d/msprod.list
-RUN apt-get update
-RUN ACCEPT_EULA=Y apt-get install -y --allow-unauthenticated msodbcsql17 mssql-tools
-
-# OTB: download and install otb packages for QGIS tests
-RUN curl -k https://www.orfeo-toolbox.org/packages/archives/OTB/OTB-7.1.0-Linux64.run -o /tmp/OTB-Linux64.run && sh /tmp/OTB-Linux64.run --target /opt/otb
-ENV OTB_INSTALL_DIR=/opt/otb
-
+# RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+# RUN curl https://packages.microsoft.com/config/ubuntu/19.04/prod.list | tee /etc/apt/sources.list.d/msprod.list
+# RUN apt-get update
+# RUN ACCEPT_EULA=Y apt-get install -y --allow-unauthenticated msodbcsql17 mssql-tools
 
 FROM binary-only
 
@@ -163,8 +179,8 @@ RUN  apt-get update \
     clang \
     cmake \
     flex \
-    git \
     grass-dev \
+    libdraco-dev \
     libexiv2-dev \
     libexpat1-dev \
     libfcgi-dev \
@@ -201,21 +217,13 @@ RUN  apt-get update \
     qtbase5-dev \
     qtdeclarative5-dev-tools \
     qtpositioning5-dev \
+    qtmultimedia5-dev \
     qttools5-dev \
     qttools5-dev-tools \
     qtbase5-private-dev \
     opencl-headers \
     ocl-icd-opencl-dev \
   && apt-get clean
-
-# Clazy
-RUN curl -k https://downloads.kdab.com/clazy/1.6/Clazy-x86_64-1.6.AppImage -o /tmp/Clazy.AppImage \
-  && chmod +x /tmp/Clazy.AppImage \
-  && mkdir /opt/clazy \
-  && cd /opt/clazy \
-  && /tmp/Clazy.AppImage --appimage-extract \
-  && ln -s /opt/clazy/squashfs-root/AppRun /usr/bin/clazy \
-  && ln -s ../../bin/ccache /usr/lib/ccache/clazy
 
 ENV PATH="/usr/local/bin:${PATH}"
 

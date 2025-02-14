@@ -27,10 +27,16 @@ QgsPointCloudBlock::QgsPointCloudBlock(
 )
   : mPointCount( count )
   , mAttributes( attributes )
+  , mRecordSize( mAttributes.pointRecordSize() )
   , mStorage( data )
   , mScale( scale )
   , mOffset( offset )
 {
+}
+
+QgsPointCloudBlock *QgsPointCloudBlock::clone() const
+{
+  return new QgsPointCloudBlock( *this );
 }
 
 const char *QgsPointCloudBlock::data() const
@@ -56,4 +62,12 @@ QgsVector3D QgsPointCloudBlock::scale() const
 QgsVector3D QgsPointCloudBlock::offset() const
 {
   return mOffset;
+}
+
+void QgsPointCloudBlock::setPointCount( int size )
+{
+  if ( size < 0 )
+    return;
+  mPointCount = size;
+  mStorage.resize( size * mAttributes.pointRecordSize() );
 }

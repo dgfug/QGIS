@@ -163,7 +163,8 @@
             @click="onContextMenuOptionClicked(item.name, node.typename)"
           >
             <v-list-item-icon>
-              <v-icon v-text="item.icon"></v-icon>
+              <div v-text="item.icon"></div>
+              <v-icon>{{item.icon}}</v-icon>
             </v-list-item-icon>
             <v-list-item-title>{{ item.title }}</v-list-item-title>
           </v-list-item>
@@ -174,7 +175,7 @@
 </template>
 
 <script>
-const uuidv4 = require("uuid/v4");
+import { v4 as uuidv4 } from 'uuid';
 export default {
   name: "LayerTreeNode",
   props: {

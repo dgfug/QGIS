@@ -17,31 +17,11 @@
 #include "qgsrelationadddlg.h"
 #include "qgsrelationaddpolymorphicdialog.h"
 #include "qgsrelationmanagerdialog.h"
+#include "moc_qgsrelationmanagerdialog.cpp"
 #include "qgsrelationmanager.h"
 #include "qgspolymorphicrelation.h"
 #include "qgsvectorlayer.h"
 
-
-#ifndef SIP_RUN
-class RelationNameEditorDelegate: public QStyledItemDelegate
-{
-  public:
-    RelationNameEditorDelegate( const QList<int> &editableColumns, QObject *parent = nullptr )
-      : QStyledItemDelegate( parent )
-      , mEditableColumns( editableColumns )
-    {}
-
-    virtual QWidget *createEditor( QWidget *parentWidget, const QStyleOptionViewItem &option, const QModelIndex &index ) const
-    {
-      if ( mEditableColumns.contains( index.column() ) )
-        return QStyledItemDelegate::createEditor( parentWidget, option, index );
-
-      return nullptr;
-    }
-  private:
-    QList<int> mEditableColumns;
-};
-#endif
 
 QgsRelationManagerDialog::QgsRelationManagerDialog( QgsRelationManager *relationMgr, QWidget *parent )
   : QWidget( parent )
@@ -50,7 +30,7 @@ QgsRelationManagerDialog::QgsRelationManagerDialog( QgsRelationManager *relation
 {
   setupUi( this );
 
-  mRelationsTree->setItemDelegate( new RelationNameEditorDelegate( QList<int>( {0} ), mRelationsTree ) );
+  mRelationsTree->setItemDelegate( new RelationNameEditorDelegate( QList<int>( { 0 } ), mRelationsTree ) );
 
   connect( mBtnAddRelation, &QPushButton::clicked, this, &QgsRelationManagerDialog::mBtnAddRelation_clicked );
   connect( mActionAddPolymorphicRelation, &QAction::triggered, this, &QgsRelationManagerDialog::mActionAddPolymorphicRelation_triggered );
@@ -66,7 +46,7 @@ QgsRelationManagerDialog::QgsRelationManagerDialog( QgsRelationManager *relation
   connect( mRelationsTree->selectionModel(), &QItemSelectionModel::selectionChanged, this, &QgsRelationManagerDialog::onSelectionChanged );
 }
 
-void QgsRelationManagerDialog::setLayers( const QList< QgsVectorLayer * > &layers )
+void QgsRelationManagerDialog::setLayers( const QList<QgsVectorLayer *> &layers )
 {
   mLayers = layers;
 
@@ -75,12 +55,18 @@ void QgsRelationManagerDialog::setLayers( const QList< QgsVectorLayer * > &layer
   {
     // the generated relations for polymorphic relations should be ignored,
     // they are generated when the polymorphic relation is added to the table
-    if ( rel.type() == QgsRelation::Generated )
-      continue;
+    switch ( rel.type() )
+    {
+      case Qgis::RelationshipType::Generated:
+        continue;
+
+      case Qgis::RelationshipType::Normal:
+        break;
+    }
 
     addRelationPrivate( rel );
   }
-  const QList<QgsPolymorphicRelation> &polymorphicRelations = mRelationManager->polymorphicRelations().values();
+  const QList<QgsPolymorphicRelation> polymorphicRelations = mRelationManager->polymorphicRelations().values();
   for ( const QgsPolymorphicRelation &polymorphicRel : polymorphicRelations )
   {
     addPolymorphicRelation( polymorphicRel );
@@ -97,7 +83,7 @@ bool QgsRelationManagerDialog::addRelation( const QgsRelation &rel )
 int QgsRelationManagerDialog::addPolymorphicRelation( const QgsPolymorphicRelation &polyRel )
 {
   int itemsAdded = 0;
-  if ( ! polyRel.isValid() )
+  if ( !polyRel.isValid() )
     return itemsAdded;
 
   QString referencingFields;
@@ -131,9 +117,15 @@ int QgsRelationManagerDialog::addPolymorphicRelation( const QgsPolymorphicRelati
   item->setText( 3, QStringLiteral( "as in \"%1\".\"%2\"" ).arg( polyRel.referencingLayer()->name(), polyRel.referencedLayerField() ) );
   item->setText( 4, referencingFields );
   item->setText( 5, polyRel.id() );
-  item->setText( 6, polyRel.strength() == QgsRelation::RelationStrength::Composition
-                 ? QStringLiteral( "Composition" )
-                 : QStringLiteral( "Association" ) );
+  switch ( polyRel.strength() )
+  {
+    case Qgis::RelationshipStrength::Association:
+      item->setText( 6, QStringLiteral( "Association" ) );
+      break;
+    case Qgis::RelationshipStrength::Composition:
+      item->setText( 6, QStringLiteral( "Composition" ) );
+      break;
+  }
 
   const QList<QgsRelation> generatedRelations = polyRel.generateRelations();
   for ( const QgsRelation &generatedRelation : generatedRelations )
@@ -149,7 +141,7 @@ int QgsRelationManagerDialog::addPolymorphicRelation( const QgsPolymorphicRelati
 
 bool QgsRelationManagerDialog::addRelationPrivate( const QgsRelation &rel, QTreeWidgetItem *parentItem )
 {
-  if ( ! rel.isValid() )
+  if ( !rel.isValid() )
     return false;
 
   QString referencingFields = rel.fieldPairs().at( 0 ).referencingField();
@@ -165,11 +157,11 @@ bool QgsRelationManagerDialog::addRelationPrivate( const QgsRelation &rel, QTree
 
   switch ( rel.type() )
   {
-    case QgsRelation::Normal:
+    case Qgis::RelationshipType::Normal:
       item->setFlags( item->flags() | Qt::ItemIsEditable );
       mRelationsTree->invisibleRootItem()->addChild( item );
       break;
-    case QgsRelation::Generated:
+    case Qgis::RelationshipType::Generated:
       Q_ASSERT( parentItem );
       item->setFlags( item->flags() & ~Qt::ItemIsSelectable );
       parentItem->addChild( item );
@@ -185,9 +177,15 @@ bool QgsRelationManagerDialog::addRelationPrivate( const QgsRelation &rel, QTree
   item->setText( 3, rel.referencingLayer()->name() );
   item->setText( 4, referencingFields );
   item->setText( 5, rel.id() );
-  item->setText( 6, rel.strength() == QgsRelation::RelationStrength::Composition
-                 ? QStringLiteral( "Composition" )
-                 : QStringLiteral( "Association" ) );
+  switch ( rel.strength() )
+  {
+    case Qgis::RelationshipStrength::Association:
+      item->setText( 6, QStringLiteral( "Association" ) );
+      break;
+    case Qgis::RelationshipStrength::Composition:
+      item->setText( 6, QStringLiteral( "Composition" ) );
+      break;
+  }
 
   mRelationsTree->setSortingEnabled( true );
 
@@ -196,7 +194,7 @@ bool QgsRelationManagerDialog::addRelationPrivate( const QgsRelation &rel, QTree
 
 void QgsRelationManagerDialog::mBtnAddRelation_clicked()
 {
-  QgsRelationAddDlg addDlg;
+  QgsCreateRelationDialog addDlg;
 
   if ( addDlg.exec() )
   {
@@ -207,10 +205,7 @@ void QgsRelationManagerDialog::mBtnAddRelation_clicked()
     QString relationId = addDlg.relationId();
     if ( addDlg.relationId().isEmpty() )
       relationId = QStringLiteral( "%1_%2_%3_%4" )
-                   .arg( addDlg.referencingLayerId().left( 10 ),
-                         addDlg.references().at( 0 ).first,
-                         addDlg.referencedLayerId().left( 10 ),
-                         addDlg.references().at( 0 ).second );
+                     .arg( addDlg.referencingLayerId().left( 10 ), addDlg.references().at( 0 ).first, addDlg.referencedLayerId().left( 10 ), addDlg.references().at( 0 ).second );
 
     QStringList existingNames;
 
@@ -336,9 +331,9 @@ void QgsRelationManagerDialog::mBtnRemoveRelation_clicked()
   }
 }
 
-QList< QgsRelation > QgsRelationManagerDialog::relations()
+QList<QgsRelation> QgsRelationManagerDialog::relations()
 {
-  QList< QgsRelation > relations;
+  QList<QgsRelation> relations;
 
   const int rows = mRelationsTree->topLevelItemCount();
   relations.reserve( rows );
@@ -358,9 +353,9 @@ QList< QgsRelation > QgsRelationManagerDialog::relations()
   return relations;
 }
 
-QList< QgsPolymorphicRelation > QgsRelationManagerDialog::polymorphicRelations()
+QList<QgsPolymorphicRelation> QgsRelationManagerDialog::polymorphicRelations()
 {
-  QList< QgsPolymorphicRelation > relations;
+  QList<QgsPolymorphicRelation> relations;
 
   const int rows = mRelationsTree->topLevelItemCount();
   relations.reserve( rows );
@@ -382,12 +377,9 @@ QList< QgsPolymorphicRelation > QgsRelationManagerDialog::polymorphicRelations()
 
 void QgsRelationManagerDialog::onSelectionChanged()
 {
-  mBtnRemoveRelation->setEnabled( ! mRelationsTree->selectionModel()->selectedRows().isEmpty() );
+  mBtnRemoveRelation->setEnabled( !mRelationsTree->selectionModel()->selectedRows().isEmpty() );
 
   const QModelIndexList rows = mRelationsTree->selectionModel()->selectedRows();
-  const bool isEditPolymorphicRelationEnabled = (
-        rows.size() == 1
-        && mRelationsTree->topLevelItem( rows[0].row() )->data( 0, Qt::UserRole ).value<QgsPolymorphicRelation>().isValid()
-      );
+  const bool isEditPolymorphicRelationEnabled = ( rows.size() == 1 && mRelationsTree->topLevelItem( rows[0].row() )->data( 0, Qt::UserRole ).value<QgsPolymorphicRelation>().isValid() );
   mActionEditPolymorphicRelation->setEnabled( isEditPolymorphicRelationEnabled );
 }

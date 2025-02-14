@@ -55,7 +55,12 @@ class QgsOracleSourceSelectDelegate : public QItemDelegate
     void setConnectionInfo( const QgsDataSourceUri &connInfo ) { mConnInfo = connInfo; }
 
   protected:
-    void setConn( QgsOracleConn *conn ) const { if ( mConn ) QgsOracleConnPool::instance()->releaseConnection( mConn ); mConn = conn; }
+    void setConn( QgsOracleConn *conn ) const
+    {
+      if ( mConn )
+        QgsOracleConnPool::instance()->releaseConnection( mConn );
+      mConn = conn;
+    }
 
     QgsOracleConn *conn() const
     {
@@ -85,7 +90,7 @@ class QgsOracleSourceSelect : public QgsAbstractDbSourceSelect
 
   public:
     //! Constructor
-    QgsOracleSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
+    QgsOracleSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Standalone );
     //! Destructor
     ~QgsOracleSourceSelect() override;
     //! Populate the connection list combo box
@@ -101,19 +106,19 @@ class QgsOracleSourceSelect : public QgsAbstractDbSourceSelect
      * Connects to the database using the stored connection parameters.
      * Once connected, available layers are displayed.
      */
-    void on_btnConnect_clicked();
-    void on_cbxAllowGeometrylessTables_stateChanged( int );
+    void btnConnect_clicked();
+    void cbxAllowGeometrylessTables_stateChanged( int );
     //! Opens the create connection dialog to build a new connection
-    void on_btnNew_clicked();
+    void btnNew_clicked();
     //! Opens a dialog to edit an existing connection
-    void on_btnEdit_clicked();
+    void btnEdit_clicked();
     //! Deletes the selected connection
-    void on_btnDelete_clicked();
+    void btnDelete_clicked();
     //! Saves the selected connections to file
-    void on_btnSave_clicked();
+    void btnSave_clicked();
     //! Loads the selected connections from file
-    void on_btnLoad_clicked();
-    void on_cmbConnections_currentIndexChanged( const QString &text );
+    void btnLoad_clicked();
+    void cmbConnections_currentIndexChanged( const QString &text );
     //! Store the selected database
     void setLayerType( const QgsOracleLayerProperty &layerProperty );
     void treeWidgetSelectionChanged( const QItemSelection &selected, const QItemSelection &deselected );
@@ -148,20 +153,18 @@ class QgsOracleSourceSelect : public QgsAbstractDbSourceSelect
     QgsDataSourceUri mConnInfo;
     QStringList mSelectedTables;
     // Storage for the range of layer type icons
-    QMap<QString, QPair<QString, QIcon> > mLayerIcons;
+    QMap<QString, QPair<QString, QIcon>> mLayerIcons;
 
     //! Model that acts as datasource for mTableTreeWidget
     QgsOracleTableModel *mTableModel = nullptr;
     QgsOracleSourceSelectDelegate *mTablesTreeDelegate = nullptr;
 
-    QPushButton *mBuildQueryButton = nullptr;
     QPushButton *mAddButton = nullptr;
 
     void finishList();
     bool mIsConnected = false;
 
     void showHelp();
-
 };
 
 #endif // QGSORACLESOURCESELECT_H

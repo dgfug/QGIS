@@ -22,28 +22,27 @@
 
 
 #include "qgsdatetimeedit.h"
+#include "moc_qgsdatetimeedit.cpp"
 
 #include "qgsapplication.h"
-#include "qgslogger.h"
-
+#include "qgsvariantutils.h"
 
 
 QgsDateTimeEdit::QgsDateTimeEdit( QWidget *parent )
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-  : QgsDateTimeEdit( QDateTime(), QVariant::DateTime, parent )
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
+  : QgsDateTimeEdit( QDateTime(), QMetaType::Type::QDateTime, parent )
 #else
   : QgsDateTimeEdit( QDateTime(), QMetaType::QDateTime, parent )
 #endif
 {
-
 }
 
 ///@cond PRIVATE
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-QgsDateTimeEdit::QgsDateTimeEdit( const QVariant &var, QVariant::Type parserType, QWidget *parent )
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
+QgsDateTimeEdit::QgsDateTimeEdit( const QVariant &var, QMetaType::Type parserType, QWidget *parent )
   : QDateTimeEdit( var, parserType, parent )
 #else
-QgsDateTimeEdit::QgsDateTimeEdit( const QVariant & var, QMetaType::Type parserType, QWidget * parent )
+QgsDateTimeEdit::QgsDateTimeEdit( const QVariant &var, QMetaType::Type parserType, QWidget *parent )
   : QDateTimeEdit( var, parserType, parent )
 #endif
   , mNullRepresentation( QgsApplication::nullRepresentation() )
@@ -70,7 +69,7 @@ QgsDateTimeEdit::QgsDateTimeEdit( const QVariant & var, QMetaType::Type parserTy
 void QgsDateTimeEdit::setAllowNull( bool allowNull )
 {
   mAllowNull = allowNull;
-  mClearAction->setVisible( mAllowNull && ( !mIsNull || mIsEmpty ) );
+  mClearAction->setVisible( !isReadOnly() && mAllowNull && ( !mIsNull || mIsEmpty ) );
 }
 
 
@@ -81,9 +80,9 @@ void QgsDateTimeEdit::clear()
     displayCurrentDate();
 
     // Check if it's really changed or crash, see GH #29937
-    if ( ! dateTime().isNull() )
+    if ( !dateTime().isNull() )
     {
-      changed( QDateTime() );
+      changed( QVariant() );
     }
 
     // emit signal of QDateTime::dateTimeChanged with an invalid date
@@ -103,6 +102,16 @@ void QgsDateTimeEdit::setEmpty()
   mIsEmpty = true;
 }
 
+bool QgsDateTimeEdit::event( QEvent *event )
+{
+  if ( event->type() == QEvent::ReadOnlyChange || event->type() == QEvent::EnabledChange )
+  {
+    mClearAction->setVisible( !isReadOnly() && mAllowNull && ( !mIsNull || mIsEmpty ) );
+  }
+
+  return QDateTimeEdit::event( event );
+}
+
 void QgsDateTimeEdit::mousePressEvent( QMouseEvent *event )
 {
   // catch mouse press on the button (when the current value is null)
@@ -117,7 +126,7 @@ void QgsDateTimeEdit::mousePressEvent( QMouseEvent *event )
     if ( calendarPopup() )
     {
       QStyleOptionComboBox optCombo;
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
       optCombo.init( this );
 #else
       optCombo.initFrom( this );
@@ -139,7 +148,7 @@ void QgsDateTimeEdit::mousePressEvent( QMouseEvent *event )
     {
       QStyleOptionSpinBox opt;
       this->initStyleOption( &opt );
-      control  = style()->hitTestComplexControl( QStyle::CC_SpinBox, &opt, event->pos(), this );
+      control = style()->hitTestComplexControl( QStyle::CC_SpinBox, &opt, event->pos(), this );
 
       if ( control == QStyle::SC_SpinBoxDown || control == QStyle::SC_SpinBoxUp )
       {
@@ -207,8 +216,7 @@ void QgsDateTimeEdit::wheelEvent( QWheelEvent *event )
 void QgsDateTimeEdit::showEvent( QShowEvent *event )
 {
   QDateTimeEdit::showEvent( event );
-  if ( mAllowNull && mIsNull &&
-       lineEdit()->text() != mNullRepresentation )
+  if ( mAllowNull && mIsNull && lineEdit()->text() != mNullRepresentation )
   {
     displayNull();
   }
@@ -218,7 +226,7 @@ void QgsDateTimeEdit::showEvent( QShowEvent *event )
 void QgsDateTimeEdit::changed( const QVariant &dateTime )
 {
   mIsEmpty = false;
-  const bool isNull = dateTime.isNull();
+  const bool isNull = QgsVariantUtils::isNull( dateTime );
   if ( isNull != mIsNull )
   {
     mIsNull = isNull;
@@ -238,7 +246,7 @@ void QgsDateTimeEdit::changed( const QVariant &dateTime )
 
   mClearAction->setVisible( mAllowNull && !mIsNull );
   if ( !mBlockChangedSignal )
-    emitValueChanged( dateTime );
+    emitValueChanged( isNull ? QVariant() : dateTime );
 }
 ///@endcond
 
@@ -315,6 +323,13 @@ void QgsDateTimeEdit::resetBeforeChange( int delta )
   QDateTimeEdit::setDateTime( dt );
 }
 
+void QgsDateTimeEdit::setMinimumEditDateTime()
+{
+  setDateRange( QDate( 1, 1, 1 ), maximumDate() );
+  setMinimumTime( QTime( 0, 0, 0 ) );
+  setMaximumTime( QTime( 23, 59, 59, 999 ) );
+}
+
 void QgsDateTimeEdit::setDateTime( const QDateTime &dateTime )
 {
   mIsEmpty = false;
@@ -330,6 +345,9 @@ void QgsDateTimeEdit::setDateTime( const QDateTime &dateTime )
   {
     // changed emits a signal, so don't allow it to be emitted from setDateTime
     mBlockChangedSignal++;
+    // We need to set the time spec of the set datetime to the widget, otherwise
+    // the dateTime() getter would loose edit, and return local time.
+    QDateTimeEdit::setTimeSpec( dateTime.timeSpec() );
     QDateTimeEdit::setDateTime( dateTime );
     mBlockChangedSignal--;
     changed( dateTime );
@@ -378,13 +396,12 @@ QDate QgsDateTimeEdit::date() const
 //
 
 QgsTimeEdit::QgsTimeEdit( QWidget *parent )
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-  : QgsDateTimeEdit( QTime(), QVariant::Time, parent )
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
+  : QgsDateTimeEdit( QTime(), QMetaType::Type::QTime, parent )
 #else
   : QgsDateTimeEdit( QTime(), QMetaType::QTime, parent )
 #endif
 {
-
 }
 
 void QgsTimeEdit::setTime( const QTime &time )
@@ -419,13 +436,12 @@ void QgsTimeEdit::emitValueChanged( const QVariant &value )
 //
 
 QgsDateEdit::QgsDateEdit( QWidget *parent )
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-  : QgsDateTimeEdit( QDate(), QVariant::Date, parent )
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
+  : QgsDateTimeEdit( QDate(), QMetaType::Type::QDate, parent )
 #else
   : QgsDateTimeEdit( QDate(), QMetaType::QDate, parent )
 #endif
 {
-
 }
 
 void QgsDateEdit::setDate( const QDate &date )

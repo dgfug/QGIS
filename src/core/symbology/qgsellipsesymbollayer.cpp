@@ -12,16 +12,16 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
+
 #include "qgsellipsesymbollayer.h"
 #include "qgsdxfexport.h"
-#include "qgsexpression.h"
 #include "qgsfeature.h"
 #include "qgsrendercontext.h"
-#include "qgsvectorlayer.h"
 #include "qgslogger.h"
 #include "qgsunittypes.h"
 #include "qgsproperty.h"
 #include "qgssymbollayerutils.h"
+#include "qgscolorutils.h"
 
 #include <QPainter>
 #include <QSet>
@@ -130,19 +130,19 @@ QgsSymbolLayer *QgsEllipseSymbolLayer::create( const QVariantMap &properties )
   if ( properties.contains( QStringLiteral( "fill_color" ) ) )
   {
     //pre 2.5 projects used "fill_color"
-    layer->setFillColor( QgsSymbolLayerUtils::decodeColor( properties[QStringLiteral( "fill_color" )].toString() ) );
+    layer->setFillColor( QgsColorUtils::colorFromString( properties[QStringLiteral( "fill_color" )].toString() ) );
   }
   else if ( properties.contains( QStringLiteral( "color" ) ) )
   {
-    layer->setFillColor( QgsSymbolLayerUtils::decodeColor( properties[QStringLiteral( "color" )].toString() ) );
+    layer->setFillColor( QgsColorUtils::colorFromString( properties[QStringLiteral( "color" )].toString() ) );
   }
   if ( properties.contains( QStringLiteral( "outline_color" ) ) )
   {
-    layer->setStrokeColor( QgsSymbolLayerUtils::decodeColor( properties[QStringLiteral( "outline_color" )].toString() ) );
+    layer->setStrokeColor( QgsColorUtils::colorFromString( properties[QStringLiteral( "outline_color" )].toString() ) );
   }
   else if ( properties.contains( QStringLiteral( "line_color" ) ) )
   {
-    layer->setStrokeColor( QgsSymbolLayerUtils::decodeColor( properties[QStringLiteral( "line_color" )].toString() ) );
+    layer->setStrokeColor( QgsColorUtils::colorFromString( properties[QStringLiteral( "line_color" )].toString() ) );
   }
   if ( properties.contains( QStringLiteral( "offset" ) ) )
   {
@@ -185,11 +185,11 @@ void QgsEllipseSymbolLayer::renderPoint( QPointF point, QgsSymbolRenderContext &
   mPen.setColor( penColor );
 
   bool ok;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyStrokeWidth ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::StrokeWidth ) )
   {
     context.setOriginalValueVariable( mStrokeWidth );
-    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::PropertyStrokeWidth, context.renderContext().expressionContext() );
-    if ( !exprVal.isNull() )
+    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::Property::StrokeWidth, context.renderContext().expressionContext() );
+    if ( !QgsVariantUtils::isNull( exprVal ) )
     {
       double width = exprVal.toDouble( &ok );
       if ( ok )
@@ -201,32 +201,32 @@ void QgsEllipseSymbolLayer::renderPoint( QPointF point, QgsSymbolRenderContext &
     }
   }
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyStrokeStyle ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::StrokeStyle ) )
   {
     context.setOriginalValueVariable( QgsSymbolLayerUtils::encodePenStyle( mStrokeStyle ) );
-    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::PropertyStrokeStyle, context.renderContext().expressionContext() );
-    if ( !exprVal.isNull() )
+    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::Property::StrokeStyle, context.renderContext().expressionContext() );
+    if ( !QgsVariantUtils::isNull( exprVal ) )
     {
       mPen.setStyle( QgsSymbolLayerUtils::decodePenStyle( exprVal.toString() ) );
       mSelPen.setStyle( mPen.style() );
     }
   }
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyJoinStyle ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::JoinStyle ) )
   {
     context.setOriginalValueVariable( QgsSymbolLayerUtils::encodePenJoinStyle( mPenJoinStyle ) );
-    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::PropertyJoinStyle, context.renderContext().expressionContext() );
-    if ( !exprVal.isNull() )
+    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::Property::JoinStyle, context.renderContext().expressionContext() );
+    if ( !QgsVariantUtils::isNull( exprVal ) )
     {
       mPen.setJoinStyle( QgsSymbolLayerUtils::decodePenJoinStyle( exprVal.toString() ) );
       mSelPen.setJoinStyle( mPen.joinStyle() );
     }
   }
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyCapStyle ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::CapStyle ) )
   {
     context.setOriginalValueVariable( QgsSymbolLayerUtils::encodePenCapStyle( mPenCapStyle ) );
-    const QString style = mDataDefinedProperties.valueAsString( QgsSymbolLayer::PropertyCapStyle, context.renderContext().expressionContext(), QString(), &ok );
+    const QString style = mDataDefinedProperties.valueAsString( QgsSymbolLayer::Property::CapStyle, context.renderContext().expressionContext(), QString(), &ok );
     if ( ok )
     {
       mPen.setCapStyle( QgsSymbolLayerUtils::decodePenCapStyle( style ) );
@@ -234,28 +234,28 @@ void QgsEllipseSymbolLayer::renderPoint( QPointF point, QgsSymbolRenderContext &
     }
   }
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyFillColor ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::FillColor ) )
   {
     context.setOriginalValueVariable( QgsSymbolLayerUtils::encodeColor( mColor ) );
-    QColor brushColor = mDataDefinedProperties.valueAsColor( QgsSymbolLayer::PropertyFillColor, context.renderContext().expressionContext(), mColor );
+    QColor brushColor = mDataDefinedProperties.valueAsColor( QgsSymbolLayer::Property::FillColor, context.renderContext().expressionContext(), mColor );
     brushColor.setAlphaF( brushColor.alphaF() * context.opacity() );
     mBrush.setColor( brushColor );
   }
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyStrokeColor ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::StrokeColor ) )
   {
     context.setOriginalValueVariable( QgsSymbolLayerUtils::encodeColor( mStrokeColor ) );
-    QColor penColor = mDataDefinedProperties.valueAsColor( QgsSymbolLayer::PropertyStrokeColor, context.renderContext().expressionContext(), mStrokeColor );
+    QColor penColor = mDataDefinedProperties.valueAsColor( QgsSymbolLayer::Property::StrokeColor, context.renderContext().expressionContext(), mStrokeColor );
     penColor.setAlphaF( penColor.alphaF() * context.opacity() );
     mPen.setColor( penColor );
   }
 
   QgsEllipseSymbolLayer::Shape shape = mShape;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyWidth ) || mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyHeight ) || mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyName ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Width ) || mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Height ) || mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Name ) )
   {
     context.setOriginalValueVariable( encodeShape( shape ) );
-    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::PropertyName, context.renderContext().expressionContext() );
-    if ( !exprVal.isNull() )
+    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::Property::Name, context.renderContext().expressionContext() );
+    if ( !QgsVariantUtils::isNull( exprVal ) )
     {
       shape = decodeShape( exprVal.toString() );
     }
@@ -281,14 +281,15 @@ void QgsEllipseSymbolLayer::renderPoint( QPointF point, QgsSymbolRenderContext &
     transform.rotate( angle );
   }
 
+  const bool useSelectedColor = shouldRenderUsingSelectionColor( context );
   if ( shapeIsFilled( shape ) )
   {
-    p->setPen( context.selected() ? mSelPen : mPen );
-    p->setBrush( context.selected() ? mSelBrush : mBrush );
+    p->setPen( useSelectedColor ? mSelPen : mPen );
+    p->setBrush( useSelectedColor ? mSelBrush : mBrush );
   }
   else
   {
-    p->setPen( context.selected() ? mSelPen : mPen );
+    p->setPen( useSelectedColor ? mSelPen : mPen );
     p->setBrush( QBrush() );
   }
   p->drawPath( transform.map( mPainterPath ) );
@@ -311,10 +312,10 @@ void QgsEllipseSymbolLayer::calculateOffsetAndRotation( QgsSymbolRenderContext &
   const bool ok = true;
   angle = mAngle + mLineAngle;
   bool usingDataDefinedRotation = false;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyAngle ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Angle ) )
   {
     context.setOriginalValueVariable( angle );
-    angle = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::PropertyAngle, context.renderContext().expressionContext(), 0 ) + mLineAngle;
+    angle = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::Property::Angle, context.renderContext().expressionContext(), 0 ) + mLineAngle;
     usingDataDefinedRotation = ok;
   }
 
@@ -330,7 +331,7 @@ void QgsEllipseSymbolLayer::calculateOffsetAndRotation( QgsSymbolRenderContext &
     if ( f )
     {
       const QgsGeometry g = f->geometry();
-      if ( !g.isNull() && g.type() == QgsWkbTypes::PointGeometry )
+      if ( !g.isNull() && g.type() == Qgis::GeometryType::Point )
       {
         const QgsMapToPixel &m2p = context.renderContext().mapToPixel();
         angle += m2p.mapRotation();
@@ -345,6 +346,11 @@ void QgsEllipseSymbolLayer::calculateOffsetAndRotation( QgsSymbolRenderContext &
 QString QgsEllipseSymbolLayer::layerType() const
 {
   return QStringLiteral( "EllipseMarker" );
+}
+
+Qgis::SymbolLayerFlags QgsEllipseSymbolLayer::flags() const
+{
+  return QgsMarkerSymbolLayer::flags() | Qgis::SymbolLayerFlag::CanCalculateMaskGeometryPerFeature;
 }
 
 void QgsEllipseSymbolLayer::startRender( QgsSymbolRenderContext &context )
@@ -381,13 +387,15 @@ void QgsEllipseSymbolLayer::stopRender( QgsSymbolRenderContext & )
 QgsEllipseSymbolLayer *QgsEllipseSymbolLayer::clone() const
 {
   QgsEllipseSymbolLayer *m = new QgsEllipseSymbolLayer();
+  m->setSizeUnit( mSizeUnit );
+  m->setSizeMapUnitScale( mSizeMapUnitScale );
+  m->setOffsetUnit( mOffsetUnit );
+  m->setOffsetMapUnitScale( mOffsetMapUnitScale );
   m->setShape( mShape );
   m->setSymbolWidth( mSymbolWidth );
   m->setSymbolHeight( mSymbolHeight );
   m->setStrokeStyle( mStrokeStyle );
   m->setOffset( mOffset );
-  m->setOffsetUnit( mOffsetUnit );
-  m->setOffsetMapUnitScale( mOffsetMapUnitScale );
   m->setStrokeStyle( mStrokeStyle );
   m->setPenJoinStyle( mPenJoinStyle );
   m->setPenCapStyle( mPenCapStyle );
@@ -433,7 +441,7 @@ void QgsEllipseSymbolLayer::writeSldMarker( QDomDocument &doc, QDomElement &elem
   QgsSymbolLayerUtils::wellKnownMarkerToSld( doc, graphicElem, encodeShape( mShape ), mColor, mStrokeColor, mStrokeStyle, strokeWidth, symbolWidth );
 
   // <Rotation>
-  const QgsProperty ddRotation = mDataDefinedProperties.property( QgsSymbolLayer::PropertyAngle );
+  const QgsProperty ddRotation = mDataDefinedProperties.property( QgsSymbolLayer::Property::Angle );
 
   QString angleFunc = props.value( QStringLiteral( "angle" ), QString() ).toString();
   if ( angleFunc.isEmpty() )  // symbol has no angle set
@@ -508,9 +516,11 @@ QgsSymbolLayer *QgsEllipseSymbolLayer::createFromSld( QDomElement &element )
   if ( !QgsSymbolLayerUtils::wellKnownMarkerFromSld( graphicElem, name, fillColor, strokeColor, strokeStyle, strokeWidth, size ) )
     return nullptr;
 
+  double scaleFactor = 1.0;
   const QString uom = element.attribute( QStringLiteral( "uom" ) );
-  size = QgsSymbolLayerUtils::sizeInPixelsFromSldUom( uom, size );
-  strokeWidth = QgsSymbolLayerUtils::sizeInPixelsFromSldUom( uom, strokeWidth );
+  Qgis::RenderUnit sldUnitSize = QgsSymbolLayerUtils::decodeSldUom( uom, &scaleFactor );
+  size = size * scaleFactor;
+  strokeWidth = strokeWidth * scaleFactor;
 
   double angle = 0.0;
   QString angleFunc;
@@ -523,7 +533,7 @@ QgsSymbolLayer *QgsEllipseSymbolLayer::createFromSld( QDomElement &element )
   }
 
   QgsEllipseSymbolLayer *m = new QgsEllipseSymbolLayer();
-  m->setOutputUnit( QgsUnitTypes::RenderUnit::RenderPixels );
+  m->setOutputUnit( sldUnitSize );
   m->setShape( decodeShape( name ) );
   m->setFillColor( fillColor );
   m->setStrokeColor( strokeColor );
@@ -552,8 +562,8 @@ QVariantMap QgsEllipseSymbolLayer::properties() const
   map[QStringLiteral( "outline_width_map_unit_scale" )] = QgsSymbolLayerUtils::encodeMapUnitScale( mStrokeWidthMapUnitScale );
   map[QStringLiteral( "joinstyle" )] = QgsSymbolLayerUtils::encodePenJoinStyle( mPenJoinStyle );
   map[QStringLiteral( "cap_style" )] = QgsSymbolLayerUtils::encodePenCapStyle( mPenCapStyle );
-  map[QStringLiteral( "color" )] = QgsSymbolLayerUtils::encodeColor( mColor );
-  map[QStringLiteral( "outline_color" )] = QgsSymbolLayerUtils::encodeColor( mStrokeColor );
+  map[QStringLiteral( "color" )] = QgsColorUtils::colorToString( mColor );
+  map[QStringLiteral( "outline_color" )] = QgsColorUtils::colorToString( mStrokeColor );
   map[QStringLiteral( "offset" )] = QgsSymbolLayerUtils::encodePoint( mOffset );
   map[QStringLiteral( "offset_unit" )] = QgsUnitTypes::encodeUnit( mOffsetUnit );
   map[QStringLiteral( "offset_map_unit_scale" )] = QgsSymbolLayerUtils::encodeMapUnitScale( mOffsetMapUnitScale );
@@ -569,10 +579,10 @@ QSizeF QgsEllipseSymbolLayer::calculateSize( QgsSymbolRenderContext &context, do
 {
   double width = 0;
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyWidth ) ) //1. priority: data defined setting on symbol layer le
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Width ) ) //1. priority: data defined setting on symbol layer le
   {
     context.setOriginalValueVariable( mSymbolWidth );
-    width = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::PropertyWidth, context.renderContext().expressionContext(), mSymbolWidth );
+    width = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::Property::Width, context.renderContext().expressionContext(), mSymbolWidth );
   }
   else //2. priority: global width setting
   {
@@ -585,10 +595,10 @@ QSizeF QgsEllipseSymbolLayer::calculateSize( QgsSymbolRenderContext &context, do
   width = context.renderContext().convertToPainterUnits( width, mSymbolWidthUnit, mSymbolHeightMapUnitScale );
 
   double height = 0;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyHeight ) ) //1. priority: data defined setting on symbol layer level
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Height ) ) //1. priority: data defined setting on symbol layer level
   {
     context.setOriginalValueVariable( mSymbolHeight );
-    height = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::PropertyHeight, context.renderContext().expressionContext(), mSymbolHeight );
+    height = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::Property::Height, context.renderContext().expressionContext(), mSymbolHeight );
   }
   else //2. priority: global height setting
   {
@@ -616,6 +626,16 @@ void QgsEllipseSymbolLayer::preparePath( const QgsEllipseSymbolLayer::Shape &sha
 
     case SemiCircle:
       mPainterPath.arcTo( -size.width() / 2.0, -size.height() / 2.0, size.width(), size.height(), 0, 180 );
+      mPainterPath.lineTo( 0, 0 );
+      return;
+
+    case ThirdCircle:
+      mPainterPath.arcTo( -size.width() / 2.0, -size.height() / 2.0, size.width(), size.height(), 90, 120 );
+      mPainterPath.lineTo( 0, 0 );
+      return;
+
+    case QuarterCircle:
+      mPainterPath.arcTo( -size.width() / 2.0, -size.height() / 2.0, size.width(), size.height(), 90, 90 );
       mPainterPath.lineTo( 0, 0 );
       return;
 
@@ -669,6 +689,57 @@ void QgsEllipseSymbolLayer::preparePath( const QgsEllipseSymbolLayer::Shape &sha
       mPainterPath.lineTo( 0, -size.height() / 2.0 );
       mPainterPath.lineTo( -size.width() / 2.0, size.height() / 2.0 );
       return;
+
+    case Pentagon:
+      mPainterPath.moveTo( ( size.width() * -0.9511 ) / 2.0, size.height() / ( 2 / -0.309 ) );
+      mPainterPath.lineTo( ( size.width() * -0.5878 ) / 2.0, size.height() / ( 2 / 0.8090 ) );
+      mPainterPath.lineTo( ( size.width() * 0.5878 ) / 2.0, size.height() / ( 2 / 0.8090 ) );
+      mPainterPath.lineTo( ( size.width() * 0.9511 ) / 2.0, size.height() / ( 2 / -0.309 ) );
+      mPainterPath.lineTo( 0, size.height() / -2.0 );
+      mPainterPath.lineTo( ( size.width() * -0.9511 ) / 2.0, size.height() / ( 2 / -0.309 ) );
+      return;
+
+    case Hexagon:
+      mPainterPath.moveTo( ( size.width() * 0.8660 ) / 2.0, size.height() / 4.0 );
+      mPainterPath.lineTo( ( size.width() * 0.8660 ) / 2.0, size.height() / -4.0 );
+      mPainterPath.lineTo( 0, size.height() / -2.0 );
+      mPainterPath.lineTo( ( size.width() * 0.8660 ) / -2.0, size.height() / -4.0 );
+      mPainterPath.lineTo( ( size.width() * 0.8660 ) / -2.0, size.height() / 4.0 );
+      mPainterPath.lineTo( 0, size.height() / 2.0 );
+      mPainterPath.lineTo( ( size.width() * 0.8660 ) / 2.0, size.height() / 4.0 );
+      return;
+
+    case Octagon:
+    {
+      static constexpr double VERTEX_OFFSET_FROM_ORIGIN = 1.0 / ( 1 + M_SQRT2 );
+      mPainterPath.moveTo( ( size.width() * VERTEX_OFFSET_FROM_ORIGIN ) / -2.0, size.height() / 2.0 );
+      mPainterPath.lineTo( ( size.width() * VERTEX_OFFSET_FROM_ORIGIN ) / 2.0, size.height() / 2.0 );
+      mPainterPath.lineTo( size.width() / 2.0, ( size.height() * VERTEX_OFFSET_FROM_ORIGIN ) / 2.0 );
+      mPainterPath.lineTo( size.width() / 2.0, ( size.height() * VERTEX_OFFSET_FROM_ORIGIN ) / -2.0 );
+      mPainterPath.lineTo( ( size.width() * VERTEX_OFFSET_FROM_ORIGIN ) / 2.0, size.height() / -2.0 );
+      mPainterPath.lineTo( ( size.width() * VERTEX_OFFSET_FROM_ORIGIN ) / -2.0, size.height() / -2.0 );
+      mPainterPath.lineTo( size.width() / -2.0, ( size.height() * VERTEX_OFFSET_FROM_ORIGIN ) / -2.0 );
+      mPainterPath.lineTo( size.width() / -2.0, ( size.height() * VERTEX_OFFSET_FROM_ORIGIN ) / 2.0 );
+      mPainterPath.lineTo( ( size.width() * VERTEX_OFFSET_FROM_ORIGIN ) / -2.0, size.height() / 2.0 );
+      return;
+    }
+
+    case Star:
+    {
+      const double inner_r = std::cos( DEG2RAD( 72.0 ) ) / std::cos( DEG2RAD( 36.0 ) );
+      mPainterPath.moveTo( ( size.width() * inner_r * std::sin( DEG2RAD( 324.0 ) ) ) / 2.0, ( size.height() * inner_r * std::cos( DEG2RAD( 324.0 ) ) ) / -2.0 );
+      mPainterPath.lineTo( ( size.width() * std::sin( DEG2RAD( 288.0 ) ) ) / 2.0, ( size.height() * std::cos( DEG2RAD( 288.0 ) ) ) / -2.0 );
+      mPainterPath.lineTo( ( size.width() * inner_r * std::sin( DEG2RAD( 252.0 ) ) ) / 2.0, ( size.height() * inner_r * std::cos( DEG2RAD( 252.0 ) ) ) / -2.0 );
+      mPainterPath.lineTo( ( size.width() * std::sin( DEG2RAD( 216.0 ) ) ) / 2.0, ( size.height() * std::cos( DEG2RAD( 216.0 ) ) ) / -2.0 );
+      mPainterPath.lineTo( 0, ( size.height() * inner_r ) / 2.0 );
+      mPainterPath.lineTo( ( size.width() * std::sin( DEG2RAD( 144.0 ) ) ) / 2.0, ( size.height() * std::cos( DEG2RAD( 144.0 ) ) ) / -2.0 );
+      mPainterPath.lineTo( ( size.width() * inner_r * std::sin( DEG2RAD( 108.0 ) ) ) / 2.0, ( size.height() * inner_r * std::cos( DEG2RAD( 108.0 ) ) ) / -2.0 );
+      mPainterPath.lineTo( ( size.width() * std::sin( DEG2RAD( 72.0 ) ) ) / 2.0, ( size.height() * std::cos( DEG2RAD( 72.0 ) ) ) / -2.0 );
+      mPainterPath.lineTo( ( size.width() * inner_r * std::sin( DEG2RAD( 36.0 ) ) ) / 2.0, ( size.height() * inner_r * std::cos( DEG2RAD( 36.0 ) ) ) / -2.0 );
+      mPainterPath.lineTo( 0, size.height() / -2.0 );
+      mPainterPath.lineTo( ( size.width() * inner_r * std::sin( DEG2RAD( 324.0 ) ) ) / 2.0, ( size.height() * inner_r * std::cos( DEG2RAD( 324.0 ) ) ) / -2.0 );
+      return;
+    }
   }
 }
 
@@ -683,6 +754,12 @@ bool QgsEllipseSymbolLayer::shapeIsFilled( const QgsEllipseSymbolLayer::Shape &s
     case RightHalfTriangle:
     case LeftHalfTriangle:
     case SemiCircle:
+    case ThirdCircle:
+    case QuarterCircle:
+    case Pentagon:
+    case Hexagon:
+    case Octagon:
+    case Star:
       return true;
 
     case Cross:
@@ -721,7 +798,7 @@ void QgsEllipseSymbolLayer::setSymbolHeight( double h )
   QgsMarkerSymbolLayer::setSize( mSymbolWidth >= mSymbolHeight ? mSymbolWidth : mSymbolHeight );
 }
 
-void QgsEllipseSymbolLayer::setOutputUnit( QgsUnitTypes::RenderUnit unit )
+void QgsEllipseSymbolLayer::setOutputUnit( Qgis::RenderUnit unit )
 {
   QgsMarkerSymbolLayer::setOutputUnit( unit );
   mSymbolWidthUnit = unit;
@@ -729,22 +806,22 @@ void QgsEllipseSymbolLayer::setOutputUnit( QgsUnitTypes::RenderUnit unit )
   mStrokeWidthUnit = unit;
 }
 
-QgsUnitTypes::RenderUnit QgsEllipseSymbolLayer::outputUnit() const
+Qgis::RenderUnit QgsEllipseSymbolLayer::outputUnit() const
 {
-  const QgsUnitTypes::RenderUnit unit = QgsMarkerSymbolLayer::outputUnit();
+  const Qgis::RenderUnit unit = QgsMarkerSymbolLayer::outputUnit();
   if ( mSymbolWidthUnit != unit || mSymbolHeightUnit != unit || mStrokeWidthUnit != unit )
   {
-    return QgsUnitTypes::RenderUnknownUnit;
+    return Qgis::RenderUnit::Unknown;
   }
   return unit;
 }
 
 bool QgsEllipseSymbolLayer::usesMapUnits() const
 {
-  return mSymbolWidthUnit == QgsUnitTypes::RenderMapUnits || mSymbolWidthUnit == QgsUnitTypes::RenderMetersInMapUnits
-         || mSymbolHeightUnit == QgsUnitTypes::RenderMapUnits || mSymbolHeightUnit == QgsUnitTypes::RenderMetersInMapUnits
-         || mStrokeWidthUnit == QgsUnitTypes::RenderMapUnits || mStrokeWidthUnit == QgsUnitTypes::RenderMetersInMapUnits
-         || mOffsetUnit == QgsUnitTypes::RenderMapUnits || mOffsetUnit == QgsUnitTypes::RenderMetersInMapUnits;
+  return mSymbolWidthUnit == Qgis::RenderUnit::MapUnits || mSymbolWidthUnit == Qgis::RenderUnit::MetersInMapUnits
+         || mSymbolHeightUnit == Qgis::RenderUnit::MapUnits || mSymbolHeightUnit == Qgis::RenderUnit::MetersInMapUnits
+         || mStrokeWidthUnit == Qgis::RenderUnit::MapUnits || mStrokeWidthUnit == Qgis::RenderUnit::MetersInMapUnits
+         || mOffsetUnit == Qgis::RenderUnit::MapUnits || mOffsetUnit == Qgis::RenderUnit::MetersInMapUnits;
 }
 
 void QgsEllipseSymbolLayer::setMapUnitScale( const QgsMapUnitScale &scale )
@@ -784,12 +861,12 @@ QRectF QgsEllipseSymbolLayer::bounds( QPointF point, QgsSymbolRenderContext &con
     transform.rotate( angle );
 
   double penWidth = mStrokeWidth;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyStrokeWidth ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::StrokeWidth ) )
   {
     context.setOriginalValueVariable( mStrokeWidth );
-    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::PropertyStrokeWidth, context.renderContext().expressionContext() );
+    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::Property::StrokeWidth, context.renderContext().expressionContext() );
 
-    if ( !exprVal.isNull() )
+    if ( !QgsVariantUtils::isNull( exprVal ) )
     {
       bool ok;
       const double strokeWidth = exprVal.toDouble( &ok );
@@ -801,11 +878,11 @@ QRectF QgsEllipseSymbolLayer::bounds( QPointF point, QgsSymbolRenderContext &con
   }
   penWidth = context.renderContext().convertToPainterUnits( penWidth, mStrokeWidthUnit, mStrokeWidthMapUnitScale );
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyStrokeStyle ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::StrokeStyle ) )
   {
     context.setOriginalValueVariable( QgsSymbolLayerUtils::encodePenStyle( mStrokeStyle ) );
-    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::PropertyStrokeStyle, context.renderContext().expressionContext() );
-    if ( !exprVal.isNull() && exprVal.toString() == QLatin1String( "no" ) )
+    const QVariant exprVal = mDataDefinedProperties.value( QgsSymbolLayer::Property::StrokeStyle, context.renderContext().expressionContext() );
+    if ( !QgsVariantUtils::isNull( exprVal ) && exprVal.toString() == QLatin1String( "no" ) )
     {
       penWidth = 0.0;
     }
@@ -833,24 +910,24 @@ bool QgsEllipseSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFact
   //width
   double symbolWidth = mSymbolWidth;
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyWidth ) ) //1. priority: data defined setting on symbol layer le
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Width ) ) //1. priority: data defined setting on symbol layer le
   {
     context.setOriginalValueVariable( mSymbolWidth );
-    symbolWidth = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::PropertyWidth, context.renderContext().expressionContext(), mSymbolWidth );
+    symbolWidth = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::Property::Width, context.renderContext().expressionContext(), mSymbolWidth );
   }
-  if ( mSymbolWidthUnit == QgsUnitTypes::RenderMillimeters )
+  if ( mSymbolWidthUnit == Qgis::RenderUnit::Millimeters )
   {
     symbolWidth *= mmMapUnitScaleFactor;
   }
 
   //height
   double symbolHeight = mSymbolHeight;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyHeight ) ) //1. priority: data defined setting on symbol layer level
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Height ) ) //1. priority: data defined setting on symbol layer level
   {
     context.setOriginalValueVariable( mSymbolHeight );
-    symbolWidth = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::PropertyHeight, context.renderContext().expressionContext(), mSymbolHeight );
+    symbolWidth = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::Property::Height, context.renderContext().expressionContext(), mSymbolHeight );
   }
-  if ( mSymbolHeightUnit == QgsUnitTypes::RenderMillimeters )
+  if ( mSymbolHeightUnit == Qgis::RenderUnit::Millimeters )
   {
     symbolHeight *= mmMapUnitScaleFactor;
   }
@@ -858,38 +935,38 @@ bool QgsEllipseSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFact
   //stroke width
   double strokeWidth = mStrokeWidth;
 
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyStrokeWidth ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::StrokeWidth ) )
   {
     context.setOriginalValueVariable( mStrokeWidth );
-    strokeWidth = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::PropertyStrokeWidth, context.renderContext().expressionContext(), mStrokeWidth );
+    strokeWidth = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::Property::StrokeWidth, context.renderContext().expressionContext(), mStrokeWidth );
   }
-  if ( mStrokeWidthUnit == QgsUnitTypes::RenderMillimeters )
+  if ( mStrokeWidthUnit == Qgis::RenderUnit::Millimeters )
   {
     strokeWidth *= strokeWidth;
   }
 
   //fill color
   QColor fc = mColor;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyFillColor ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::FillColor ) )
   {
     context.setOriginalValueVariable( QgsSymbolLayerUtils::encodeColor( mColor ) );
-    fc = mDataDefinedProperties.valueAsColor( QgsSymbolLayer::PropertyFillColor, context.renderContext().expressionContext(), mColor );
+    fc = mDataDefinedProperties.valueAsColor( QgsSymbolLayer::Property::FillColor, context.renderContext().expressionContext(), mColor );
   }
 
   //stroke color
   QColor oc = mStrokeColor;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyStrokeColor ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::StrokeColor ) )
   {
     context.setOriginalValueVariable( QgsSymbolLayerUtils::encodeColor( mStrokeColor ) );
-    oc = mDataDefinedProperties.valueAsColor( QgsSymbolLayer::PropertyStrokeColor, context.renderContext().expressionContext(), mStrokeColor );
+    oc = mDataDefinedProperties.valueAsColor( QgsSymbolLayer::Property::StrokeColor, context.renderContext().expressionContext(), mStrokeColor );
   }
 
   //symbol name
   QgsEllipseSymbolLayer::Shape shape = mShape;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyName ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Name ) )
   {
     context.setOriginalValueVariable( encodeShape( shape ) );
-    shape = decodeShape( mDataDefinedProperties.valueAsString( QgsSymbolLayer::PropertyName, context.renderContext().expressionContext(), encodeShape( shape ) ) );
+    shape = decodeShape( mDataDefinedProperties.valueAsString( QgsSymbolLayer::Property::Name, context.renderContext().expressionContext(), encodeShape( shape ) ) );
   }
 
   //offset
@@ -900,10 +977,10 @@ bool QgsEllipseSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFact
 
   //priority for rotation: 1. data defined symbol level, 2. symbol layer rotation (mAngle)
   double rotation = 0.0;
-  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::PropertyAngle ) )
+  if ( mDataDefinedProperties.isActive( QgsSymbolLayer::Property::Angle ) )
   {
     context.setOriginalValueVariable( mAngle );
-    rotation = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::PropertyAngle, context.renderContext().expressionContext(), mAngle ) + mLineAngle;
+    rotation = mDataDefinedProperties.valueAsDouble( QgsSymbolLayer::Property::Angle, context.renderContext().expressionContext(), mAngle ) + mLineAngle;
   }
   else if ( !qgsDoubleNear( mAngle + mLineAngle, 0.0 ) )
   {
@@ -1006,6 +1083,12 @@ bool QgsEllipseSymbolLayer::writeDxf( QgsDxfExport &e, double mmMapUnitScaleFact
     case RightHalfTriangle:
     case LeftHalfTriangle:
     case SemiCircle:
+    case ThirdCircle:
+    case QuarterCircle:
+    case Pentagon:
+    case Hexagon:
+    case Octagon:
+    case Star:
       return false;
   }
 
@@ -1038,8 +1121,18 @@ QgsEllipseSymbolLayer::Shape QgsEllipseSymbolLayer::decodeShape( const QString &
     return LeftHalfTriangle;
   else if ( cleaned == QLatin1String( "semi_circle" ) )
     return SemiCircle;
-
-  if ( ok )
+  else if ( cleaned == QLatin1String( "third_circle" ) )
+    return ThirdCircle;
+  else if ( cleaned == QLatin1String( "quarter_circle" ) )
+    return QuarterCircle;
+  else if ( cleaned == QLatin1String( "pentagon" ) )
+    return Pentagon;
+  else if ( cleaned == QLatin1String( "hexagon" ) )
+    return Hexagon;
+  else if ( cleaned == QLatin1String( "octagon" ) )
+    return Octagon;
+  else if ( cleaned == QLatin1String( "star" ) )
+    return Star;  if ( ok )
     *ok = false;
   return Circle;
 }
@@ -1068,6 +1161,18 @@ QString QgsEllipseSymbolLayer::encodeShape( QgsEllipseSymbolLayer::Shape shape )
       return QStringLiteral( "left_half_triangle" );
     case SemiCircle:
       return QStringLiteral( "semi_circle" );
+    case ThirdCircle:
+      return QStringLiteral( "third_circle" );
+    case QuarterCircle:
+      return QStringLiteral( "quarter_circle" );
+    case Pentagon:
+      return QStringLiteral( "pentagon" );
+    case Hexagon:
+      return QStringLiteral( "hexagon" );
+    case Octagon:
+      return QStringLiteral( "octagon" );
+    case Star:
+      return QStringLiteral( "star" );
   }
   return QString();
 }
@@ -1084,6 +1189,12 @@ QList<QgsEllipseSymbolLayer::Shape> QgsEllipseSymbolLayer::availableShapes()
          << Triangle
          << LeftHalfTriangle
          << RightHalfTriangle
-         << SemiCircle;
+         << SemiCircle
+         << ThirdCircle
+         << QuarterCircle
+         << Pentagon
+         << Hexagon
+         << Octagon
+         << Star;
   return shapes;
 }

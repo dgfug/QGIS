@@ -18,9 +18,11 @@
 
 #include "qgis_core.h"
 
-#define SIP_NO_FILE
-
 #include <QSet>
+#include <QVariantMap>
+
+#include "qgshttpheaders.h"
+
 
 class QPointF;
 class QPolygon;
@@ -35,6 +37,7 @@ class QgsTileMatrix;
 class QgsTileRange;
 class QgsTileXYZ;
 class QgsVectorTileLayer;
+class QgsMapBoxGlStyleConversionContext;
 
 /**
  * \ingroup core
@@ -46,10 +49,15 @@ class CORE_EXPORT QgsVectorTileUtils
 {
   public:
 
-    //! Returns a list of tiles in the given tile range
-    static QVector<QgsTileXYZ> tilesInRange( const QgsTileRange &range, int zoomLevel );
+    /**
+     * Parses the style URL to update the source URLs in the \a uri.
+     * If \a forceUpdate is TRUE, any existing source will be updated.
+     * \since QGIS 3.40
+     */
+    static void updateUriSources( QString &uri SIP_INOUT, bool forceUpdate = false );
+
     //! Orders tile requests according to the distance from view center (given in tile matrix coords)
-    static void sortTilesByDistanceFromCenter( QVector<QgsTileXYZ> &tiles, const QPointF &center );
+    static void sortTilesByDistanceFromCenter( QVector<QgsTileXYZ> &tiles, QPointF center );
 
     /**
      * Returns polygon (made by four corners of the tile) in screen coordinates
@@ -59,23 +67,49 @@ class CORE_EXPORT QgsVectorTileUtils
     static QPolygon tilePolygon( QgsTileXYZ id, const QgsCoordinateTransform &ct, const QgsTileMatrix &tm, const QgsMapToPixel &mtp );
 
     //! Returns QgsFields instance based on the set of field names
-    static QgsFields makeQgisFields( QSet<QString> flds );
+    static QgsFields makeQgisFields( const QSet<QString> &flds );
 
     /**
-     * Finds zoom level (assuming GoogleCRS84Quad tile matrix set) given map scale denominator.
+     * Finds zoom level given map scale denominator.
+     *
+     * The \a z0Scale argument gives the scale denominator at zoom level 0, where the default
+     * value corresponds to GoogleCRS84Quad tile matrix set
      *
      * \since QGIS 3.16
      */
-    static double scaleToZoom( double mapScale );
+    static double scaleToZoom( double mapScale, double z0Scale = 559082264.0287178 );
 
-    //! Finds best fitting zoom level (assuming GoogleCRS84Quad tile matrix set) given map scale denominator and allowed zoom level range
-    static int scaleToZoomLevel( double mapScale, int sourceMinZoom, int sourceMaxZoom );
+    /**
+     * Finds the best fitting zoom level given a map scale denominator and allowed zoom level range.
+     *
+     * The \a z0Scale argument gives the scale denominator at zoom level 0, where the default
+     * value corresponds to GoogleCRS84Quad tile matrix set.
+     */
+    static int scaleToZoomLevel( double mapScale, int sourceMinZoom, int sourceMaxZoom, double z0Scale = 559082264.0287178 );
     //! Returns a temporary vector layer for given sub-layer of tile in vector tile layer
     static QgsVectorLayer *makeVectorLayerForTile( QgsVectorTileLayer *mvt, QgsTileXYZ tileID, const QString &layerName );
     //! Returns formatted tile URL string replacing {x}, {y}, {z} placeholders (or {-y} instead of {y} for TMS convention)
     static QString formatXYZUrlTemplate( const QString &url, QgsTileXYZ tile, const QgsTileMatrix &tileMatrix );
     //! Checks whether the URL template string is correct (contains {x}, {y} / {-y}, {z} placeholders)
     static bool checkXYZUrlTemplate( const QString &url );
+
+    /**
+     * Downloads the sprite image and sets it to the conversion context
+     * \param styleDefinition the style definition map
+     * \param context the style conversion context
+     * \param styleUrl optional the style url
+     */
+    static void loadSprites( const QVariantMap &styleDefinition, QgsMapBoxGlStyleConversionContext &context, const QString &styleUrl = QString() );
+
+  private:
+    //! Parses the style URL to get a list of named source URLs.
+    static QMap<QString, QString> parseStyleSourceUrl( const QString &styleUrl, const QgsHttpHeaders &headers = QgsHttpHeaders(), const QString &authCfg = QString() );
+
+    //! Returns the tiles URLs of a source
+    static QVariantList parseStyleSourceContentUrl( const QString &sourceUrl, const QgsHttpHeaders &headers = QgsHttpHeaders(), const QString &authCfg = QString() );
+
+    friend class TestQgsVectorTileUtils;
+
 };
 
 #endif // QGSVECTORTILEUTILS_H

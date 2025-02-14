@@ -21,22 +21,22 @@
 #include "qgspostgresprovider.h"
 
 //The only purpose of this class is to set geomColumn and srid
-class QgsTestPostgresExpressionCompiler: public QgsPostgresExpressionCompiler
+class QgsTestPostgresExpressionCompiler : public QgsPostgresExpressionCompiler
 {
   public:
-    QgsTestPostgresExpressionCompiler( QgsPostgresFeatureSource *source, const QString &srid, const QString &geometryColumn ): QgsPostgresExpressionCompiler( source )
+    QgsTestPostgresExpressionCompiler( QgsPostgresFeatureSource *source, const QString &srid, const QString &geometryColumn )
+      : QgsPostgresExpressionCompiler( source )
     {
       mDetectedSrid = srid;
       mGeometryColumn = geometryColumn;
     }
 };
 
-class TestQgsPostgresExpressionCompiler: public QObject
+class TestQgsPostgresExpressionCompiler : public QObject
 {
     Q_OBJECT
 
   public:
-
     TestQgsPostgresExpressionCompiler() = default;
 
   private slots:
@@ -45,7 +45,7 @@ class TestQgsPostgresExpressionCompiler: public QObject
 
 void TestQgsPostgresExpressionCompiler::testGeometryFromWkt()
 {
-  const QgsPostgresProvider p( QStringLiteral( "" ), QgsDataProvider::ProviderOptions() );
+  const QgsPostgresProvider p( QLatin1String( "" ), QgsDataProvider::ProviderOptions() );
   QgsPostgresFeatureSource featureSource( &p );
   QgsTestPostgresExpressionCompiler compiler( &featureSource, QStringLiteral( "4326" ), QStringLiteral( "geom" ) );
   QgsExpression exp( QStringLiteral( "intersects($geometry,geom_from_wkt('Polygon((0 0, 1 0, 1 1, 0 1, 0 0))'))" ) );

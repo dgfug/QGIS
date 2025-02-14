@@ -40,17 +40,16 @@
  * \ingroup UnitTests
  * This is a unit test for shapeburst fill types.
  */
-class TestQgsShapeburst : public QObject
+class TestQgsShapeburst : public QgsTest
 {
     Q_OBJECT
   public:
-    TestQgsShapeburst() = default;
+    TestQgsShapeburst()
+      : QgsTest( QStringLiteral( "Shapeburst Renderer Tests" ) ) {}
 
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init() {} // will be called before each testfunction is executed.
-    void cleanup() {} // will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
 
     void shapeburstSymbol();
     void shapeburstSymbolColors();
@@ -62,7 +61,7 @@ class TestQgsShapeburst : public QObject
     void shapeburstSymbolFromQml();
 
   private:
-    bool mTestHasError =  false ;
+    bool mTestHasError = false;
     bool setQml( const QString &type );
     bool imageCheck( const QString &type );
     QgsMapSettings mMapSettings;
@@ -71,7 +70,6 @@ class TestQgsShapeburst : public QObject
     QgsFillSymbol *mFillSymbol = nullptr;
     QgsSingleSymbolRenderer *mSymbolRenderer = nullptr;
     QString mTestDataDir;
-    QString mReport;
 };
 
 
@@ -92,16 +90,16 @@ void TestQgsShapeburst::initTestCase()
   //
   const QString myPolysFileName = mTestDataDir + "polys.shp";
   const QFileInfo myPolyFileInfo( myPolysFileName );
-  mpPolysLayer = new QgsVectorLayer( myPolyFileInfo.filePath(),
-                                     myPolyFileInfo.completeBaseName(), QStringLiteral( "ogr" ) );
+  mpPolysLayer = new QgsVectorLayer( myPolyFileInfo.filePath(), myPolyFileInfo.completeBaseName(), QStringLiteral( "ogr" ) );
 
   QgsVectorSimplifyMethod simplifyMethod;
-  simplifyMethod.setSimplifyHints( QgsVectorSimplifyMethod::NoSimplification );
+  simplifyMethod.setSimplifyHints( Qgis::VectorRenderingSimplificationFlags() );
   mpPolysLayer->setSimplifyMethod( simplifyMethod );
 
   // Register the layer with the registry
   QgsProject::instance()->addMapLayers(
-    QList<QgsMapLayer *>() << mpPolysLayer );
+    QList<QgsMapLayer *>() << mpPolysLayer
+  );
 
   //setup shapeburst fill
   mShapeburstFill = new QgsShapeburstFillSymbolLayer();
@@ -115,26 +113,14 @@ void TestQgsShapeburst::initTestCase()
   // and is more light weight
   //
   mMapSettings.setLayers( QList<QgsMapLayer *>() << mpPolysLayer );
-  mReport += QLatin1String( "<h1>Shapeburst Renderer Tests</h1>\n" );
-
 }
 void TestQgsShapeburst::cleanupTestCase()
 {
-  const QString myReportFile = QDir::tempPath() + "/qgistest.html";
-  QFile myFile( myReportFile );
-  if ( myFile.open( QIODevice::WriteOnly | QIODevice::Append ) )
-  {
-    QTextStream myQTextStream( &myFile );
-    myQTextStream << mReport;
-    myFile.close();
-  }
-
   QgsApplication::exitQgis();
 }
 
 void TestQgsShapeburst::shapeburstSymbol()
 {
-  mReport += QLatin1String( "<h2>Shapeburst symbol renderer test</h2>\n" );
   mShapeburstFill->setColor( QColor( "red" ) );
   mShapeburstFill->setColor2( QColor( "blue" ) );
   mShapeburstFill->setBlurRadius( 0 );
@@ -144,7 +130,6 @@ void TestQgsShapeburst::shapeburstSymbol()
 
 void TestQgsShapeburst::shapeburstSymbolColors()
 {
-  mReport += QLatin1String( "<h2>Shapeburst symbol renderer color test</h2>\n" );
   mShapeburstFill->setColor( QColor( "green" ) );
   mShapeburstFill->setColor2( QColor( "white" ) );
   QVERIFY( imageCheck( "shapeburst_colors" ) );
@@ -154,8 +139,6 @@ void TestQgsShapeburst::shapeburstSymbolColors()
 
 void TestQgsShapeburst::shapeburstSymbolRamp()
 {
-  mReport += QLatin1String( "<h2>Shapeburst symbol renderer ramp test</h2>\n" );
-
   QgsGradientColorRamp *gradientRamp = new QgsGradientColorRamp( QColor( Qt::yellow ), QColor( 255, 105, 180 ) );
   QgsGradientStopsList stops;
   stops.append( QgsGradientStop( 0.5, QColor( 255, 255, 255, 0 ) ) );
@@ -169,7 +152,6 @@ void TestQgsShapeburst::shapeburstSymbolRamp()
 
 void TestQgsShapeburst::shapeburstBlur()
 {
-  mReport += QLatin1String( "<h2>Shapeburst symbol renderer blur test</h2>\n" );
   mShapeburstFill->setBlurRadius( 17 );
   QVERIFY( imageCheck( "shapeburst_blur" ) );
   mShapeburstFill->setBlurRadius( 0 );
@@ -177,28 +159,25 @@ void TestQgsShapeburst::shapeburstBlur()
 
 void TestQgsShapeburst::shapeburstMaxDistanceMm()
 {
-  mReport += QLatin1String( "<h2>Shapeburst symbol renderer maximum distance MM </h2>\n" );
   mShapeburstFill->setUseWholeShape( false );
   mShapeburstFill->setMaxDistance( 3 );
-  mShapeburstFill->setDistanceUnit( QgsUnitTypes::RenderMillimeters );
+  mShapeburstFill->setDistanceUnit( Qgis::RenderUnit::Millimeters );
   QVERIFY( imageCheck( "shapeburst_maxdistance_mm" ) );
   mShapeburstFill->setUseWholeShape( true );
 }
 
 void TestQgsShapeburst::shapeburstMaxDistanceMapUnits()
 {
-  mReport += QLatin1String( "<h2>Shapeburst symbol renderer maximum distance map units</h2>\n" );
   mShapeburstFill->setUseWholeShape( false );
   mShapeburstFill->setMaxDistance( 10 );
-  mShapeburstFill->setDistanceUnit( QgsUnitTypes::RenderMapUnits );
+  mShapeburstFill->setDistanceUnit( Qgis::RenderUnit::MapUnits );
   QVERIFY( imageCheck( "shapeburst_maxdistance_mapunit" ) );
   mShapeburstFill->setUseWholeShape( true );
-  mShapeburstFill->setDistanceUnit( QgsUnitTypes::RenderMillimeters );
+  mShapeburstFill->setDistanceUnit( Qgis::RenderUnit::Millimeters );
 }
 
 void TestQgsShapeburst::shapeburstIgnoreRings()
 {
-  mReport += QLatin1String( "<h2>Shapeburst symbol renderer ignore rings</h2>\n" );
   mShapeburstFill->setIgnoreRings( true );
   QVERIFY( imageCheck( "shapeburst_ignorerings" ) );
   mShapeburstFill->setIgnoreRings( false );
@@ -206,10 +185,9 @@ void TestQgsShapeburst::shapeburstIgnoreRings()
 
 void TestQgsShapeburst::shapeburstSymbolFromQml()
 {
-  mReport += QLatin1String( "<h2>Shapeburst symbol from QML test</h2>\n" );
   QVERIFY( setQml( "shapeburst" ) );
   QgsVectorSimplifyMethod simplifyMethod;
-  simplifyMethod.setSimplifyHints( QgsVectorSimplifyMethod::NoSimplification );
+  simplifyMethod.setSimplifyHints( Qgis::VectorRenderingSimplificationFlags() );
   mpPolysLayer->setSimplifyMethod( simplifyMethod );
   QVERIFY( imageCheck( "shapeburst_from_qml" ) );
 }

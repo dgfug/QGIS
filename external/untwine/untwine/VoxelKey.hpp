@@ -10,6 +10,9 @@
  *                                                                           *
  ****************************************************************************/
 
+#include <cstdint>
+#include <string>
+#include <algorithm>
 
 #pragma once
 

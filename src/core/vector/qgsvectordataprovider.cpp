@@ -15,11 +15,10 @@
 
 #include <QTextCodec>
 
-#include <cfloat>
-#include <climits>
 #include <limits>
 
 #include "qgsvectordataprovider.h"
+#include "moc_qgsvectordataprovider.cpp"
 #include "qgscircularstring.h"
 #include "qgscompoundcurve.h"
 #include "qgsfeature.h"
@@ -32,28 +31,34 @@
 #include "qgsgeometryfactory.h"
 #include "qgslogger.h"
 #include "qgsmessagelog.h"
-#include "qgssettings.h"
 #include "qgsogrproxytextcodec.h"
+#include "qgsthreadingutils.h"
 #include <mutex>
+#include "qgsdataproviderelevationproperties.h"
 
 QgsVectorDataProvider::QgsVectorDataProvider( const QString &uri, const ProviderOptions &options,
-    QgsDataProvider::ReadFlags flags )
+    Qgis::DataProviderReadFlags flags )
   : QgsDataProvider( uri, options, flags )
   , mTemporalCapabilities( std::make_unique< QgsVectorDataProviderTemporalCapabilities >() )
+  , mElevationProperties( std::make_unique< QgsDataProviderElevationProperties >() )
 {
 }
 
 QString QgsVectorDataProvider::storageType() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QStringLiteral( "Generic vector file" );
 }
 
 bool QgsVectorDataProvider::empty() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QgsFeature f;
   QgsFeatureRequest request;
   request.setNoAttributes();
-  request.setFlags( QgsFeatureRequest::NoGeometry );
+  request.setFlags( Qgis::FeatureRequestFlag::NoGeometry );
   request.setLimit( 1 );
   if ( getFeatures( request ).nextFeature( f ) )
     return false;
@@ -63,39 +68,60 @@ bool QgsVectorDataProvider::empty() const
 
 bool QgsVectorDataProvider::isSqlQuery() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return vectorLayerTypeFlags().testFlag( Qgis::VectorLayerTypeFlag::SqlQuery );
 }
 
 Qgis::VectorLayerTypeFlags QgsVectorDataProvider::vectorLayerTypeFlags() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return Qgis::VectorLayerTypeFlags();
 }
 
-QgsFeatureSource::FeatureAvailability QgsVectorDataProvider::hasFeatures() const
+Qgis::FeatureAvailability QgsVectorDataProvider::hasFeatures() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   if ( empty() )
-    return QgsFeatureSource::FeatureAvailability::NoFeaturesAvailable;
+    return Qgis::FeatureAvailability::NoFeaturesAvailable;
   else
-    return QgsFeatureSource::FeatureAvailability::FeaturesAvailable;
+    return Qgis::FeatureAvailability::FeaturesAvailable;
 }
 
 QgsCoordinateReferenceSystem QgsVectorDataProvider::sourceCrs() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return crs();
 }
 
 QgsRectangle QgsVectorDataProvider::sourceExtent() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return extent();
+}
+
+QgsBox3D QgsVectorDataProvider::sourceExtent3D() const
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  return extent3D();
 }
 
 QString QgsVectorDataProvider::dataComment() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QString();
 }
 
 bool QgsVectorDataProvider::addFeatures( QgsFeatureList &flist, Flags flags )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( flist )
   Q_UNUSED( flags )
   return false;
@@ -103,22 +129,28 @@ bool QgsVectorDataProvider::addFeatures( QgsFeatureList &flist, Flags flags )
 
 QString QgsVectorDataProvider::lastError() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mErrors.isEmpty() ? QString() : mErrors.last();
 }
 
 bool QgsVectorDataProvider::deleteFeatures( const QgsFeatureIds &ids )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( ids )
   return false;
 }
 
 bool QgsVectorDataProvider::truncate()
 {
-  if ( !( capabilities() & DeleteFeatures ) )
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  if ( !( capabilities() & Qgis::VectorProviderCapability::DeleteFeatures ) )
     return false;
 
   QgsFeatureIds toDelete;
-  QgsFeatureIterator it = getFeatures( QgsFeatureRequest().setFlags( QgsFeatureRequest::NoGeometry ).setNoAttributes() );
+  QgsFeatureIterator it = getFeatures( QgsFeatureRequest().setFlags( Qgis::FeatureRequestFlag::NoGeometry ).setNoAttributes() );
   QgsFeature f;
   while ( it.nextFeature( f ) )
     toDelete << f.id();
@@ -128,42 +160,56 @@ bool QgsVectorDataProvider::truncate()
 
 bool QgsVectorDataProvider::addAttributes( const QList<QgsField> &attributes )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( attributes )
   return false;
 }
 
 bool QgsVectorDataProvider::deleteAttributes( const QgsAttributeIds &attributes )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( attributes )
   return false;
 }
 
 bool QgsVectorDataProvider::renameAttributes( const QgsFieldNameMap &renamedAttributes )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( renamedAttributes )
   return false;
 }
 
 bool QgsVectorDataProvider::changeAttributeValues( const QgsChangedAttributesMap &attr_map )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( attr_map )
   return false;
 }
 
 QVariant QgsVectorDataProvider::defaultValue( int fieldId ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( fieldId )
   return QVariant();
 }
 
 QString QgsVectorDataProvider::defaultValueClause( int fieldIndex ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( fieldIndex )
   return QString();
 }
 
 QgsFieldConstraints::Constraints QgsVectorDataProvider::fieldConstraints( int fieldIndex ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   const QgsFields f = fields();
   if ( fieldIndex < 0 || fieldIndex >= f.count() )
     return QgsFieldConstraints::Constraints();
@@ -173,11 +219,15 @@ QgsFieldConstraints::Constraints QgsVectorDataProvider::fieldConstraints( int fi
 
 bool QgsVectorDataProvider::skipConstraintCheck( int, QgsFieldConstraints::Constraint, const QVariant & ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return false;
 }
 
 bool QgsVectorDataProvider::changeGeometryValues( const QgsGeometryMap &geometry_map )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( geometry_map )
   return false;
 }
@@ -185,7 +235,9 @@ bool QgsVectorDataProvider::changeGeometryValues( const QgsGeometryMap &geometry
 bool QgsVectorDataProvider::changeFeatures( const QgsChangedAttributesMap &attr_map,
     const QgsGeometryMap &geometry_map )
 {
-  if ( !( capabilities() & ChangeAttributeValues ) || !( capabilities() & ChangeGeometries ) )
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  if ( !( capabilities() & Qgis::VectorProviderCapability::ChangeAttributeValues ) || !( capabilities() & Qgis::VectorProviderCapability::ChangeGeometries ) )
     return false;
 
   bool result = true;
@@ -196,23 +248,39 @@ bool QgsVectorDataProvider::changeFeatures( const QgsChangedAttributesMap &attr_
 
 bool QgsVectorDataProvider::createSpatialIndex()
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return false;
 }
 
 bool QgsVectorDataProvider::createAttributeIndex( int field )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Q_UNUSED( field )
   return true;
 }
 
-QgsVectorDataProvider::Capabilities QgsVectorDataProvider::capabilities() const
+Qgis::VectorProviderCapabilities QgsVectorDataProvider::capabilities() const
 {
-  return QgsVectorDataProvider::NoCapabilities;
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  return Qgis::VectorProviderCapability::NoCapabilities;
 }
 
 void QgsVectorDataProvider::setEncoding( const QString &e )
 {
-  mEncoding = QTextCodec::codecForName( e.toLocal8Bit().constData() );
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  // Use UTF-8 if no encoding is specified
+  if ( e.isEmpty() )
+  {
+    mEncoding = QTextCodec::codecForName( "UTF-8" );
+  }
+  else
+  {
+    mEncoding = QTextCodec::codecForName( e.toLocal8Bit().constData() );
+  }
   if ( !mEncoding && e != QLatin1String( "System" ) )
   {
     if ( !e.isEmpty() )
@@ -241,6 +309,8 @@ void QgsVectorDataProvider::setEncoding( const QString &e )
 
 QString QgsVectorDataProvider::encoding() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   if ( mEncoding )
   {
     return mEncoding->name();
@@ -251,87 +321,89 @@ QString QgsVectorDataProvider::encoding() const
 
 QString QgsVectorDataProvider::capabilitiesString() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QStringList abilitiesList;
 
-  const int abilities = capabilities();
+  const Qgis::VectorProviderCapabilities abilities = capabilities();
 
-  if ( abilities & QgsVectorDataProvider::AddFeatures )
+  if ( abilities & Qgis::VectorProviderCapability::AddFeatures )
   {
     abilitiesList += tr( "Add Features" );
   }
 
-  if ( abilities & QgsVectorDataProvider::DeleteFeatures )
+  if ( abilities & Qgis::VectorProviderCapability::DeleteFeatures )
   {
     abilitiesList += tr( "Delete Features" );
   }
 
-  if ( abilities & QgsVectorDataProvider::ChangeAttributeValues )
+  if ( abilities & Qgis::VectorProviderCapability::ChangeAttributeValues )
   {
     abilitiesList += tr( "Change Attribute Values" );
   }
 
-  if ( abilities & QgsVectorDataProvider::AddAttributes )
+  if ( abilities & Qgis::VectorProviderCapability::AddAttributes )
   {
     abilitiesList += tr( "Add Attributes" );
   }
 
-  if ( abilities & QgsVectorDataProvider::DeleteAttributes )
+  if ( abilities & Qgis::VectorProviderCapability::DeleteAttributes )
   {
     abilitiesList += tr( "Delete Attributes" );
   }
 
-  if ( abilities & QgsVectorDataProvider::RenameAttributes )
+  if ( abilities & Qgis::VectorProviderCapability::RenameAttributes )
   {
     abilitiesList += tr( "Rename Attributes" );
   }
 
-  if ( abilities & QgsVectorDataProvider::CreateSpatialIndex )
+  if ( abilities & Qgis::VectorProviderCapability::CreateSpatialIndex )
   {
     // TODO: Tighten up this test.  See QgsOgrProvider for details.
     abilitiesList += tr( "Create Spatial Index" );
   }
 
-  if ( abilities & QgsVectorDataProvider::CreateAttributeIndex )
+  if ( abilities & Qgis::VectorProviderCapability::CreateAttributeIndex )
   {
     abilitiesList += tr( "Create Attribute Indexes" );
   }
 
-  if ( abilities & QgsVectorDataProvider::SelectAtId )
+  if ( abilities & Qgis::VectorProviderCapability::SelectAtId )
   {
     abilitiesList += tr( "Fast Access to Features at ID" );
   }
 
-  if ( abilities & QgsVectorDataProvider::ChangeGeometries )
+  if ( abilities & Qgis::VectorProviderCapability::ChangeGeometries )
   {
     abilitiesList += tr( "Change Geometries" );
   }
 
-  if ( abilities & QgsVectorDataProvider::SimplifyGeometries )
+  if ( abilities & Qgis::VectorProviderCapability::SimplifyGeometries )
   {
     abilitiesList += tr( "Presimplify Geometries" );
   }
 
-  if ( abilities & QgsVectorDataProvider::SimplifyGeometriesWithTopologicalValidation )
+  if ( abilities & Qgis::VectorProviderCapability::SimplifyGeometriesWithTopologicalValidation )
   {
     abilitiesList += tr( "Presimplify Geometries with Validity Check" );
   }
 
-  if ( abilities & QgsVectorDataProvider::ChangeFeatures )
+  if ( abilities & Qgis::VectorProviderCapability::ChangeFeatures )
   {
     abilitiesList += tr( "Simultaneous Geometry and Attribute Updates" );
   }
 
-  if ( abilities & QgsVectorDataProvider::TransactionSupport )
+  if ( abilities & Qgis::VectorProviderCapability::TransactionSupport )
   {
     abilitiesList += tr( "Transactions" );
   }
 
-  if ( abilities & QgsVectorDataProvider::CircularGeometries )
+  if ( abilities & Qgis::VectorProviderCapability::CircularGeometries )
   {
     abilitiesList += tr( "Curved Geometries" );
   }
 
-  if ( abilities & QgsVectorDataProvider::FeatureSymbology )
+  if ( abilities & Qgis::VectorProviderCapability::FeatureSymbology )
   {
     abilitiesList += tr( "Feature Symbology" );
   }
@@ -339,14 +411,22 @@ QString QgsVectorDataProvider::capabilitiesString() const
   return abilitiesList.join( QLatin1String( ", " ) );
 }
 
+Qgis::VectorDataProviderAttributeEditCapabilities QgsVectorDataProvider::attributeEditCapabilities() const
+{
+  return Qgis::VectorDataProviderAttributeEditCapabilities();
+}
 
 int QgsVectorDataProvider::fieldNameIndex( const QString &fieldName ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return fields().lookupField( fieldName );
 }
 
 QMap<QString, int> QgsVectorDataProvider::fieldNameMap() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QMap<QString, int> resultMap;
 
   const QgsFields fieldsCopy = fields();
@@ -360,26 +440,43 @@ QMap<QString, int> QgsVectorDataProvider::fieldNameMap() const
 
 QgsAttributeList QgsVectorDataProvider::attributeIndexes() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return fields().allAttributesList();
 }
 
 QgsAttributeList QgsVectorDataProvider::pkAttributeIndexes() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QgsAttributeList();
+}
+
+QString QgsVectorDataProvider::geometryColumnName() const
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  return QString();
 }
 
 QList<QgsVectorDataProvider::NativeType> QgsVectorDataProvider::nativeTypes() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mNativeTypes;
 }
 
 QgsAttrPalIndexNameHash QgsVectorDataProvider::palAttributeIndexNames() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QgsAttrPalIndexNameHash();
 }
 
 bool QgsVectorDataProvider::supportedType( const QgsField &field ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QgsDebugMsgLevel( QStringLiteral( "field name = %1 type = %2 length = %3 precision = %4" )
                     .arg( field.name(),
                           QVariant::typeToName( field.type() ) )
@@ -424,15 +521,17 @@ bool QgsVectorDataProvider::supportedType( const QgsField &field ) const
     return true;
   }
 
-  QgsDebugMsg( QStringLiteral( "no sufficient native type found" ) );
+  QgsDebugError( QStringLiteral( "no sufficient native type found" ) );
   return false;
 }
 
 QVariant QgsVectorDataProvider::minimumValue( int index ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   if ( index < 0 || index >= fields().count() )
   {
-    QgsDebugMsg( "Warning: access requested to invalid field index: " + QString::number( index ) );
+    QgsDebugError( "Warning: access requested to invalid field index: " + QString::number( index ) );
     return QVariant();
   }
 
@@ -446,9 +545,11 @@ QVariant QgsVectorDataProvider::minimumValue( int index ) const
 
 QVariant QgsVectorDataProvider::maximumValue( int index ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   if ( index < 0 || index >= fields().count() )
   {
-    QgsDebugMsg( "Warning: access requested to invalid field index: " + QString::number( index ) );
+    QgsDebugError( "Warning: access requested to invalid field index: " + QString::number( index ) );
     return QVariant();
   }
 
@@ -460,9 +561,10 @@ QVariant QgsVectorDataProvider::maximumValue( int index ) const
   return mCacheMaxValues[index];
 }
 
-
 QStringList QgsVectorDataProvider::uniqueStringsMatching( int index, const QString &substring, int limit, QgsFeedback *feedback ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QStringList results;
 
   // Safety belt
@@ -475,7 +577,7 @@ QStringList QgsVectorDataProvider::uniqueStringsMatching( int index, const QStri
 
   QgsFeatureRequest request;
   request.setSubsetOfAttributes( keys );
-  request.setFlags( QgsFeatureRequest::NoGeometry );
+  request.setFlags( Qgis::FeatureRequestFlag::NoGeometry );
   const QString fieldName = fields().at( index ).name();
   request.setFilterExpression( QStringLiteral( "\"%1\" ILIKE '%%2%'" ).arg( fieldName, substring ) );
   QgsFeatureIterator fi = getFeatures( request );
@@ -497,9 +599,12 @@ QStringList QgsVectorDataProvider::uniqueStringsMatching( int index, const QStri
   return results;
 }
 
-QVariant QgsVectorDataProvider::aggregate( QgsAggregateCalculator::Aggregate aggregate, int index,
+QVariant QgsVectorDataProvider::aggregate( Qgis::Aggregate aggregate, int index,
     const QgsAggregateCalculator::AggregateParameters &parameters, QgsExpressionContext *context, bool &ok, QgsFeatureIds *fids ) const
 {
+  // non fatal for now -- the "aggregate" functions are not thread safe and call this
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS_NON_FATAL
+
   //base implementation does nothing
   Q_UNUSED( aggregate )
   Q_UNUSED( index )
@@ -513,6 +618,8 @@ QVariant QgsVectorDataProvider::aggregate( QgsAggregateCalculator::Aggregate agg
 
 void QgsVectorDataProvider::clearMinMaxCache()
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   mCacheMinMaxDirty = true;
   mCacheMinValues.clear();
   mCacheMaxValues.clear();
@@ -520,23 +627,25 @@ void QgsVectorDataProvider::clearMinMaxCache()
 
 void QgsVectorDataProvider::fillMinMaxCache() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   if ( !mCacheMinMaxDirty )
     return;
 
   const QgsFields flds = fields();
   for ( int i = 0; i < flds.count(); ++i )
   {
-    if ( flds.at( i ).type() == QVariant::Int )
+    if ( flds.at( i ).type() == QMetaType::Type::Int )
     {
       mCacheMinValues[i] = QVariant( std::numeric_limits<int>::max() );
       mCacheMaxValues[i] = QVariant( std::numeric_limits<int>::lowest() );
     }
-    else if ( flds.at( i ).type() == QVariant::LongLong )
+    else if ( flds.at( i ).type() == QMetaType::Type::LongLong )
     {
       mCacheMinValues[i] = QVariant( std::numeric_limits<qlonglong>::max() );
       mCacheMaxValues[i] = QVariant( std::numeric_limits<qlonglong>::lowest() );
     }
-    else if ( flds.at( i ).type() == QVariant::Double )
+    else if ( flds.at( i ).type() == QMetaType::Type::Double )
     {
       mCacheMinValues[i] = QVariant( std::numeric_limits<double>::max() );
       mCacheMaxValues[i] = QVariant( std::numeric_limits<double>::lowest() );
@@ -552,7 +661,7 @@ void QgsVectorDataProvider::fillMinMaxCache() const
   QgsFeature f;
   const QgsAttributeList keys = mCacheMinValues.keys();
   QgsFeatureIterator fi = getFeatures( QgsFeatureRequest().setSubsetOfAttributes( keys )
-                                       .setFlags( QgsFeatureRequest::NoGeometry ) );
+                                       .setFlags( Qgis::FeatureRequestFlag::NoGeometry ) );
 
   while ( fi.nextFeature( f ) )
   {
@@ -561,12 +670,12 @@ void QgsVectorDataProvider::fillMinMaxCache() const
     {
       const QVariant &varValue = attrs.at( attributeIndex );
 
-      if ( varValue.isNull() )
+      if ( QgsVariantUtils::isNull( varValue ) )
         continue;
 
       switch ( flds.at( attributeIndex ).type() )
       {
-        case QVariant::Int:
+        case QMetaType::Type::Int:
         {
           const int value = varValue.toInt();
           if ( value < mCacheMinValues[ attributeIndex ].toInt() )
@@ -575,7 +684,7 @@ void QgsVectorDataProvider::fillMinMaxCache() const
             mCacheMaxValues[ attributeIndex ] = value;
           break;
         }
-        case QVariant::LongLong:
+        case QMetaType::Type::LongLong:
         {
           const qlonglong value = varValue.toLongLong();
           if ( value < mCacheMinValues[ attributeIndex ].toLongLong() )
@@ -584,7 +693,7 @@ void QgsVectorDataProvider::fillMinMaxCache() const
             mCacheMaxValues[ attributeIndex ] = value;
           break;
         }
-        case QVariant::Double:
+        case QMetaType::Type::Double:
         {
           const double value = varValue.toDouble();
           if ( value < mCacheMinValues[ attributeIndex ].toDouble() )
@@ -593,7 +702,7 @@ void QgsVectorDataProvider::fillMinMaxCache() const
             mCacheMaxValues[ attributeIndex ] = value;
           break;
         }
-        case QVariant::DateTime:
+        case QMetaType::Type::QDateTime:
         {
           const QDateTime value = varValue.toDateTime();
           if ( value < mCacheMinValues[ attributeIndex ].toDateTime() || !mCacheMinValues[ attributeIndex ].isValid() )
@@ -602,7 +711,7 @@ void QgsVectorDataProvider::fillMinMaxCache() const
             mCacheMaxValues[ attributeIndex ] = value;
           break;
         }
-        case QVariant::Date:
+        case QMetaType::Type::QDate:
         {
           const QDate value = varValue.toDate();
           if ( value < mCacheMinValues[ attributeIndex ].toDate() || !mCacheMinValues[ attributeIndex ].isValid() )
@@ -611,7 +720,7 @@ void QgsVectorDataProvider::fillMinMaxCache() const
             mCacheMaxValues[ attributeIndex ] = value;
           break;
         }
-        case QVariant::Time:
+        case QMetaType::Type::QTime:
         {
           const QTime value = varValue.toTime();
           if ( value < mCacheMinValues[ attributeIndex ].toTime() || !mCacheMinValues[ attributeIndex ].isValid() )
@@ -623,11 +732,11 @@ void QgsVectorDataProvider::fillMinMaxCache() const
         default:
         {
           const QString value = varValue.toString();
-          if ( mCacheMinValues[ attributeIndex ].isNull() || value < mCacheMinValues[attributeIndex ].toString() )
+          if ( QgsVariantUtils::isNull( mCacheMinValues[ attributeIndex ] ) || value < mCacheMinValues[attributeIndex ].toString() )
           {
             mCacheMinValues[attributeIndex] = value;
           }
-          if ( mCacheMaxValues[attributeIndex].isNull() || value > mCacheMaxValues[attributeIndex].toString() )
+          if ( QgsVariantUtils::isNull( mCacheMaxValues[attributeIndex] ) || value > mCacheMaxValues[attributeIndex].toString() )
           {
             mCacheMaxValues[attributeIndex] = value;
           }
@@ -640,24 +749,36 @@ void QgsVectorDataProvider::fillMinMaxCache() const
   mCacheMinMaxDirty = false;
 }
 
-QVariant QgsVectorDataProvider::convertValue( QVariant::Type type, const QString &value )
+QVariant QgsVectorDataProvider::convertValue( QMetaType::Type type, const QString &value )
 {
   QVariant v( value );
 
   if ( !v.convert( type ) || value.isNull() )
-    v = QVariant( type );
+    v = QgsVariantUtils::createNullVariant( type );
 
   return v;
 }
 
+QVariant QgsVectorDataProvider::convertValue( QVariant::Type type, const QString &value )
+{
+  return convertValue( QgsVariantUtils::variantTypeToMetaType( type ), value );
+}
+
 QgsTransaction *QgsVectorDataProvider::transaction() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return nullptr;
 }
 
 static bool _compareEncodings( const QString &s1, const QString &s2 )
 {
   return s1.toLower() < s2.toLower();
+}
+
+static bool _removeDuplicateEncodings( const QString &s1, const QString &s2 )
+{
+  return s1.compare( s2, Qt::CaseInsensitive ) == 0;
 }
 
 QStringList QgsVectorDataProvider::availableEncodings()
@@ -718,8 +839,10 @@ QStringList QgsVectorDataProvider::availableEncodings()
     smEncodings << "System";
 #endif
 
-    // Do case-insensitive sorting of encodings
+    // Do case-insensitive sorting of encodings then remove duplicates
     std::sort( sEncodings.begin(), sEncodings.end(), _compareEncodings );
+    const auto last = std::unique( sEncodings.begin(), sEncodings.end(), _removeDuplicateEncodings );
+    sEncodings.erase( last, sEncodings.end() );
 
   } );
 
@@ -728,68 +851,95 @@ QStringList QgsVectorDataProvider::availableEncodings()
 
 void QgsVectorDataProvider::clearErrors()
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   mErrors.clear();
 }
 
 bool QgsVectorDataProvider::hasErrors() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return !mErrors.isEmpty();
 }
 
 QStringList QgsVectorDataProvider::errors() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mErrors;
-}
-
-bool QgsVectorDataProvider::isSaveAndLoadStyleToDatabaseSupported() const
-{
-  return false;
-}
-
-bool QgsVectorDataProvider::isDeleteStyleFromDatabaseSupported() const
-{
-  return false;
 }
 
 QgsFeatureRenderer *QgsVectorDataProvider::createRenderer( const QVariantMap & ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return nullptr;
 }
 
 QgsAbstractVectorLayerLabeling *QgsVectorDataProvider::createLabeling( const QVariantMap & ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return nullptr;
 }
 
 void QgsVectorDataProvider::pushError( const QString &msg ) const
 {
-  QgsDebugMsg( msg );
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  QgsDebugError( msg );
   mErrors << msg;
   emit raiseError( msg );
 }
 
 QSet<QgsMapLayerDependency> QgsVectorDataProvider::dependencies() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QSet<QgsMapLayerDependency>();
 }
 
 QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geom ) const
 {
-  if ( geom.isNull() )
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  // Call the static version
+  return QgsVectorDataProvider::convertToProviderType( geom, wkbType() );
+
+}
+
+void QgsVectorDataProvider::setNativeTypes( const QList<NativeType> &nativeTypes )
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  mNativeTypes = nativeTypes;
+}
+
+QTextCodec *QgsVectorDataProvider::textEncoding() const
+{
+  // non fatal for now -- the "rasterize" processing algorithm is not thread safe and calls this
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS_NON_FATAL
+
+  return mEncoding;
+}
+
+QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geometry, Qgis::WkbType providerGeometryType )
+{
+  if ( geometry.isNull() )
   {
     return QgsGeometry();
   }
 
-  const QgsAbstractGeometry *geometry = geom.constGet();
-  if ( !geometry )
+  const QgsAbstractGeometry *convertedGeometry = geometry.constGet();
+  if ( !convertedGeometry )
   {
     return QgsGeometry();
   }
 
-  const QgsWkbTypes::Type providerGeomType = wkbType();
 
   //geom is already in the provider geometry type
-  if ( geometry->wkbType() == providerGeomType )
+  if ( convertedGeometry->wkbType() == providerGeometryType )
   {
     return QgsGeometry();
   }
@@ -797,9 +947,9 @@ QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geo
   std::unique_ptr< QgsAbstractGeometry > outputGeom;
 
   //convert compoundcurve to circularstring (possible if compoundcurve consists of one circular string)
-  if ( QgsWkbTypes::flatType( providerGeomType ) == QgsWkbTypes::CircularString )
+  if ( QgsWkbTypes::flatType( providerGeometryType ) == Qgis::WkbType::CircularString )
   {
-    QgsCompoundCurve *compoundCurve = qgsgeometry_cast<QgsCompoundCurve *>( geometry );
+    QgsCompoundCurve *compoundCurve = qgsgeometry_cast<QgsCompoundCurve *>( convertedGeometry );
     if ( compoundCurve )
     {
       if ( compoundCurve->nCurves() == 1 )
@@ -814,9 +964,9 @@ QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geo
   }
 
   //convert to curved type if necessary
-  if ( !QgsWkbTypes::isCurvedType( geometry->wkbType() ) && QgsWkbTypes::isCurvedType( providerGeomType ) )
+  if ( !QgsWkbTypes::isCurvedType( convertedGeometry->wkbType() ) && QgsWkbTypes::isCurvedType( providerGeometryType ) )
   {
-    QgsAbstractGeometry *curveGeom = outputGeom ? outputGeom->toCurveType() : geometry->toCurveType();
+    QgsAbstractGeometry *curveGeom = outputGeom ? outputGeom->toCurveType() : convertedGeometry->toCurveType();
     if ( curveGeom )
     {
       outputGeom.reset( curveGeom );
@@ -824,9 +974,9 @@ QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geo
   }
 
   //convert to linear type from curved type
-  if ( QgsWkbTypes::isCurvedType( geometry->wkbType() ) && !QgsWkbTypes::isCurvedType( providerGeomType ) )
+  if ( QgsWkbTypes::isCurvedType( convertedGeometry->wkbType() ) && !QgsWkbTypes::isCurvedType( providerGeometryType ) )
   {
-    QgsAbstractGeometry *segmentizedGeom = outputGeom ? outputGeom->segmentize() : geometry->segmentize();
+    QgsAbstractGeometry *segmentizedGeom = outputGeom ? outputGeom->segmentize() : convertedGeometry->segmentize();
     if ( segmentizedGeom )
     {
       outputGeom.reset( segmentizedGeom );
@@ -834,13 +984,13 @@ QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geo
   }
 
   //convert to multitype if necessary
-  if ( QgsWkbTypes::isMultiType( providerGeomType ) && !QgsWkbTypes::isMultiType( geometry->wkbType() ) )
+  if ( QgsWkbTypes::isMultiType( providerGeometryType ) && !QgsWkbTypes::isMultiType( convertedGeometry->wkbType() ) )
   {
-    std::unique_ptr< QgsAbstractGeometry > collGeom( QgsGeometryFactory::geomFromWkbType( providerGeomType ) );
+    std::unique_ptr< QgsAbstractGeometry > collGeom( QgsGeometryFactory::geomFromWkbType( providerGeometryType ) );
     QgsGeometryCollection *geomCollection = qgsgeometry_cast<QgsGeometryCollection *>( collGeom.get() );
     if ( geomCollection )
     {
-      if ( geomCollection->addGeometry( outputGeom ? outputGeom->clone() : geometry->clone() ) )
+      if ( geomCollection->addGeometry( outputGeom ? outputGeom->clone() : convertedGeometry->clone() ) )
       {
         outputGeom.reset( collGeom.release() );
       }
@@ -848,15 +998,15 @@ QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geo
   }
 
   //convert to single type if there's a single part of compatible type
-  if ( !QgsWkbTypes::isMultiType( providerGeomType ) && QgsWkbTypes::isMultiType( geometry->wkbType() ) )
+  if ( !QgsWkbTypes::isMultiType( providerGeometryType ) && QgsWkbTypes::isMultiType( convertedGeometry->wkbType() ) )
   {
-    const QgsGeometryCollection *collection = qgsgeometry_cast<const QgsGeometryCollection *>( geometry );
+    const QgsGeometryCollection *collection = qgsgeometry_cast<const QgsGeometryCollection *>( convertedGeometry );
     if ( collection )
     {
       if ( collection->numGeometries() == 1 )
       {
         const QgsAbstractGeometry *firstGeom = collection->geometryN( 0 );
-        if ( firstGeom && firstGeom->wkbType() == providerGeomType )
+        if ( firstGeom && firstGeom->wkbType() == providerGeometryType )
         {
           outputGeom.reset( firstGeom->clone() );
         }
@@ -865,20 +1015,20 @@ QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geo
   }
 
   //set z/m types
-  if ( QgsWkbTypes::hasZ( providerGeomType ) )
+  if ( QgsWkbTypes::hasZ( providerGeometryType ) )
   {
     if ( !outputGeom )
     {
-      outputGeom.reset( geometry->clone() );
+      outputGeom.reset( convertedGeometry->clone() );
     }
     outputGeom->addZValue();
   }
 
-  if ( QgsWkbTypes::hasM( providerGeomType ) )
+  if ( QgsWkbTypes::hasM( providerGeometryType ) )
   {
     if ( !outputGeom )
     {
-      outputGeom.reset( geometry->clone() );
+      outputGeom.reset( convertedGeometry->clone() );
     }
     outputGeom->addMValue();
   }
@@ -891,18 +1041,10 @@ QgsGeometry QgsVectorDataProvider::convertToProviderType( const QgsGeometry &geo
   return QgsGeometry();
 }
 
-void QgsVectorDataProvider::setNativeTypes( const QList<NativeType> &nativeTypes )
-{
-  mNativeTypes = nativeTypes;
-}
-
-QTextCodec *QgsVectorDataProvider::textEncoding() const
-{
-  return mEncoding;
-}
-
 bool QgsVectorDataProvider::cancelReload()
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return false;
 }
 
@@ -910,20 +1052,41 @@ QStringList QgsVectorDataProvider::sEncodings;
 
 QList<QgsRelation> QgsVectorDataProvider::discoverRelations( const QgsVectorLayer *, const QList<QgsVectorLayer *> & ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QList<QgsRelation>();
 }
 
 void QgsVectorDataProvider::handlePostCloneOperations( QgsVectorDataProvider * )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
 
 }
 
 QgsVectorDataProviderTemporalCapabilities *QgsVectorDataProvider::temporalCapabilities()
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mTemporalCapabilities.get();
 }
 
 const QgsVectorDataProviderTemporalCapabilities *QgsVectorDataProvider::temporalCapabilities() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mTemporalCapabilities.get();
+}
+
+QgsDataProviderElevationProperties *QgsVectorDataProvider::elevationProperties()
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  return mElevationProperties.get();
+}
+
+const QgsDataProviderElevationProperties *QgsVectorDataProvider::elevationProperties() const
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  return mElevationProperties.get();
 }

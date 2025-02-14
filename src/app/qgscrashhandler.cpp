@@ -28,11 +28,11 @@
 #include <QStandardPaths>
 #include <QUuid>
 
+QString QgsCrashHandler::sPythonCrashLogFile;
+
 #ifdef _MSC_VER
 LONG WINAPI QgsCrashHandler::handle( LPEXCEPTION_POINTERS exception )
 {
-  QgsDebugMsg( QStringLiteral( "CRASH!!!" ) );
-
   DWORD processID = GetCurrentProcessId();
   DWORD threadID = GetCurrentThreadId();
 
@@ -40,20 +40,33 @@ LONG WINAPI QgsCrashHandler::handle( LPEXCEPTION_POINTERS exception )
   if ( !QgsApplication::isRunningFromBuildDir() )
   {
     symbolPath = QStringLiteral( "%1\\pdb;http://msdl.microsoft.com/download/symbols;http://download.osgeo.org/osgeo4w/%2/symstores/%3" )
-                 .arg( getenv( "QGIS_PREFIX_PATH" ) )
-                 .arg( QSysInfo::WordSize == 64 ? QStringLiteral( "x86_64" ) : QStringLiteral( "x86" ) )
-                 .arg( QFileInfo( getenv( "QGIS_PREFIX_PATH" ) ).baseName() );
+                   .arg( getenv( "QGIS_PREFIX_PATH" ) )
+                   .arg( QSysInfo::WordSize == 64 ? QStringLiteral( "x86_64" ) : QStringLiteral( "x86" ) )
+                   .arg( QFileInfo( getenv( "QGIS_PREFIX_PATH" ) ).baseName() );
   }
   else
   {
     symbolPath = QStringLiteral( "%1;%2;http://msdl.microsoft.com/download/symbols" )
-                 .arg( getenv( "QGIS_PDB_PATH" ) )
-                 .arg( QgsApplication::applicationDirPath() );
+                   .arg( getenv( "QGIS_PDB_PATH" ) )
+                   .arg( QgsApplication::applicationDirPath() );
   }
 
-  QString ptrStr = QString( "0x%1" ).arg( ( quintptr )exception, QT_POINTER_SIZE * 2, 16, QChar( '0' ) );
+  QString ptrStr = QString( "0x%1" ).arg( ( quintptr ) exception, QT_POINTER_SIZE * 2, 16, QChar( '0' ) );
+
+  handleCrash( processID, threadID, symbolPath, ptrStr );
+  return TRUE;
+}
+#else
+void QgsCrashHandler::handle( int )
+{
+  handleCrash( QCoreApplication::applicationPid(), 0, QString(), QString() );
+}
+#endif
+
+void QgsCrashHandler::handleCrash( int processID, int threadID, const QString &symbolPath, const QString &ptrStr )
+{
   QString fileName = QStandardPaths::standardLocations( QStandardPaths::TempLocation ).at( 0 ) + "/qgis-crash-info-" + QString::number( processID );
-  QgsDebugMsg( fileName );
+  QgsDebugMsgLevel( fileName, 2 );
 
   QStringList arguments;
   arguments = QCoreApplication::arguments();
@@ -70,7 +83,8 @@ LONG WINAPI QgsCrashHandler::handle( LPEXCEPTION_POINTERS exception )
   if ( QString( Qgis::devVersion() ) == QLatin1String( "exported" ) )
   {
     reportData.append( QStringLiteral( "QGIS code branch: Release %1.%2" )
-                       .arg( Qgis::versionInt() / 10000 ).arg( Qgis::versionInt() / 100 % 100 ) );
+                         .arg( Qgis::versionInt() / 10000 )
+                         .arg( Qgis::versionInt() / 100 % 100 ) );
   }
   else
   {
@@ -87,12 +101,13 @@ LONG WINAPI QgsCrashHandler::handle( LPEXCEPTION_POINTERS exception )
   if ( file.open( QIODevice::WriteOnly | QIODevice::Text ) )
   {
     QTextStream stream( &file );
-    stream << QString::number( processID ) << endl;
-    stream << QString::number( threadID ) << endl;
-    stream << ptrStr << endl;
-    stream << symbolPath << endl;
-    stream << arguments.join( " " ) << endl;
-    stream << reportData.join( "\n" ) << endl;
+    stream << QString::number( processID ) << Qt::endl;
+    stream << QString::number( threadID ) << Qt::endl;
+    stream << ptrStr << Qt::endl;
+    stream << symbolPath << Qt::endl;
+    stream << sPythonCrashLogFile << Qt::endl;
+    stream << arguments.join( ' ' ) << Qt::endl;
+    stream << reportData.join( '\n' ) << Qt::endl;
   }
 
   file.close();
@@ -100,10 +115,11 @@ LONG WINAPI QgsCrashHandler::handle( LPEXCEPTION_POINTERS exception )
   args << fileName;
 
   QString prefixPath( getenv( "QGIS_PREFIX_PATH" ) ? getenv( "QGIS_PREFIX_PATH" ) : QApplication::applicationDirPath() );
-  QString path = prefixPath + "/qgiscrashhandler.exe";
-  QgsDebugMsg( path );
-  QProcess::execute( path, args );
-
-  return TRUE;
-}
+#ifdef _MSC_VER
+  QString path = prefixPath + QStringLiteral( "/qgiscrashhandler.exe" );
+#else
+  QString path = prefixPath + QStringLiteral( "/qgiscrashhandler" );
 #endif
+  QgsDebugMsgLevel( path, 2 );
+  QProcess::execute( path, args );
+}

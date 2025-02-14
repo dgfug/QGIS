@@ -28,14 +28,12 @@ class QgsRelationAggregateSearchWidgetWrapper;
  *
  * \brief Widget to show for child relations on an attribute form.
  *
- * \since QGIS 3.0
  */
 class GUI_EXPORT QgsAttributeFormRelationEditorWidget : public QgsAttributeFormWidget
 {
     Q_OBJECT
 
   public:
-
     /**
      * Constructor
      */
@@ -43,6 +41,13 @@ class GUI_EXPORT QgsAttributeFormRelationEditorWidget : public QgsAttributeFormW
 
     void createSearchWidgetWrappers( const QgsAttributeEditorContext &context = QgsAttributeEditorContext() ) override;
     QString currentFilterExpression() const override;
+
+    /**
+     * Set multiple feature to edit simultaneously.
+     * \param fids Multiple Id of features to edit
+     * \since QGIS 3.24
+     */
+    void setMultiEditFeatureIds( const QgsFeatureIds &fids );
 
   private:
     QgsRelationAggregateSearchWidgetWrapper *mSearchWidget = nullptr;

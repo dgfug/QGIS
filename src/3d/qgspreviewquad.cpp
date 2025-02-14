@@ -14,37 +14,48 @@
  ***************************************************************************/
 
 #include "qgspreviewquad.h"
+#include "moc_qgspreviewquad.cpp"
 
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
 #include <Qt3DRender/QGeometry>
 #include <Qt3DRender/QAttribute>
 #include <Qt3DRender/QBuffer>
+typedef Qt3DRender::QAttribute Qt3DQAttribute;
+typedef Qt3DRender::QBuffer Qt3DQBuffer;
+typedef Qt3DRender::QGeometry Qt3DQGeometry;
+#else
+#include <Qt3DCore/QGeometry>
+#include <Qt3DCore/QAttribute>
+#include <Qt3DCore/QBuffer>
+typedef Qt3DCore::QAttribute Qt3DQAttribute;
+typedef Qt3DCore::QBuffer Qt3DQBuffer;
+typedef Qt3DCore::QGeometry Qt3DQGeometry;
+#endif
 #include <Qt3DRender/QGeometryRenderer>
 #include <Qt3DRender/QTechnique>
 #include <Qt3DRender/QGraphicsApiFilter>
 #include <Qt3DRender/QShaderProgram>
 #include <QMatrix4x4>
 #include <QUrl>
+#include <QVector2D>
 
-QgsPreviewQuad::QgsPreviewQuad( Qt3DRender::QAbstractTexture *texture,
-                                const QPointF &centerNDC, const QSizeF &size,
-                                QVector<Qt3DRender::QParameter *> additionalShaderParameters,
-                                Qt3DCore::QEntity *parent )
+QgsPreviewQuad::QgsPreviewQuad( Qt3DRender::QAbstractTexture *texture, const QPointF &centerTexCoords, const QSizeF &sizeTexCoords, QVector<Qt3DRender::QParameter *> additionalShaderParameters, Qt3DCore::QEntity *parent )
   : Qt3DCore::QEntity( parent )
 {
   setObjectName( "Preview Quad" );
-  Qt3DRender::QGeometry *geom = new Qt3DRender::QGeometry;
-  Qt3DRender::QAttribute *positionAttribute = new Qt3DRender::QAttribute;
-  const QVector<float> vert = { -1.0f, -1.0f, 1.0f, /**/ 1.0f, -1.0f, 1.0f, /**/ -1.0f,  1.0f, 1.0f, /**/ -1.0f,  1.0f, 1.0f, /**/ 1.0f, -1.0f, 1.0f, /**/ 1.0f,  1.0f, 1.0f };
+  Qt3DQGeometry *geom = new Qt3DQGeometry;
+  Qt3DQAttribute *positionAttribute = new Qt3DQAttribute;
+  const QVector<float> vert = { -1.0f, -1.0f, 1.0f, /**/ 1.0f, -1.0f, 1.0f, /**/ -1.0f, 1.0f, 1.0f, /**/ -1.0f, 1.0f, 1.0f, /**/ 1.0f, -1.0f, 1.0f, /**/ 1.0f, 1.0f, 1.0f };
 
   const QByteArray vertexArr( ( const char * ) vert.constData(), vert.size() * sizeof( float ) );
-  Qt3DRender::QBuffer *vertexBuffer = nullptr;
-  vertexBuffer = new Qt3DRender::QBuffer( this );
+  Qt3DQBuffer *vertexBuffer = nullptr;
+  vertexBuffer = new Qt3DQBuffer( this );
   vertexBuffer->setData( vertexArr );
 
-  positionAttribute->setName( Qt3DRender::QAttribute::defaultPositionAttributeName() );
-  positionAttribute->setVertexBaseType( Qt3DRender::QAttribute::Float );
+  positionAttribute->setName( Qt3DQAttribute::defaultPositionAttributeName() );
+  positionAttribute->setVertexBaseType( Qt3DQAttribute::Float );
   positionAttribute->setVertexSize( 3 );
-  positionAttribute->setAttributeType( Qt3DRender::QAttribute::VertexAttribute );
+  positionAttribute->setAttributeType( Qt3DQAttribute::VertexAttribute );
   positionAttribute->setBuffer( vertexBuffer );
   positionAttribute->setByteOffset( 0 );
   positionAttribute->setByteStride( 3 * sizeof( float ) );
@@ -58,32 +69,29 @@ QgsPreviewQuad::QgsPreviewQuad( Qt3DRender::QAbstractTexture *texture,
 
   addComponent( renderer );
 
-  QMatrix4x4 modelMatrix;
-  modelMatrix.setToIdentity();
-  modelMatrix.translate( centerNDC.x(), centerNDC.y() );
-  modelMatrix.scale( size.width(), size.height() );
-  mMaterial = new QgsPreviewQuadMaterial( texture, modelMatrix, additionalShaderParameters );
+  mMaterial = new QgsPreviewQuadMaterial( texture, additionalShaderParameters );
 
   addComponent( mMaterial );
+
+  setViewPort( centerTexCoords, sizeTexCoords );
 }
 
-void QgsPreviewQuad::setViewPort( const QPointF &centerNDC, const QSizeF &size )
+void QgsPreviewQuad::setViewPort( const QPointF &centerTexCoords, const QSizeF &sizeTexCoords )
 {
-  QMatrix4x4 modelMatrix;
-  modelMatrix.setToIdentity();
-  modelMatrix.translate( centerNDC.x(), centerNDC.y() );
-  modelMatrix.scale( size.width(), size.height() );
-  mMaterial->setModelMatrix( modelMatrix );
+  mMaterial->setViewPort( QVector2D( centerTexCoords.x(), centerTexCoords.y() ), QVector2D( sizeTexCoords.width(), sizeTexCoords.height() ) );
 }
 
-QgsPreviewQuadMaterial::QgsPreviewQuadMaterial( Qt3DRender::QAbstractTexture *texture, const QMatrix4x4 &modelMatrix, QVector<Qt3DRender::QParameter *> additionalShaderParameters, QNode *parent )
+QgsPreviewQuadMaterial::QgsPreviewQuadMaterial( Qt3DRender::QAbstractTexture *texture, QVector<Qt3DRender::QParameter *> additionalShaderParameters, QNode *parent )
   : Qt3DRender::QMaterial( parent )
 {
   mTextureParameter = new Qt3DRender::QParameter( "previewTexture", texture );
-  mTextureTransformParameter = new Qt3DRender::QParameter( "modelMatrix", QVariant::fromValue( modelMatrix ) );
+  mCenterTextureCoords = new Qt3DRender::QParameter( "centerTexCoords", QVector2D( 0, 0 ) );
+  mSizeTextureCoords = new Qt3DRender::QParameter( "sizeTexCoords", QVector2D( 1, 1 ) );
   addParameter( mTextureParameter );
-  addParameter( mTextureTransformParameter );
-  for ( Qt3DRender::QParameter *parameter : additionalShaderParameters ) addParameter( parameter );
+  addParameter( mCenterTextureCoords );
+  addParameter( mSizeTextureCoords );
+  for ( Qt3DRender::QParameter *parameter : additionalShaderParameters )
+    addParameter( parameter );
 
   mEffect = new Qt3DRender::QEffect;
 
@@ -108,7 +116,8 @@ QgsPreviewQuadMaterial::QgsPreviewQuadMaterial( Qt3DRender::QAbstractTexture *te
   setEffect( mEffect );
 }
 
-void QgsPreviewQuadMaterial::setModelMatrix( const QMatrix4x4 &modelMatrix )
+void QgsPreviewQuadMaterial::setViewPort( QVector2D centerTexCoords, QVector2D sizeTexCoords )
 {
-  mTextureTransformParameter->setValue( modelMatrix );
+  mCenterTextureCoords->setValue( centerTexCoords );
+  mSizeTextureCoords->setValue( sizeTexCoords );
 }

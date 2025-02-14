@@ -63,6 +63,19 @@ QgsRasterPipe::~QgsRasterPipe()
   }
 }
 
+void QgsRasterPipe::moveToThread( QThread *thread )
+{
+  // only data provider is derived from QObject currently:
+  auto it = mRoleMap.find( Qgis::RasterPipeInterfaceRole::Provider );
+  if ( it != mRoleMap.end() )
+  {
+    if ( QgsRasterDataProvider *dp = dynamic_cast<QgsRasterDataProvider *>( mInterfaces.value( it.value() ) ) )
+    {
+      dp->moveToThread( thread );
+    }
+  }
+}
+
 bool QgsRasterPipe::connect( QVector<QgsRasterInterface *> interfaces )
 {
   QgsDebugMsgLevel( QStringLiteral( "Entered" ), 4 );
@@ -73,7 +86,7 @@ bool QgsRasterPipe::connect( QVector<QgsRasterInterface *> interfaces )
 #ifdef QGISDEBUG
       const QgsRasterInterface &a = *interfaces[i];
       const QgsRasterInterface &b = *interfaces[i - 1];
-      QgsDebugMsg( QStringLiteral( "cannot connect %1 to %2" ).arg( typeid( a ).name(), typeid( b ).name() ) );
+      QgsDebugError( QStringLiteral( "cannot connect %1 to %2" ).arg( typeid( a ).name(), typeid( b ).name() ) );
 #endif
       return false;
     }
@@ -179,15 +192,12 @@ void QgsRasterPipe::unsetRole( QgsRasterInterface *interface )
   mRoleMap.remove( role );
 
   // Decrease all indexes greater than the removed one
-  const auto roleMapValues {mRoleMap.values()};
-  if ( roleIdx < *std::max_element( roleMapValues.begin(), roleMapValues.end() ) )
+  const QMap<Qgis::RasterPipeInterfaceRole, int> currentRoles = mRoleMap;
+  for ( auto it = currentRoles.cbegin(); it != currentRoles.cend(); ++it )
   {
-    for ( auto it = mRoleMap.cbegin(); it != mRoleMap.cend(); ++it )
+    if ( it.value() > roleIdx )
     {
-      if ( it.value() > roleIdx )
-      {
-        mRoleMap[it.key()] = it.value() - 1;
-      }
+      mRoleMap[it.key()] = it.value() - 1;
     }
   }
 }
@@ -413,14 +423,14 @@ void QgsRasterPipe::evaluateDataDefinedProperties( QgsExpressionContext &context
   if ( !mDataDefinedProperties.hasActiveProperties() )
     return;
 
-  if ( mDataDefinedProperties.isActive( RendererOpacity ) )
+  if ( mDataDefinedProperties.isActive( Property::RendererOpacity ) )
   {
     if ( QgsRasterRenderer *r = renderer() )
     {
       const double prevOpacity = r->opacity();
       context.setOriginalValueVariable( prevOpacity * 100 );
       bool ok = false;
-      const double opacity = mDataDefinedProperties.valueAsDouble( RendererOpacity, context, prevOpacity, &ok ) / 100;
+      const double opacity = mDataDefinedProperties.valueAsDouble( Property::RendererOpacity, context, prevOpacity, &ok ) / 100;
       if ( ok )
       {
         r->setOpacity( opacity );
@@ -437,7 +447,7 @@ void QgsRasterPipe::initPropertyDefinitions()
 
   sPropertyDefinitions = QgsPropertiesDefinition
   {
-    { QgsRasterPipe::RendererOpacity, QgsPropertyDefinition( "RendererOpacity", QObject::tr( "Renderer opacity" ), QgsPropertyDefinition::Opacity, origin ) },
+    { static_cast< int >( QgsRasterPipe::Property::RendererOpacity ), QgsPropertyDefinition( "RendererOpacity", QObject::tr( "Renderer opacity" ), QgsPropertyDefinition::Opacity, origin ) },
   };
 }
 

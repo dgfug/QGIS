@@ -15,8 +15,8 @@
 
 
 #include "qgsmaptoolselect.h"
+#include "moc_qgsmaptoolselect.cpp"
 #include "qgsmaptoolselectutils.h"
-#include "qgsrubberband.h"
 #include "qgsmapcanvas.h"
 #include "qgsmapmouseevent.h"
 #include "qgsvectorlayer.h"
@@ -24,8 +24,6 @@
 #include "qgspointxy.h"
 #include "qgis.h"
 #include "qgsapplication.h"
-#include "qgslogger.h"
-#include "qgshighlight.h"
 
 #include <QMouseEvent>
 #include <QMenu>
@@ -78,10 +76,7 @@ void QgsMapToolSelect::keyPressEvent( QKeyEvent *e )
       case Qt::Key_Alt:
       case Qt::Key_Meta:
         //note -- if ctrl and shift are already depressed, pressing alt reports the "meta" key eventZ
-        modifiersChanged( e->modifiers() & Qt::ControlModifier || e->key() == Qt::Key_Control,
-                          e->modifiers() & Qt::ShiftModifier || e->key() == Qt::Key_Shift,
-                          e->modifiers() & Qt::AltModifier || e->key() == Qt::Key_Alt ||
-                          ( e->modifiers() & Qt::ControlModifier && e->modifiers() & Qt::ShiftModifier && e->key() == Qt::Key_Meta ) );
+        modifiersChanged( e->modifiers() & Qt::ControlModifier || e->key() == Qt::Key_Control, e->modifiers() & Qt::ShiftModifier || e->key() == Qt::Key_Shift, e->modifiers() & Qt::AltModifier || e->key() == Qt::Key_Alt || ( e->modifiers() & Qt::ControlModifier && e->modifiers() & Qt::ShiftModifier && e->key() == Qt::Key_Meta ) );
         break;
 
       default:
@@ -105,10 +100,7 @@ void QgsMapToolSelect::keyReleaseEvent( QKeyEvent *e )
       case Qt::Key_Control:
       case Qt::Key_Alt:
       case Qt::Key_Meta:
-        modifiersChanged( e->modifiers() & Qt::ControlModifier && e->key() != Qt::Key_Control,
-                          e->modifiers() & Qt::ShiftModifier && e->key() != Qt::Key_Shift,
-                          e->modifiers() & Qt::AltModifier && e->key() != Qt::Key_Alt &&
-                          !( e->modifiers() & Qt::ControlModifier && e->modifiers() & Qt::ShiftModifier && e->key() == Qt::Key_Meta ) );
+        modifiersChanged( e->modifiers() & Qt::ControlModifier && e->key() != Qt::Key_Control, e->modifiers() & Qt::ShiftModifier && e->key() != Qt::Key_Shift, e->modifiers() & Qt::AltModifier && e->key() != Qt::Key_Alt && !( e->modifiers() & Qt::ControlModifier && e->modifiers() & Qt::ShiftModifier && e->key() == Qt::Key_Meta ) );
         break;
 
       default:
@@ -133,6 +125,7 @@ QgsMapTool::Flags QgsMapToolSelect::flags() const
       break;
 
     case QgsMapToolSelectionHandler::SelectSimple:
+    case QgsMapToolSelectionHandler::SelectOnMouseOver:
     case QgsMapToolSelectionHandler::SelectFreehand:
     case QgsMapToolSelectionHandler::SelectRadius:
       return QgsMapTool::flags() | QgsMapTool::ShowContextMenu;
@@ -144,9 +137,13 @@ QgsMapTool::Flags QgsMapToolSelect::flags() const
 bool QgsMapToolSelect::populateContextMenuWithEvent( QMenu *menu, QgsMapMouseEvent *event )
 {
   Q_ASSERT( menu );
-  QgsVectorLayer *vlayer = QgsMapToolSelectUtils::getCurrentVectorLayer( mCanvas );
+  QgsMapLayer *layer = QgsMapToolSelectUtils::getCurrentTargetLayer( mCanvas );
 
-  if ( !vlayer )
+  if ( !layer || layer->type() != Qgis::LayerType::Vector )
+    return false;
+
+  QgsVectorLayer *vlayer = qobject_cast<QgsVectorLayer *>( layer );
+  if ( !vlayer->isSpatial() )
     return false;
 
   menu->addSeparator();
@@ -166,7 +163,7 @@ bool QgsMapToolSelect::populateContextMenuWithEvent( QMenu *menu, QgsMapMouseEve
   else if ( modifiers & Qt::ControlModifier )
     behavior = Qgis::SelectBehavior::RemoveFromSelection;
 
-  const QgsRectangle r = QgsMapToolSelectUtils::expandSelectRectangle( mapPoint, mCanvas, vlayer );
+  const QgsRectangle r = QgsMapToolSelectUtils::expandSelectRectangle( mapPoint, mCanvas, layer );
 
   QgsMapToolSelectUtils::QgsMapToolSelectMenuActions *menuActions
     = new QgsMapToolSelectUtils::QgsMapToolSelectMenuActions( mCanvas, vlayer, behavior, QgsGeometry::fromRect( r ), menu );
@@ -180,11 +177,10 @@ bool QgsMapToolSelect::populateContextMenuWithEvent( QMenu *menu, QgsMapMouseEve
 
 void QgsMapToolSelect::selectFeatures( Qt::KeyboardModifiers modifiers )
 {
-  if ( mSelectionHandler->selectionMode() == QgsMapToolSelectionHandler::SelectSimple &&
-       mSelectionHandler->selectedGeometry().type() == QgsWkbTypes::PointGeometry )
+  if ( mSelectionHandler->selectionMode() == QgsMapToolSelectionHandler::SelectSimple && mSelectionHandler->selectedGeometry().type() == Qgis::GeometryType::Point )
   {
-    QgsVectorLayer *vlayer = QgsMapToolSelectUtils::getCurrentVectorLayer( mCanvas );
-    const QgsRectangle r = QgsMapToolSelectUtils::expandSelectRectangle( mSelectionHandler->selectedGeometry().asPoint(), mCanvas, vlayer );
+    QgsMapLayer *layer = QgsMapToolSelectUtils::getCurrentTargetLayer( mCanvas );
+    const QgsRectangle r = QgsMapToolSelectUtils::expandSelectRectangle( mSelectionHandler->selectedGeometry().asPoint(), mCanvas, layer );
     QgsMapToolSelectUtils::selectSingleFeature( mCanvas, QgsGeometry::fromRect( r ), modifiers );
   }
   else

@@ -3,6 +3,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include <pdal/util/FileUtils.hpp>
 #include <pdal/util/ProgramArgs.hpp>
@@ -12,6 +13,8 @@
 #include "OctantInfo.hpp"
 #include "../untwine/Common.hpp"
 #include "../untwine/ProgressWriter.hpp"
+
+#include <dirlist.hpp>  //untwine/os
 
 namespace untwine
 {
@@ -24,123 +27,18 @@ BuPyramid::BuPyramid(BaseInfo& common) : m_b(common), m_manager(m_b)
 {}
 
 
-void BuPyramid::run(const Options& options, ProgressWriter& progress)
+void BuPyramid::run(ProgressWriter& progress)
 {
-    m_b.inputDir = options.tempDir;
-    m_b.outputDir = options.outputDir;
-    m_b.stats = options.stats;
-
     getInputFiles();
     size_t count = queueWork();
-    
+    if (!count)
+        throw FatalError("No temporary files to process. I/O or directory list error?");
+
     progress.setPercent(.6);
     progress.setIncrement(.4 / count);
     m_manager.setProgress(&progress);
-    std::thread runner(&PyramidManager::run, &m_manager);
-    runner.join();
-    writeInfo();
+    m_manager.run();
 }
-
-
-void BuPyramid::writeInfo()
-{
-    auto typeString = [](pdal::Dimension::BaseType b)
-    {
-        using namespace pdal::Dimension;
-
-        switch (b)
-        {
-        case BaseType::Signed:
-            return "signed";
-        case BaseType::Unsigned:
-            return "unsigned";
-        case BaseType::Floating:
-            return "float";
-        default:
-            return "";
-        }
-    };
-
-    std::ofstream out(m_b.outputDir + "/ept.json");
-
-    out << "{\n";
-
-    pdal::BOX3D& b = m_b.bounds;
-
-    // Set fixed output for bounds output to get sufficient precision.
-    out << std::fixed;
-    out << "\"bounds\": [" <<
-        b.minx << ", " << b.miny << ", " << b.minz << ", " <<
-        b.maxx << ", " << b.maxy << ", " << b.maxz << "],\n";
-
-    pdal::BOX3D& tb = m_b.trueBounds;
-    out << "\"boundsConforming\": [" <<
-        tb.minx << ", " << tb.miny << ", " << tb.minz << ", " <<
-        tb.maxx << ", " << tb.maxy << ", " << tb.maxz << "],\n";
-    // Reset to default float output to match PDAL option handling for now.
-    out << std::defaultfloat;
-
-    out << "\"dataType\": \"laszip\",\n";
-    out << "\"hierarchyType\": \"json\",\n";
-    out << "\"points\": " << m_manager.totalPoints() << ",\n";
-    out << "\"span\": 128,\n";
-    out << "\"version\": \"1.0.0\",\n";
-    out << "\"schema\": [\n";
-    for (auto di = m_b.dimInfo.begin(); di != m_b.dimInfo.end(); ++di)
-    {
-        const FileDimInfo& fdi = *di;
-
-        out << "\t{";
-            out << "\"name\": \"" << fdi.name << "\", ";
-            out << "\"type\": \"" << typeString(pdal::Dimension::base(fdi.type)) << "\", ";
-            if (fdi.name == "X")
-                out << "\"scale\": " << m_b.scale[0] << ", \"offset\": " << m_b.offset[0] << ", ";
-            if (fdi.name == "Y")
-                out << "\"scale\": " << m_b.scale[1] << ", \"offset\": " << m_b.offset[1] << ", ";
-            if (fdi.name == "Z")
-                out << "\"scale\": " << m_b.scale[2] << ", \"offset\": " << m_b.offset[2] << ", ";
-            out << "\"size\": " << pdal::Dimension::size(fdi.type);
-            const Stats *stats = m_manager.stats(fdi.name);
-            if (stats)
-            {
-                const Stats::EnumMap& v = stats->values();
-                out << ", ";
-                if (v.size())
-                {
-                    out << "\"counts\": [ ";
-                    for (auto ci = v.begin(); ci != v.end(); ++ci)
-                    {
-                        auto c = *ci;
-                        if (ci != v.begin())
-                            out << ", ";
-                        out << "{\"value\": " << c.first << ", \"count\": " << c.second << "}";
-                    }
-                    out << "], ";
-                }
-                out << "\"count\": " << m_manager.totalPoints() << ", ";
-                out << "\"maximum\": " << stats->maximum() << ", ";
-                out << "\"minimum\": " << stats->minimum() << ", ";
-                out << "\"mean\": " << stats->average() << ", ";
-                out << "\"stddev\": " << stats->stddev() << ", ";
-                out << "\"variance\": " << stats->variance();
-            }
-        out << "}";
-        if (di + 1 != m_b.dimInfo.end())
-            out << ",";
-        out << "\n";
-    }
-    out << "],\n";
-
-    out << "\"srs\": {\n";
-    if (m_b.srs.valid())
-    {
-        out << "\"wkt\": " <<  "\"" << pdal::Utils::escapeJSON(m_b.srs.getWKT()) << "\"\n";
-    }
-    out << "}\n";
-
-    out << "}\n";
-}
-
 
 void BuPyramid::getInputFiles()
 {
@@ -157,7 +55,7 @@ void BuPyramid::getInputFiles()
         return std::make_pair(true, VoxelKey(x, y, z, level));
     };
 
-    std::vector<std::string> files = pdal::FileUtils::directoryList(m_b.inputDir);
+    std::vector<std::string> files = os::directoryList(m_b.opts.tempDir);
 
     VoxelKey root;
     for (std::string file : files)

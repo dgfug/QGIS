@@ -22,15 +22,16 @@
 #include "ui_qgspointcloudelevationpropertieswidgetbase.h"
 
 class QgsPointCloudLayer;
+class QgsProjectionSelectionWidget;
 
 class QgsPointCloudElevationPropertiesWidget : public QgsMapLayerConfigWidget, private Ui::QgsPointCloudElevationPropertiesWidgetBase
 {
     Q_OBJECT
   public:
-
     QgsPointCloudElevationPropertiesWidget( QgsPointCloudLayer *layer, QgsMapCanvas *canvas, QWidget *parent );
 
-    void syncToLayer( QgsMapLayer *layer ) override;
+    void syncToLayer( QgsMapLayer *layer ) final;
+    bool shouldTriggerLayerRepaint() const override { return false; }
 
   public slots:
     void apply() override;
@@ -39,11 +40,12 @@ class QgsPointCloudElevationPropertiesWidget : public QgsMapLayerConfigWidget, p
 
     void onChanged();
     void shiftPointCloudZAxis();
+    void updateVerticalCrsOptions();
+
   private:
-
     QgsPointCloudLayer *mLayer = nullptr;
+    QgsProjectionSelectionWidget *mVerticalCrsWidget = nullptr;
     bool mBlockUpdates = false;
-
 };
 
 
@@ -59,7 +61,6 @@ class QgsPointCloudElevationPropertiesWidgetFactory : public QObject, public Qgs
     bool supportsLayer( QgsMapLayer *layer ) const override;
     QString layerPropertiesPagePositionHint() const override;
 };
-
 
 
 #endif // QGSPOINTCLOUDELEVATIONPROPERTIESWIDGET_H

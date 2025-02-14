@@ -20,10 +20,7 @@
 
 #include "qgs3dmapsettings.h"
 #include "qgs3dutils.h"
-#include "qgsline3dsymbol.h"
-#include "qgspoint3dsymbol.h"
-#include "qgspolygon3dsymbol.h"
-
+#include "qgsfeature3dhandler_p.h"
 #include "qgsrulebasedchunkloader_p.h"
 #include "qgsapplication.h"
 #include "qgs3dsymbolregistry.h"
@@ -209,7 +206,7 @@ QgsRuleBased3DRenderer::Rule *QgsRuleBased3DRenderer::Rule::create( const QDomEl
     }
     else
     {
-      //QgsDebugMsg( QStringLiteral( "failed to init a child rule!" ) );
+      //QgsDebugError( QStringLiteral( "failed to init a child rule!" ) );
     }
     childRuleElem = childRuleElem.nextSiblingElement( QStringLiteral( "rule" ) );
   }
@@ -265,12 +262,12 @@ void QgsRuleBased3DRenderer::Rule::createHandlers( QgsVectorLayer *layer, QgsRul
 }
 
 
-void QgsRuleBased3DRenderer::Rule::prepare( const Qgs3DRenderContext &context, QSet<QString> &attributeNames, QgsRuleBased3DRenderer::RuleToHandlerMap &handlers ) const
+void QgsRuleBased3DRenderer::Rule::prepare( const Qgs3DRenderContext &context, QSet<QString> &attributeNames, const QgsVector3D &chunkOrigin, QgsRuleBased3DRenderer::RuleToHandlerMap &handlers ) const
 {
   if ( mSymbol )
   {
     QgsFeature3DHandler *handler = handlers[this];
-    if ( !handler->prepare( context, attributeNames ) )
+    if ( !handler->prepare( context, attributeNames, chunkOrigin ) )
     {
       handlers.remove( this );
       delete handler;
@@ -286,7 +283,7 @@ void QgsRuleBased3DRenderer::Rule::prepare( const Qgs3DRenderContext &context, Q
   // call recursively
   for ( Rule *rule : std::as_const( mChildren ) )
   {
-    rule->prepare( context, attributeNames, handlers );
+    rule->prepare( context, attributeNames, chunkOrigin, handlers );
   }
 }
 
@@ -304,7 +301,7 @@ QgsRuleBased3DRenderer::Rule::RegisterResult QgsRuleBased3DRenderer::Rule::regis
     registered = true;
   }
 
-  bool willRegisterSomething = false;
+  bool matchedAChild = false;
 
   // call recursively
   for ( Rule *rule : std::as_const( mChildren ) )
@@ -312,23 +309,25 @@ QgsRuleBased3DRenderer::Rule::RegisterResult QgsRuleBased3DRenderer::Rule::regis
     // Don't process else rules yet
     if ( !rule->isElse() )
     {
-      RegisterResult res = rule->registerFeature( feature, context, handlers );
-      // consider inactive items as "registered" so the else rule will ignore them
-      willRegisterSomething |= ( res == Registered || res == Inactive );
-      registered |= willRegisterSomething;
+      const RegisterResult res = rule->registerFeature( feature, context, handlers );
+      // consider inactive items as "matched" so the else rule will ignore them
+      matchedAChild |= ( res == Registered || res == Inactive );
+      registered |= matchedAChild;
     }
   }
 
   // If none of the rules passed then we jump into the else rules and process them.
-  if ( !willRegisterSomething )
+  if ( !matchedAChild )
   {
     for ( Rule *rule : std::as_const( mElseRules ) )
     {
-      registered |= rule->registerFeature( feature, context, handlers ) != Filtered;
+      const RegisterResult res = rule->registerFeature( feature, context, handlers );
+      matchedAChild |= ( res == Registered || res == Inactive );
+      registered |= res != Filtered;
     }
   }
 
-  if ( !mIsActive )
+  if ( !mIsActive || ( matchedAChild && !registered ) )
     return Inactive;
   else if ( registered )
     return Registered;
@@ -339,7 +338,7 @@ QgsRuleBased3DRenderer::Rule::RegisterResult QgsRuleBased3DRenderer::Rule::regis
 
 bool QgsRuleBased3DRenderer::Rule::isFilterOK( QgsFeature &f, Qgs3DRenderContext &context ) const
 {
-  if ( ! mFilter || mElseRule )
+  if ( !mFilter || mElseRule )
     return true;
 
   context.expressionContext().setFeature( f );
@@ -379,17 +378,22 @@ QgsRuleBased3DRenderer *QgsRuleBased3DRenderer::clone() const
   return r;
 }
 
-Qt3DCore::QEntity *QgsRuleBased3DRenderer::createEntity( const Qgs3DMapSettings &map ) const
+Qt3DCore::QEntity *QgsRuleBased3DRenderer::createEntity( Qgs3DMapSettings *map ) const
 {
   QgsVectorLayer *vl = layer();
 
   if ( !vl )
     return nullptr;
 
-  double zMin, zMax;
-  Qgs3DUtils::estimateVectorLayerZRange( vl, zMin, zMax );
+  // we start with a maximal z range because we can't know this upfront. There's too many
+  // factors to consider eg vertex z data, terrain heights, data defined offsets and extrusion heights,...
+  // This range will be refined after populating the nodes to the actual z range of the generated chunks nodes.
+  // Assuming the vertical height is in meter, then it's extremely unlikely that a real vertical
+  // height will exceed this amount!
+  constexpr double MINIMUM_VECTOR_Z_ESTIMATE = -100000;
+  constexpr double MAXIMUM_VECTOR_Z_ESTIMATE = 100000;
 
-  return new QgsRuleBasedChunkedEntity( vl, zMin + map.terrainElevationOffset(), zMax + map.terrainElevationOffset(), tilingSettings(), mRootRule, map );
+  return new QgsRuleBasedChunkedEntity( map, vl, MINIMUM_VECTOR_Z_ESTIMATE, MAXIMUM_VECTOR_Z_ESTIMATE, tilingSettings(), mRootRule );
 }
 
 void QgsRuleBased3DRenderer::writeXml( QDomElement &elem, const QgsReadWriteContext &context ) const

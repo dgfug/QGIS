@@ -28,17 +28,19 @@
 #include "qgstest.h"
 #include <QtTest/QSignalSpy>
 
-class TestQgsLayoutContext: public QObject
+class TestQgsLayoutContext : public QgsTest
 {
     Q_OBJECT
 
+  public:
+    TestQgsLayoutContext()
+      : QgsTest( QStringLiteral( "Layout Context Tests" ) ) {}
+
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init();// will be called before each testfunction is executed.
-    void cleanup();// will be called after every testfunction.
+
+    void cleanupTestCase();
     void creation(); //test creation of QgsLayout
-    void flags(); //test QgsLayout flags
+    void flags();    //test QgsLayout flags
     void feature();
     void layer();
     void dpi();
@@ -48,37 +50,12 @@ class TestQgsLayoutContext: public QObject
     void geometry();
     void scales();
     void simplifyMethod();
-
-  private:
-    QString mReport;
-
+    void maskRenderSettings();
 };
-
-void TestQgsLayoutContext::initTestCase()
-{
-  mReport = QStringLiteral( "<h1>Layout Context Tests</h1>\n" );
-}
 
 void TestQgsLayoutContext::cleanupTestCase()
 {
-  const QString myReportFile = QDir::tempPath() + QDir::separator() + "qgistest.html";
-  QFile myFile( myReportFile );
-  if ( myFile.open( QIODevice::WriteOnly | QIODevice::Append ) )
-  {
-    QTextStream myQTextStream( &myFile );
-    myQTextStream << mReport;
-    myFile.close();
-  }
-}
-
-void TestQgsLayoutContext::init()
-{
-
-}
-
-void TestQgsLayoutContext::cleanup()
-{
-
+  QgsApplication::exitQgis();
 }
 
 void TestQgsLayoutContext::creation()
@@ -101,13 +78,13 @@ void TestQgsLayoutContext::flags()
   QVERIFY( context.flags() == ( QgsLayoutRenderContext::FlagAntialiasing | QgsLayoutRenderContext::FlagUseAdvancedEffects ) );
   QVERIFY( context.testFlag( QgsLayoutRenderContext::FlagAntialiasing ) );
   QVERIFY( context.testFlag( QgsLayoutRenderContext::FlagUseAdvancedEffects ) );
-  QVERIFY( ! context.testFlag( QgsLayoutRenderContext::FlagDebug ) );
+  QVERIFY( !context.testFlag( QgsLayoutRenderContext::FlagDebug ) );
   context.setFlag( QgsLayoutRenderContext::FlagDebug );
   QCOMPARE( spyFlagsChanged.count(), 1 );
   QVERIFY( context.testFlag( QgsLayoutRenderContext::FlagDebug ) );
   context.setFlag( QgsLayoutRenderContext::FlagDebug, false );
   QCOMPARE( spyFlagsChanged.count(), 2 );
-  QVERIFY( ! context.testFlag( QgsLayoutRenderContext::FlagDebug ) );
+  QVERIFY( !context.testFlag( QgsLayoutRenderContext::FlagDebug ) );
   context.setFlag( QgsLayoutRenderContext::FlagDebug, false ); //no change
   QCOMPARE( spyFlagsChanged.count(), 2 );
   context.setFlags( QgsLayoutRenderContext::FlagDebug );
@@ -150,8 +127,10 @@ void TestQgsLayoutContext::layer()
   QgsLayout l( QgsProject::instance() );
   l.reportContext().setLayer( layer );
   //test that expression context created for layout contains report context layer scope
-  const QgsExpressionContext expContext  = l.createExpressionContext();
-  QCOMPARE( QgsExpressionUtils::getVectorLayer( expContext.variable( "layer" ), nullptr ), layer );
+  const QgsExpressionContext expContext = l.createExpressionContext();
+  Q_NOWARN_DEPRECATED_PUSH
+  QCOMPARE( QgsExpressionUtils::getVectorLayer( expContext.variable( "layer" ), &expContext, nullptr ), layer );
+  Q_NOWARN_DEPRECATED_POP
 
   delete layer;
 }
@@ -235,10 +214,10 @@ void TestQgsLayoutContext::geometry()
 
   QCOMPARE( context.currentGeometry().asWkt(), f.geometry().asWkt() );
   QVERIFY( !context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).isNull() );
-  QCOMPARE( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).asWkt( 0 ), QStringLiteral( "LineString (2412169 2388563, 2500000 2277996)" ) );
+  QCOMPARE( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).asWkt( -2 ), QStringLiteral( "LineString (2412200 2388600, 2500000 2278000)" ) );
 
   // should be cached
-  QCOMPARE( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).asWkt( 0 ), QStringLiteral( "LineString (2412169 2388563, 2500000 2277996)" ) );
+  QCOMPARE( context.currentGeometry( QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:3111" ) ) ).asWkt( -2 ), QStringLiteral( "LineString (2412200 2388600, 2500000 2278000)" ) );
 
   // layer crs
   QCOMPARE( context.currentGeometry( layer->crs() ).asWkt(), f.geometry().asWkt() );
@@ -254,7 +233,7 @@ void TestQgsLayoutContext::geometry()
 
 void TestQgsLayoutContext::scales()
 {
-  QVector< qreal > scales;
+  QVector<qreal> scales;
   scales << 1 << 15 << 5 << 10;
 
   QgsLayoutRenderContext context( nullptr );
@@ -264,7 +243,7 @@ void TestQgsLayoutContext::scales()
   QCOMPARE( spyScalesChanged.count(), 1 );
 
   // should be sorted
-  QCOMPARE( context.predefinedScales(), QVector< qreal >() << 1 << 5 << 10 << 15 );
+  QCOMPARE( context.predefinedScales(), QVector<qreal>() << 1 << 5 << 10 << 15 );
 
   context.setPredefinedScales( context.predefinedScales() );
   QCOMPARE( spyScalesChanged.count(), 1 );
@@ -275,11 +254,22 @@ void TestQgsLayoutContext::simplifyMethod()
   QgsLayout l( QgsProject::instance() );
   QgsLayoutRenderContext context( &l );
   // must default to no simplification
-  QCOMPARE( context.simplifyMethod().simplifyHints(), QgsVectorSimplifyMethod::NoSimplification );
+  QCOMPARE( context.simplifyMethod().simplifyHints(), Qgis::VectorRenderingSimplificationFlag::NoSimplification );
   QgsVectorSimplifyMethod simplify;
-  simplify.setSimplifyHints( QgsVectorSimplifyMethod::GeometrySimplification );
+  simplify.setSimplifyHints( Qgis::VectorRenderingSimplificationFlag::GeometrySimplification );
   context.setSimplifyMethod( simplify );
-  QCOMPARE( context.simplifyMethod().simplifyHints(), QgsVectorSimplifyMethod::GeometrySimplification );
+  QCOMPARE( context.simplifyMethod().simplifyHints(), Qgis::VectorRenderingSimplificationFlag::GeometrySimplification );
+}
+
+void TestQgsLayoutContext::maskRenderSettings()
+{
+  QgsLayout l( QgsProject::instance() );
+  QgsLayoutRenderContext context( &l );
+  QCOMPARE( context.maskSettings().simplifyTolerance(), 0 );
+  QgsMaskRenderSettings settings2;
+  settings2.setSimplificationTolerance( 11 );
+  context.setMaskSettings( settings2 );
+  QCOMPARE( context.maskSettings().simplifyTolerance(), 11 );
 }
 
 QGSTEST_MAIN( TestQgsLayoutContext )

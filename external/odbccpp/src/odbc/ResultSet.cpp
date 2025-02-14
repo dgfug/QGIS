@@ -12,7 +12,7 @@
 //------------------------------------------------------------------------------
 using namespace std;
 //------------------------------------------------------------------------------
-namespace odbc {
+NS_ODBC_START
 //------------------------------------------------------------------------------
 ResultSet::ResultSet(StatementBase* parent)
 : parent_(parent, true)
@@ -158,7 +158,7 @@ Decimal ResultSet::getDecimal(unsigned short columnIndex)
     if (ind == SQL_NULL_DATA)
         return Decimal();
     char str[64];
-    odbc::UtilInternal::numericToString(num, str);
+    UtilInternal::numericToString(num, str);
     return Decimal(decimal(str, num.precision, num.scale));
 }
 //------------------------------------------------------------------------------
@@ -254,7 +254,7 @@ String ResultSet::getString(unsigned short columnIndex)
             SQL_C_CHAR, &ret[0], ret.size(), &ind);
         ret.resize(ind);
     }
-    return String(move(ret));
+    return String(std::move(ret));
 }
 //------------------------------------------------------------------------------
 NString ResultSet::getNString(unsigned short columnIndex)
@@ -293,7 +293,7 @@ NString ResultSet::getNString(unsigned short columnIndex)
             SQL_C_WCHAR, &ret[0], ret.size()*sizeof(char16_t), &ind);
         ret.resize(ind/2);
     }
-    return NString(move(ret));
+    return NString(std::move(ret));
 }
 //------------------------------------------------------------------------------
 Binary ResultSet::getBinary(unsigned short columnIndex)
@@ -331,7 +331,7 @@ Binary ResultSet::getBinary(unsigned short columnIndex)
         EXEC_STMT(SQLGetData, parent_->hstmt_, columnIndex,
             SQL_C_BINARY, ret.data(), ret.size(), &ind);
     }
-    return Binary(move(ret));
+    return Binary(std::move(ret));
 }
 //------------------------------------------------------------------------------
 static size_t convertLength(SQLLEN ind)
@@ -397,4 +397,4 @@ void ResultSet::getNStringData(unsigned short columnIndex, void* data,
         SQL_C_WCHAR, (SQLPOINTER)data, size * sizeof(char16_t), NULL);
 }
 //------------------------------------------------------------------------------
-} // namespace odbc
+NS_ODBC_END

@@ -70,6 +70,9 @@ class QgsConnectionPoolGroup
       QTime lastUsedTime;
     };
 
+    /**
+     * Constructor for QgsConnectionPoolGroup, with the specified connection info.
+     */
     QgsConnectionPoolGroup( const QString &ci )
       : connInfo( ci )
       , sem( QgsApplication::instance()->maxConcurrentConnectionsPerPool() + CONN_POOL_SPARE_CONNECTIONS )
@@ -84,9 +87,7 @@ class QgsConnectionPoolGroup
       }
     }
 
-    //! QgsConnectionPoolGroup cannot be copied
     QgsConnectionPoolGroup( const QgsConnectionPoolGroup &other ) = delete;
-    //! QgsConnectionPoolGroup cannot be copied
     QgsConnectionPoolGroup &operator=( const QgsConnectionPoolGroup &other ) = delete;
 
     /**
@@ -342,7 +343,7 @@ class QgsConnectionPool
     /**
      * Invalidates all connections to the specified resource.
      * The internal state of certain handles (for instance OGR) are altered
-     * when a dataset is modified. Consquently, all open handles need to be
+     * when a dataset is modified. Consequently, all open handles need to be
      * invalidated when such datasets are changed to ensure the handles are
      * refreshed. See the OGR provider for an example where this is needed.
      */

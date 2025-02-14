@@ -1,7 +1,6 @@
 FROM ubuntu:latest
-MAINTAINER Paul Blottiere <blottiere.paul@gmail.com>
 RUN  export DEBIAN_FRONTEND=noninteractive
-ENV  DEBIAN_FRONTEND noninteractive
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -17,11 +16,14 @@ RUN apt-get update \
   libzip-dev \
   libprotobuf-dev \
   qtbase5-dev \
+  libdraco-dev \
   libqt5svg5-dev \
   libqt5serialport5-dev \
   qttools5-dev \
   protobuf-compiler \
-  qt5-default \
+  qt5-qmake \
+  qtbase5-dev-tools \
+  qtchooser \
   qtpositioning5-dev \
   libqt5webkit5-dev \
   libqca-qt5-2-dev \
@@ -35,6 +37,9 @@ RUN apt-get update \
   pyqt5-dev \
   python3-pyqt5 \
   python3-pyqt5.qsci \
+  python3-all-dev \
+  python3-dev \
+  python3-sip-dev \
   pyqt5-dev-tools \
   spawn-fcgi
 

@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgslayoutitem3dmap.h"
+#include "moc_qgslayoutitem3dmap.cpp"
 
 #include "qgs3dmapscene.h"
 #include "qgs3dutils.h"
@@ -22,9 +23,7 @@
 #include "qgslayoutmodel.h"
 #include "qgslayoutitemregistry.h"
 #include "qgsoffscreen3dengine.h"
-#include "qgspostprocessingentity.h"
-#include "qgsshadowrenderingframegraph.h"
-#include "qgswindow3dengine.h"
+#include "qgslayoutrendercontext.h"
 
 QgsLayoutItem3DMap::QgsLayoutItem3DMap( QgsLayout *layout )
   : QgsLayoutItem( layout )
@@ -132,11 +131,23 @@ void QgsLayoutItem3DMap::draw( QgsLayoutItemRenderContext &context )
   {
     painter->drawText( r, Qt::AlignCenter, tr( "Loading" ) );
     painter->restore();
+    if ( mSettings->rendererUsage() != Qgis::RendererUsage::View )
+    {
+      mSettings->setRendererUsage( Qgis::RendererUsage::View );
+      mEngine.reset(); //we need to rebuild the scene to force the render again
+    }
+  }
+  else
+  {
+    if ( mSettings->rendererUsage() != Qgis::RendererUsage::Export )
+    {
+      mSettings->setRendererUsage( Qgis::RendererUsage::Export );
+      mEngine.reset(); //we need to rebuild the scene to force the render again
+    }
   }
 
-  QSizeF sizePixels = mLayout->renderContext().measurementConverter().convert( sizeWithUnits(), QgsUnitTypes::LayoutPixels ).toQSizeF();
-  QSize sizePixelsInt = QSize( static_cast<int>( std::ceil( sizePixels.width() ) ),
-                               static_cast<int>( std::ceil( sizePixels.height() ) ) );
+  QSizeF sizePixels = mLayout->renderContext().measurementConverter().convert( sizeWithUnits(), Qgis::LayoutUnit::Pixels ).toQSizeF();
+  QSize sizePixelsInt = QSize( static_cast<int>( std::ceil( sizePixels.width() ) ), static_cast<int>( std::ceil( sizePixels.height() ) ) );
 
   if ( isTemporal() )
     mSettings->setTemporalRange( temporalRange() );
@@ -151,7 +162,6 @@ void QgsLayoutItem3DMap::draw( QgsLayoutItemRenderContext &context )
     connect( mScene, &Qgs3DMapScene::sceneStateChanged, this, &QgsLayoutItem3DMap::onSceneStateChanged );
 
     mEngine->setRootEntity( mScene );
-
   }
 
   if ( mEngine->size() != sizePixelsInt )
@@ -170,10 +180,16 @@ void QgsLayoutItem3DMap::draw( QgsLayoutItemRenderContext &context )
     if ( mDrawing )
       return;
     mDrawing = true;
+    disconnect( mEngine.get(), &QgsAbstract3DEngine::imageCaptured, this, &QgsLayoutItem3DMap::onImageCaptured );
+    disconnect( mScene, &Qgs3DMapScene::sceneStateChanged, this, &QgsLayoutItem3DMap::onSceneStateChanged );
+
     Qgs3DUtils::captureSceneImage( *mEngine.get(), mScene );
     QImage img = Qgs3DUtils::captureSceneImage( *mEngine.get(), mScene );
     painter->drawImage( r, img );
     painter->restore();
+
+    connect( mEngine.get(), &QgsAbstract3DEngine::imageCaptured, this, &QgsLayoutItem3DMap::onImageCaptured );
+    connect( mScene, &Qgs3DMapScene::sceneStateChanged, this, &QgsLayoutItem3DMap::onSceneStateChanged );
     mDrawing = false;
   }
 }

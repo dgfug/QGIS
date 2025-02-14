@@ -32,16 +32,20 @@
  */
 class QgsPreviewQuadMaterial : public Qt3DRender::QMaterial
 {
+    Q_OBJECT
+
   public:
     //! Constructor
-    QgsPreviewQuadMaterial( Qt3DRender::QAbstractTexture *texture, const QMatrix4x4 &modelMatrix, QVector<Qt3DRender::QParameter *> additionalShaderParameters = QVector<Qt3DRender::QParameter *>(), QNode *parent = nullptr );
+    QgsPreviewQuadMaterial( Qt3DRender::QAbstractTexture *texture, QVector<Qt3DRender::QParameter *> additionalShaderParameters = QVector<Qt3DRender::QParameter *>(), QNode *parent = nullptr );
 
-    //! Sets the model matrix of the quad
-    void setModelMatrix( const QMatrix4x4 &modelMatrix );
+    //! Sets the view port of the quad
+    void setViewPort( QVector2D centerTexCoords, QVector2D sizeTexCoords );
+
   private:
     Qt3DRender::QEffect *mEffect = nullptr;
     Qt3DRender::QParameter *mTextureParameter = nullptr;
-    Qt3DRender::QParameter *mTextureTransformParameter = nullptr;
+    Qt3DRender::QParameter *mCenterTextureCoords = nullptr;
+    Qt3DRender::QParameter *mSizeTextureCoords = nullptr;
 };
 
 /**
@@ -53,8 +57,9 @@ class QgsPreviewQuadMaterial : public Qt3DRender::QMaterial
  */
 class QgsPreviewQuad : public Qt3DCore::QEntity
 {
-  public:
+    Q_OBJECT
 
+  public:
     /**
      * \brief Construct an object that displays a texture for debugging purposes (example: depth buffer)
      * \param texture The texture to be rendered
@@ -68,6 +73,7 @@ class QgsPreviewQuad : public Qt3DCore::QEntity
 
     //! Sets where the quad will be located on the scene
     void setViewPort( const QPointF &centerNDC, const QSizeF &size );
+
   private:
     QgsPreviewQuadMaterial *mMaterial = nullptr;
 };

@@ -16,6 +16,7 @@
 #define QGSNETWORKLOGGERNODE_H
 
 #include "qgsnetworkaccessmanager.h"
+#include "devtools/qgsdevtoolsmodelnode.h"
 #include <QElapsedTimer>
 #include <QVariant>
 #include <QColor>
@@ -24,160 +25,6 @@
 #include <deque>
 
 class QAction;
-class QgsNetworkLoggerGroup;
-
-/**
- * \ingroup app
- * \class QgsNetworkLoggerNode
- * \brief Base class for nodes in the network logger model.
- *
- * \since QGIS 3.14
- */
-class QgsNetworkLoggerNode
-{
-  public:
-
-    //! Custom node data roles
-    enum Roles
-    {
-      RoleStatus = Qt::UserRole + 1, //!< Request status role
-      RoleId, //!< Request ID role
-    };
-
-    virtual ~QgsNetworkLoggerNode();
-
-    /**
-     * Returns the node's parent node.
-     *
-     * If parent is NULLPTR, the node is a root node
-     */
-    QgsNetworkLoggerGroup *parent() { return mParent; }
-
-    /**
-     * Returns the node's data for the specified model \a role.
-     */
-    virtual QVariant data( int role = Qt::DisplayRole ) const = 0;
-
-    /**
-     * Returns the number of child nodes owned by this node.
-     */
-    virtual int childCount() const = 0;
-
-    /**
-     * Returns a list of actions relating to the node.
-     *
-     * The actions should be parented to \a parent.
-     */
-    virtual QList< QAction * > actions( QObject *parent );
-
-    /**
-     * Converts the node's contents to a variant.
-     */
-    virtual QVariant toVariant() const;
-
-  protected:
-
-    QgsNetworkLoggerNode();
-
-  private:
-
-    QgsNetworkLoggerGroup *mParent = nullptr;
-    friend class QgsNetworkLoggerGroup;
-};
-
-/**
- * \ingroup app
- * \class QgsNetworkLoggerGroup
- * \brief Base class for network logger model "group" nodes, which contain children of their own.
- *
- * \since QGIS 3.14
- */
-class QgsNetworkLoggerGroup : public QgsNetworkLoggerNode
-{
-  public:
-
-    /**
-     * Adds a \a child node to this node.
-     */
-    void addChild( std::unique_ptr< QgsNetworkLoggerNode > child );
-
-    /**
-     * Returns the index of the specified \a child node.
-     *
-     * \warning \a child must be a valid child of this node.
-     */
-    int indexOf( QgsNetworkLoggerNode *child ) const;
-
-    /**
-     * Returns the child at the specified \a index.
-     */
-    QgsNetworkLoggerNode *childAt( int index );
-
-    /**
-     * Clears the group, removing all its children.
-     */
-    void clear();
-
-    int childCount() const override final { return mChildren.size(); }
-    QVariant data( int role = Qt::DisplayRole ) const override;
-    QVariant toVariant() const override;
-
-  protected:
-
-    /**
-     * Constructor for a QgsNetworkLoggerGroup, with the specified \a title.
-     */
-    QgsNetworkLoggerGroup( const QString &title );
-
-    /**
-     * Adds a simple \a key: \a value node to the group.
-     */
-    void addKeyValueNode( const QString &key, const QString &value, const QColor &color = QColor() );
-
-  private:
-
-    std::deque< std::unique_ptr< QgsNetworkLoggerNode > > mChildren;
-    QString mGroupTitle;
-    friend class QgsNetworkLoggerRootNode;
-
-};
-
-/**
- * \ingroup app
- * \class QgsNetworkLoggerValueNode
- * \brief A "key: value" style node for the network logger model.
- *
- * \since QGIS 3.14
- */
-class QgsNetworkLoggerValueNode : public QgsNetworkLoggerNode
-{
-  public:
-
-    /**
-     * Constructor for QgsNetworkLoggerValueNode, with the specified \a key (usually translated) and \a value.
-     */
-    QgsNetworkLoggerValueNode( const QString &key, const QString &value, const QColor &color = QColor() );
-
-    /**
-     * Returns the node's key.
-     */
-    QString key() const { return mKey; }
-
-    /**
-     * Returns the node's value.
-     */
-    QString value() const { return mValue; }
-
-    QVariant data( int role = Qt::DisplayRole ) const override final;
-    int childCount() const override final { return 0; }
-    QList< QAction * > actions( QObject *parent ) override final;
-
-  private:
-
-    QString mKey;
-    QString mValue;
-    QColor mColor;
-};
 
 /**
  * \ingroup app
@@ -186,10 +33,9 @@ class QgsNetworkLoggerValueNode : public QgsNetworkLoggerNode
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerRootNode final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerRootNode final : public QgsDevToolsModelGroup
 {
   public:
-
     QgsNetworkLoggerRootNode();
     QVariant data( int role = Qt::DisplayRole ) const override final;
 
@@ -231,17 +77,16 @@ class QgsNetworkLoggerSslErrorGroup;
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerRequestGroup final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerRequestGroup final : public QgsDevToolsModelGroup
 {
   public:
-
     //! Request statu
     enum class Status
     {
-      Pending, //!< Request underway
+      Pending,  //!< Request underway
       Complete, //!< Request was successfully completed
-      Error, //!< Request encountered an error
-      TimeOut, //!< Request timed out
+      Error,    //!< Request encountered an error
+      TimeOut,  //!< Request timed out
       Canceled, //!< Request was manually canceled
     };
 
@@ -251,7 +96,7 @@ class QgsNetworkLoggerRequestGroup final : public QgsNetworkLoggerGroup
      */
     QgsNetworkLoggerRequestGroup( const QgsNetworkRequestParameters &request );
     QVariant data( int role = Qt::DisplayRole ) const override;
-    QList< QAction * > actions( QObject *parent ) override final;
+    QList<QAction *> actions( QObject *parent ) override final;
     QVariant toVariant() const override;
 
     /**
@@ -265,11 +110,21 @@ class QgsNetworkLoggerRequestGroup final : public QgsNetworkLoggerGroup
     QUrl url() const { return mUrl; }
 
     /**
+     * Sets the request's URL.
+     */
+    void setUrl( const QUrl &url );
+
+    /**
+     * Returns TRUE if the request was served directly from local cache.
+     */
+    bool replyFromCache() const { return mReplyFromCache; }
+
+    /**
      * Called to set the \a reply associated with the request.
      *
      * Will automatically create children encapsulating the reply details.
      */
-    void setReply( const  QgsNetworkReplyContent &reply );
+    void setReply( const QgsNetworkReplyContent &reply );
 
     /**
      * Flags the reply as having timed out.
@@ -302,10 +157,10 @@ class QgsNetworkLoggerRequestGroup final : public QgsNetworkLoggerGroup
     static QString cacheControlToString( QNetworkRequest::CacheLoadControl control );
 
   private:
-
     QUrl mUrl;
     int mRequestId = 0;
     QNetworkAccessManager::Operation mOperation;
+    QString mVerb;
     QElapsedTimer mTimer;
     qint64 mTotalTime = 0;
     int mHttpStatus = -1;
@@ -316,7 +171,8 @@ class QgsNetworkLoggerRequestGroup final : public QgsNetworkLoggerGroup
     QByteArray mData;
     Status mStatus = Status::Pending;
     bool mHasSslErrors = false;
-    QList< QPair< QString, QString > > mHeaders;
+    bool mReplyFromCache = false;
+    QList<QPair<QString, QString>> mHeaders;
     QgsNetworkLoggerRequestDetailsGroup *mDetailsGroup = nullptr;
     QgsNetworkLoggerReplyGroup *mReplyGroup = nullptr;
     QgsNetworkLoggerSslErrorGroup *mSslErrorsGroup = nullptr;
@@ -351,10 +207,9 @@ class QgsNetworkLoggerPostContentGroup;
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerRequestDetailsGroup final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerRequestDetailsGroup final : public QgsDevToolsModelGroup
 {
   public:
-
     /**
      * Constructor for QgsNetworkLoggerRequestDetailsGroup, populated from the
      * specified \a request details.
@@ -363,7 +218,6 @@ class QgsNetworkLoggerRequestDetailsGroup final : public QgsNetworkLoggerGroup
     QVariant toVariant() const override;
 
   private:
-
     QgsNetworkLoggerRequestQueryGroup *mQueryGroup = nullptr;
     QgsNetworkLoggerRequestHeadersGroup *mRequestHeaders = nullptr;
     QgsNetworkLoggerPostContentGroup *mPostContent = nullptr;
@@ -383,16 +237,14 @@ class QgsNetworkLoggerRequestDetailsGroup final : public QgsNetworkLoggerGroup
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerRequestHeadersGroup final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerRequestHeadersGroup final : public QgsDevToolsModelGroup
 {
   public:
-
     /**
      * Constructor for QgsNetworkLoggerRequestHeadersGroup, populated from the
      * specified \a request details.
      */
     QgsNetworkLoggerRequestHeadersGroup( const QgsNetworkRequestParameters &request );
-
 };
 
 
@@ -409,16 +261,14 @@ class QgsNetworkLoggerRequestHeadersGroup final : public QgsNetworkLoggerGroup
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerRequestQueryGroup final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerRequestQueryGroup final : public QgsDevToolsModelGroup
 {
   public:
-
     /**
      * Constructor for QgsNetworkLoggerRequestQueryGroup, populated from the
      * specified \a url.
      */
     QgsNetworkLoggerRequestQueryGroup( const QUrl &url );
-
 };
 
 /**
@@ -433,10 +283,9 @@ class QgsNetworkLoggerRequestQueryGroup final : public QgsNetworkLoggerGroup
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerPostContentGroup final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerPostContentGroup final : public QgsDevToolsModelGroup
 {
   public:
-
     /**
      * Constructor for QgsNetworkLoggerPostContentGroup, populated from the
      * specified \a request details.
@@ -462,10 +311,9 @@ class QgsNetworkLoggerReplyHeadersGroup;
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerReplyGroup final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerReplyGroup final : public QgsDevToolsModelGroup
 {
   public:
-
     /**
      * Constructor for QgsNetworkLoggerReplyGroup, populated from the
      * specified \a reply details.
@@ -474,9 +322,7 @@ class QgsNetworkLoggerReplyGroup final : public QgsNetworkLoggerGroup
     QVariant toVariant() const override;
 
   private:
-
     QgsNetworkLoggerReplyHeadersGroup *mReplyHeaders = nullptr;
-
 };
 
 /**
@@ -493,16 +339,14 @@ class QgsNetworkLoggerReplyGroup final : public QgsNetworkLoggerGroup
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerReplyHeadersGroup final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerReplyHeadersGroup final : public QgsDevToolsModelGroup
 {
   public:
-
     /**
      * Constructor for QgsNetworkLoggerReplyHeadersGroup, populated from the
      * specified \a reply details.
      */
     QgsNetworkLoggerReplyHeadersGroup( const QgsNetworkReplyContent &reply );
-
 };
 
 /**
@@ -519,10 +363,9 @@ class QgsNetworkLoggerReplyHeadersGroup final : public QgsNetworkLoggerGroup
  *
  * \since QGIS 3.14
  */
-class QgsNetworkLoggerSslErrorGroup final : public QgsNetworkLoggerGroup
+class QgsNetworkLoggerSslErrorGroup final : public QgsDevToolsModelGroup
 {
   public:
-
     /**
      * Constructor for QgsNetworkLoggerSslErrorGroup, populated from the
      * specified \a errors.
@@ -530,7 +373,6 @@ class QgsNetworkLoggerSslErrorGroup final : public QgsNetworkLoggerGroup
     QgsNetworkLoggerSslErrorGroup( const QList<QSslError> &errors );
     QVariant data( int role = Qt::DisplayRole ) const override;
 };
-
 
 
 #endif // QGSNETWORKLOGGERNODE_H

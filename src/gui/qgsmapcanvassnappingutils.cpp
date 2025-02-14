@@ -13,16 +13,18 @@
  *                                                                         *
  ***************************************************************************/
 #include "qgsmapcanvassnappingutils.h"
+#include "moc_qgsmapcanvassnappingutils.cpp"
 
 #include "qgsmapcanvas.h"
 #include "qgsvectorlayer.h"
 #include "qgssettingsregistrycore.h"
+#include "qgssettingsentryimpl.h"
 
 #include <QApplication>
 #include <QProgressDialog>
 
 QgsMapCanvasSnappingUtils::QgsMapCanvasSnappingUtils( QgsMapCanvas *canvas, QObject *parent )
-  : QgsSnappingUtils( parent, QgsSettingsRegistryCore::settingsDigitizingSnapInvisibleFeature.value() )
+  : QgsSnappingUtils( parent, QgsSettingsRegistryCore::settingsDigitizingSnapInvisibleFeature->value() )
   , mCanvas( canvas )
 
 {
@@ -39,7 +41,7 @@ QgsMapCanvasSnappingUtils::QgsMapCanvasSnappingUtils( QgsMapCanvas *canvas, QObj
 void QgsMapCanvasSnappingUtils::canvasMapSettingsChanged()
 {
   setMapSettings( mCanvas->mapSettings() );
-  setEnableSnappingForInvisibleFeature( QgsSettingsRegistryCore::settingsDigitizingSnapInvisibleFeature.value() );
+  setEnableSnappingForInvisibleFeature( QgsSettingsRegistryCore::settingsDigitizingSnapInvisibleFeature->value() );
 }
 
 void QgsMapCanvasSnappingUtils::canvasTransformContextChanged()
@@ -56,7 +58,7 @@ void QgsMapCanvasSnappingUtils::canvasCurrentLayerChanged()
 
 void QgsMapCanvasSnappingUtils::canvasMapToolChanged()
 {
-  setEnableSnappingForInvisibleFeature( QgsSettingsRegistryCore::settingsDigitizingSnapInvisibleFeature.value() );
+  setEnableSnappingForInvisibleFeature( QgsSettingsRegistryCore::settingsDigitizingSnapInvisibleFeature->value() );
 }
 
 void QgsMapCanvasSnappingUtils::prepareIndexStarting( int count )

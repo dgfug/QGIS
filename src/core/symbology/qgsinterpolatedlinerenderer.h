@@ -21,8 +21,6 @@
 #include "qgis.h"
 #include "qgscolorrampshader.h"
 #include "qgsreadwritecontext.h"
-#include "qgsrenderer.h"
-#include "qgsunittypes.h"
 #include "qgssymbollayer.h"
 
 class QgsLayerTreeLayer;
@@ -211,13 +209,13 @@ class CORE_EXPORT QgsInterpolatedLineRenderer
     QgsInterpolatedLineWidth interpolatedLineWidth() const;
 
     //! Sets the unit of the stroke width
-    void setWidthUnit( QgsUnitTypes::RenderUnit strokeWidthUnit );
+    void setWidthUnit( Qgis::RenderUnit strokeWidthUnit );
 
     /**
     *   Returns the unit of the stroke width
     *  \since QGIS 3.20
     */
-    QgsUnitTypes::RenderUnit widthUnit() const;
+    Qgis::RenderUnit widthUnit() const;
 
     //! Sets the stroke color used to render
     void setInterpolatedColor( const QgsInterpolatedLineColor &strokeColoring );
@@ -267,7 +265,7 @@ class CORE_EXPORT QgsInterpolatedLineRenderer
 
     QgsInterpolatedLineWidth mStrokeWidth;
     QgsInterpolatedLineColor mStrokeColoring;
-    QgsUnitTypes::RenderUnit mStrokeWidthUnit = QgsUnitTypes::RenderMillimeters;
+    Qgis::RenderUnit mStrokeWidthUnit = Qgis::RenderUnit::Millimeters;
     void adjustLine( double value, double value1, double value2, double &width, double &adjusting ) const;
     bool mSelected = false;
 
@@ -286,7 +284,6 @@ class CORE_EXPORT QgsInterpolatedLineSymbolLayer : public QgsLineSymbolLayer
 {
   public:
 
-    //! Constructor
     QgsInterpolatedLineSymbolLayer();
 
     //! Creates the symbol layer
@@ -299,47 +296,49 @@ class CORE_EXPORT QgsInterpolatedLineSymbolLayer : public QgsLineSymbolLayer
     QgsInterpolatedLineSymbolLayer *clone() const override SIP_FACTORY;
     QVariantMap properties() const override;
     void drawPreviewIcon( QgsSymbolRenderContext &context, QSize size ) override;
+    QColor color() const override;
 
     void startFeatureRender( const QgsFeature &feature, QgsRenderContext &context ) override;
     void stopFeatureRender( const QgsFeature &feature, QgsRenderContext &context ) override;
     void renderPolyline( const QPolygonF &points, QgsSymbolRenderContext &context ) override;
-    bool isCompatibleWithSymbol( QgsSymbol *symbol ) const override;
     bool canCauseArtifactsBetweenAdjacentTiles() const override;
 
     /**
      * Sets the expressions (as string) that define the extremety values af the line feature for width.
      *
-     * \deprecated use setDataDefinedProperty( QgsSymbolLayer::PropertyLineStartWidthValue ) and setDataDefinedProperty( QgsSymbolLayer::PropertyLineEndWidthValue ) instead
+     * \deprecated QGIS 3.40. Use setDataDefinedProperty( QgsSymbolLayer::PropertyLineStartWidthValue ) and setDataDefinedProperty( QgsSymbolLayer::PropertyLineEndWidthValue ) instead.
      */
     Q_DECL_DEPRECATED void setExpressionsStringForWidth( const QString &start, const QString &end ) SIP_DEPRECATED;
 
     /**
      * Returns the epression related to the start extremity value for width.
      *
-     * \deprecated use dataDefinedProperty( QgsSymbolLayer::PropertyLineStartWidthValue ) instead.
+     * \deprecated QGIS 3.40. Use dataDefinedProperty( QgsSymbolLayer::PropertyLineStartWidthValue ) instead.
      */
     Q_DECL_DEPRECATED QString startValueExpressionForWidth() const SIP_DEPRECATED;
 
     /**
      * Returns the expression related to the end extremity value for width.
      *
-     * \deprecated use dataDefinedProperty( QgsSymbolLayer::PropertyLineEndWidthValue ) instead.
+     * \deprecated QGIS 3.40. Use dataDefinedProperty( QgsSymbolLayer::PropertyLineEndWidthValue ) instead.
      */
     Q_DECL_DEPRECATED QString endValueExpressionForWidth() const SIP_DEPRECATED;
+
+    // TODO QGIS 4.0 -- rename to avoid collision with base class methods
 
     /**
      * Sets the width unit.
      *
      * \see widthUnit()
      */
-    void setWidthUnit( QgsUnitTypes::RenderUnit strokeWidthUnit );
+    void setWidthUnit( Qgis::RenderUnit strokeWidthUnit ); // cppcheck-suppress duplInheritedMember
 
     /**
      * Returns the width unit.
      *
      * \see setWidthUnit()
      */
-    QgsUnitTypes::RenderUnit widthUnit() const;
+    Qgis::RenderUnit widthUnit() const; // cppcheck-suppress duplInheritedMember
 
     /**
      * Sets the interpolated width used to render the width of lines, \a see QgsInterpolatedLineWidth.
@@ -358,21 +357,21 @@ class CORE_EXPORT QgsInterpolatedLineSymbolLayer : public QgsLineSymbolLayer
     /**
      * Sets the expressions (as string) that define the extremety values af the line feature for color.
      *
-     * \deprecated use setDataDefinedProperty( QgsSymbolLayer::PropertyLineStartColorValue ) and setDataDefinedProperty( QgsSymbolLayer::PropertyLineEndColorValue ) instead
+     * \deprecated QGIS 3.40. Use setDataDefinedProperty( QgsSymbolLayer::PropertyLineStartColorValue ) and setDataDefinedProperty( QgsSymbolLayer::PropertyLineEndColorValue ) instead.
      */
     Q_DECL_DEPRECATED void setExpressionsStringForColor( const QString &start, const QString &end ) SIP_DEPRECATED;
 
     /**
      * Returns the epression related to the start extremity value for width for color
      *
-     * \deprecated use dataDefinedProperty( QgsSymbolLayer::PropertyLineStartColorValue ) instead.
+     * \deprecated QGIS 3.40. Use dataDefinedProperty( QgsSymbolLayer::PropertyLineStartColorValue ) instead.
      */
     Q_DECL_DEPRECATED QString startValueExpressionForColor() const SIP_DEPRECATED;
 
     /**
      * Returns the expression related to the end extremity value for width for color
      *
-     * \deprecated use dataDefinedProperty( QgsSymbolLayer::PropertyLineEndColorValue ) instead.
+     * \deprecated QGIS 3.40. Use dataDefinedProperty( QgsSymbolLayer::PropertyLineEndColorValue ) instead.
      */
     Q_DECL_DEPRECATED QString endValueExpressionForColor() const SIP_DEPRECATED;
 

@@ -27,14 +27,11 @@
 // version without notice, or even be removed.
 //
 
-#include <Qt3DRender/QMaterial>
+#include "qgsmaterial.h"
+
+#include <Qt3DRender/QCamera>
 
 #define SIP_NO_FILE
-
-namespace Qt3DRender
-{
-  class QCamera;
-}
 
 /**
  * \ingroup 3d
@@ -55,7 +52,7 @@ namespace Qt3DRender
  * we have access to previous (p0) and next (p3) points). Geometry shader generates two triangles
  * for each segment and possibly another triangle for bevel join.
  */
-class QgsLineMaterial : public Qt3DRender::QMaterial
+class QgsLineMaterial : public QgsMaterial
 {
     Q_OBJECT
   public:
@@ -63,6 +60,9 @@ class QgsLineMaterial : public Qt3DRender::QMaterial
 
     void setLineColor( const QColor &color );
     QColor lineColor() const;
+
+    void setUseVertexColors( bool enabled );
+    bool useVertexColors() const;
 
     void setLineWidth( float width );
     float lineWidth() const;
@@ -73,9 +73,9 @@ class QgsLineMaterial : public Qt3DRender::QMaterial
     Qt3DRender::QParameter *mParameterThickness = nullptr;
     Qt3DRender::QParameter *mParameterMiterLimit = nullptr;
     Qt3DRender::QParameter *mParameterLineColor = nullptr;
+    Qt3DRender::QParameter *mParameterUseVertexColors = nullptr;
 
     Qt3DRender::QParameter *mParameterWindowScale = nullptr;
-
 };
 
 /// @endcond

@@ -10,17 +10,25 @@
  *                                                                           *
  ****************************************************************************/
 
-
 #include <numeric>
 #include <random>
 
 #include "../untwine/GridKey.hpp"
 
+#include <pdal/PDALUtils.hpp>
 #include <pdal/StageFactory.hpp>
 #include <pdal/io/BufferReader.hpp>
+#include <pdal/filters/SortFilter.hpp>
+#include <pdal/util/Algorithm.hpp>
+
+#include <lazperf/lazperf.hpp>
+#include <lazperf/writers.hpp>
+#include <lazperf/readers.hpp>
 
 #include "Processor.hpp"
 #include "PyramidManager.hpp"
+
+#include <stringconv.hpp>  // untwine/os
 
 namespace untwine
 {
@@ -37,17 +45,47 @@ Processor::Processor(PyramidManager& manager, const VoxelInfo& v, const BaseInfo
 
 void Processor::run()
 {
+    // Don't let any exception sneak out of here.
+    try
+    {
+        runLocal();
+    }
+    catch (const std::exception& ex)
+    {
+        m_manager.queueWithError(m_vi.octant(), ex.what());
+        return;
+    }
+    catch (...)
+    {
+        std::string msg = std::string("Unexpected error processing ") + m_vi.key().toString() + ".";
+        m_manager.queueWithError(m_vi.octant(), msg);
+        return;
+    }
+    m_manager.queue(m_vi.octant());
+}
+
+void Processor::runLocal()
+{
+    // If we don't merge small files into one, we'll end up trying to deal with too many
+    // open files later and run out of file descriptors.
+    for (int i = 0; i < 8; ++i)
+    {
+        OctantInfo& child = m_vi[i];
+        if (child.fileInfos().size() >= 4)
+            child.mergeSmallFiles(m_b.opts.tempDir, m_b.pointSize);
+    }
+
     size_t totalPoints = 0;
     size_t totalFileInfos = 0;
     for (int i = 0; i < 8; ++i)
     {
         OctantInfo& child = m_vi[i];
-
         totalFileInfos += child.fileInfos().size();
         totalPoints += child.numPoints();
         if (child.numPoints() < MinimumPoints)
             m_vi.octant().appendFileInfos(child);
     }
+
     // It's possible that all the file infos have been moved above, but this is cheap.
     if (totalPoints < MinimumTotalPoints)
         for (int i = 0; i < 8; ++i)
@@ -63,8 +101,6 @@ void Processor::run()
         sample(accepted, rejected);
 
     write(accepted, rejected);
-
-    m_manager.queue(m_vi.octant());
 }
 
 
@@ -86,6 +122,11 @@ void Processor::sample(Index& accepted, Index& rejected)
 
     std::random_device rd;
     std::mt19937 g(rd());
+    /**
+    std::vector<int32_t> v{1234};
+    std::seed_seq seed(v.begin(), v.end());
+    std::mt19937 g(seed);
+    **/
 
     //ABELL - This may not be the best way to do this. Probably better to work from some
     //  point (center, whatever) out, but this is cheap because you don't have to do
@@ -118,11 +159,6 @@ void Processor::sample(Index& accepted, Index& rejected)
 
 void Processor::write(Index& accepted, Index& rejected)
 {
-/**
-std::cerr << m_vi.key() << " Accepted/Rejected/num points = " <<
-    accepted.size() << "/" << rejected.size() << "/" << m_vi.numPoints() << "!\n";
-**/
-
     // If this is the final key, append any remaining file infos as accepted points and
     // write the accepted points as compressed.
     if (m_vi.key() == VoxelKey(0, 0, 0, 0))
@@ -183,6 +219,7 @@ bool Processor::acceptable(int pointId, GridKey key)
 }
 
 
+/**
 bool Processor::tooClose(pdal::PointId id1, pdal::PointId id2)
 {
     const Point& p1 = m_points[id1];
@@ -194,6 +231,7 @@ bool Processor::tooClose(pdal::PointId id1, pdal::PointId id2)
 
     return dx * dx + dy * dy + dz * dz <= m_vi.squareSpacing();
 }
+**/
 
 
 void Processor::writeBinOutput(Index& index)
@@ -206,10 +244,10 @@ void Processor::writeBinOutput(Index& index)
     // Note that we write the the input directory, as this will be input to a later
     // pass.
     std::string filename = m_vi.key().toString() + ".bin";
-    std::string fullFilename = m_b.inputDir + "/" + filename;
-    std::ofstream out(fullFilename, std::ios::binary | std::ios::trunc);
+    std::string fullFilename = m_b.opts.tempDir + "/" + filename;
+    std::ofstream out(os::toNative(fullFilename), std::ios::binary | std::ios::trunc);
     if (!out)
-        fatal("Couldn't open '" + fullFilename + "' for output.");
+        throw FatalError("Couldn't open '" + fullFilename + "' for output.");
     for (size_t i = 0; i < index.size(); ++i)
         out.write(m_points[index[i]].cdata(), m_b.pointSize);
     m_vi.octant().appendFileInfo(FileInfo(filename, index.size()));
@@ -280,35 +318,45 @@ void Processor::writeCompressedOutput(Index& index)
 Processor::IndexIter
 Processor::writeOctantCompressed(const OctantInfo& o, Index& index, IndexIter pos)
 {
+    using namespace pdal;
+
     auto begin = pos;
-    pdal::PointTable table;
+    PointTable table;
     IndexedStats stats;
 
     //ABELL - fixme
     // For now we copy the dimension list so we're sure that it matches the layout, though
     // there's no reason why it should change. We should modify things to use a single
     // layout.
+
     DimInfoList dims = m_b.dimInfo;
+    m_extraDims.clear();
     for (FileDimInfo& fdi : dims)
     {
         fdi.dim = table.layout()->registerOrAssignDim(fdi.name, fdi.type);
-        if (m_b.stats)
+        if (m_b.opts.stats)
         {
+            // For single file output we need the counts by return number.
             if (fdi.dim == pdal::Dimension::Id::Classification)
+                stats.push_back({fdi.dim, Stats(fdi.name, Stats::EnumType::Enumerate, false)});
+            else if (fdi.dim == pdal::Dimension::Id::ReturnNumber)
                 stats.push_back({fdi.dim, Stats(fdi.name, Stats::EnumType::Enumerate, false)});
             else
                 stats.push_back({fdi.dim, Stats(fdi.name, Stats::EnumType::NoEnum, false)});
         }
+        if (fdi.extraDim)
+            m_extraDims.push_back(DimType(fdi.dim, fdi.type));
     }
     table.finalize();
 
-    pdal::PointViewPtr view(new pdal::PointView(table));
+    PointViewPtr view(new pdal::PointView(table));
 
     // The octant's points can came from one or more FileInfo.  The points are sorted such
     // all the points that come from a single FileInfo are consecutive.
     auto fii = o.fileInfos().begin();
     auto fiiEnd = o.fileInfos().end();
     size_t count = 0;
+
     if (fii != fiiEnd)
     {
         // We're trying to find the range of points that come from a single FileInfo.
@@ -339,13 +387,12 @@ Processor::writeOctantCompressed(const OctantInfo& o, Index& index, IndexIter po
 flush:
     try
     {
-        flushCompressed(table, view, o, stats);
+        flushCompressed(view, o, stats);
     }
-    catch (pdal::pdal_error& err)
+    catch (pdal_error& err)
     {
-        fatal(err.what());
+        throw FatalError(err.what());
     }
-
     m_manager.logOctant(o.key(), count, stats);
     return pos;
 }
@@ -368,61 +415,156 @@ void Processor::appendCompressed(pdal::PointViewPtr view, const DimInfoList& dim
     }
 }
 
-void Processor::flushCompressed(pdal::PointTableRef table, pdal::PointViewPtr view,
-    const OctantInfo& oi, IndexedStats& stats)
+void Processor::flushCompressed(pdal::PointViewPtr view, const OctantInfo& oi, IndexedStats& stats)
 {
-    using namespace pdal;
-
-    std::string filename = m_b.outputDir + "/ept-data/" + oi.key().toString() + ".laz";
-
-    if (m_b.stats)
+    // For single file output we need the stats for
+    if (m_b.opts.stats)
     {
-        for (PointId id = 0; id < view->size(); ++id)
+        for (pdal::PointId id = 0; id < view->size(); ++id)
         {
             for (auto& sp : stats)
             {
-                Dimension::Id dim = sp.first;
+                pdal::Dimension::Id dim = sp.first;
                 Stats& s = sp.second;
                 s.insert(view->getFieldAs<double>(dim, id));
             }
         }
     }
 
-    StageFactory factory;
+    createChunk(oi.key(), view);
+}
 
-    BufferReader r;
+
+void Processor::sortChunk(pdal::PointViewPtr view)
+{
+    pdal::BufferReader r;
     r.addView(view);
 
-    Stage *prev = &r;
+    pdal::SortFilter s;
+    s.setInput(r);
+    pdal::Options o;
+    o.add("dimension", "GpsTime");
+    s.setOptions(o);
 
-    if (table.layout()->hasDim(Dimension::Id::GpsTime))
+    s.prepare(view->table());
+    s.execute(view->table());
+}
+
+void Processor::createChunk(const VoxelKey& key, pdal::PointViewPtr view)
+{
+    using namespace pdal;
+
+    if (view->size() == 0)
     {
-        Stage *f = factory.createStage("filters.sort");
-        pdal::Options fopts;
-        fopts.add("dimension", "gpstime");
-        f->setOptions(fopts);
-        f->setInput(*prev);
-        prev = f;
+        m_manager.newChunk(key, 0, 0);
+        return;
     }
 
-    Stage *w = factory.createStage("writers.las");
-    pdal::Options wopts;
-    wopts.add("extra_dims", "all");
-    wopts.add("software_id", "Entwine 1.0");
-    wopts.add("compression", "laszip");
-    wopts.add("filename", filename);
-    wopts.add("offset_x", m_b.offset[0]);
-    wopts.add("offset_y", m_b.offset[1]);
-    wopts.add("offset_z", m_b.offset[2]);
-    wopts.add("scale_x", m_b.scale[0]);
-    wopts.add("scale_y", m_b.scale[1]);
-    wopts.add("scale_z", m_b.scale[2]);
-    w->setOptions(wopts);
-    w->setInput(*prev);
-    // Set dataformat ID based on time/rgb, but for now accept the default.
+    // Sort the chunk on GPS time.
+    if (view->layout()->hasDim(Dimension::Id::GpsTime))
+        sortChunk(view);
 
-    w->prepare(table);
-    w->execute(table);
+    PointLayoutPtr layout = view->layout();
+
+    int ebCount {0};
+    for (DimType dim : m_extraDims)
+        ebCount += layout->dimSize(dim.m_id);
+
+    std::vector<char> buf(lazperf::baseCount(m_b.pointFormatId) + ebCount);
+    lazperf::writer::chunk_compressor compressor(m_b.pointFormatId, ebCount);
+    for (PointId idx = 0; idx < view->size(); ++idx)
+    {
+        PointRef point(*view, idx);
+        fillPointBuf(point, buf, layout->findDim(UntwineBitsDimName));
+        compressor.compress(buf.data());
+    }
+    std::vector<unsigned char> chunk = compressor.done();
+
+    uint64_t location = m_manager.newChunk(key, chunk.size(), (uint32_t)view->size());
+
+    std::ofstream out(os::toNative(m_b.opts.outputName),
+        std::ios::out | std::ios::in | std::ios::binary);
+    out.seekp(std::ofstream::pos_type(location));
+    out.write(reinterpret_cast<const char *>(chunk.data()), chunk.size());
+    out.close();
+    if (!out)
+        throw FatalError("Failure writing to file '" + m_b.opts.outputName + "'.");
+}
+
+void Processor::fillPointBuf(pdal::PointRef& point, std::vector<char>& buf,
+    pdal::Dimension::Id bitsDim)
+{
+    using namespace pdal;
+
+    LeInserter ostream(buf.data(), buf.size());
+
+    bool hasTime = true; //  m_lasHeader.hasTime();
+    bool hasColor = m_b.pointFormatId == 7 || m_b.pointFormatId == 8;
+    bool hasInfrared = m_b.pointFormatId == 8;
+
+    // we always write the base fields
+    using namespace Dimension;
+
+    uint8_t returnNumber(1);
+    uint8_t numberOfReturns(1);
+    if (point.hasDim(Id::ReturnNumber))
+        returnNumber = point.getFieldAs<uint8_t>(Id::ReturnNumber);
+    if (point.hasDim(Id::NumberOfReturns))
+        numberOfReturns = point.getFieldAs<uint8_t>(Id::NumberOfReturns);
+
+    auto converter = [](double d, Dimension::Id dim) -> int32_t
+    {
+        int32_t i(0);
+
+        if (!Utils::numericCast(d, i))
+            throw FatalError("Unable to convert scaled value (" +
+                Utils::toString(d) + ") to "
+                "int32 for dimension '" + Dimension::name(dim) +
+                "' when writing LAS/LAZ file.");
+        return i;
+    };
+
+    int32_t x = converter((point.getFieldAs<double>(Id::X) - m_b.offset[0]) / m_b.scale[0], Id::X);
+    int32_t y = converter((point.getFieldAs<double>(Id::Y) - m_b.offset[1]) / m_b.scale[1], Id::Y);
+    int32_t z = converter((point.getFieldAs<double>(Id::Z) - m_b.offset[2]) / m_b.scale[2], Id::Z);
+
+    ostream << x;
+    ostream << y;
+    ostream << z;
+
+    ostream << point.getFieldAs<uint16_t>(Id::Intensity);
+    ostream << (uint8_t)(returnNumber | (numberOfReturns << 4));
+    ostream << point.getFieldAs<uint8_t>(bitsDim);
+    ostream << point.getFieldAs<uint8_t>(Id::Classification);
+
+    uint8_t userData = point.getFieldAs<uint8_t>(Id::UserData);
+     // Guaranteed to fit if scan angle rank isn't wonky.
+    int16_t scanAngleRank =
+        static_cast<int16_t>(std::round(
+            point.getFieldAs<float>(Id::ScanAngleRank) / .006f));
+    ostream << userData << scanAngleRank;
+
+    ostream << point.getFieldAs<uint16_t>(Id::PointSourceId);
+
+    if (hasTime)
+        ostream << point.getFieldAs<double>(Id::GpsTime);
+
+    if (hasColor)
+    {
+        ostream << point.getFieldAs<uint16_t>(Id::Red);
+        ostream << point.getFieldAs<uint16_t>(Id::Green);
+        ostream << point.getFieldAs<uint16_t>(Id::Blue);
+    }
+
+    if (hasInfrared)
+        ostream << point.getFieldAs<uint16_t>(Id::Infrared);
+
+    Everything e;
+    for (auto& dim : m_extraDims)
+    {
+        point.getField((char *)&e, dim.m_id, dim.m_type);
+        Utils::insertDim(ostream, dim.m_type, e);
+    }
 }
 
 } // namespace bu

@@ -40,6 +40,7 @@
 
 #include <QUrl>
 #include <QUrlQuery>
+#include <QTemporaryDir>
 
 /**
 * \ingroup UnitTests
@@ -47,30 +48,35 @@
 */
 
 
-class TestQgsVirtualRasterProvider : public QObject
+class TestQgsVirtualRasterProvider : public QgsTest
 {
     Q_OBJECT
 
+  public:
+    TestQgsVirtualRasterProvider()
+      : QgsTest( QStringLiteral( "Virtual Raster Provider Tests" ) ) {}
+
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init() {}// will be called before each testfunction is executed.
-    void cleanup() {}// will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
+    void init() {}          // will be called before each testfunction is executed.
+    void cleanup() {}       // will be called after every testfunction.
 
     void validLayer();
     void testUriProviderDecoding();
     void testUriEncoding();
+    void absoluteRelativeUri();
     void testConstructorWrong();
     void testConstructor();
     void testNewCalcNodeMethods();
     void testSecondGenerationVirtualRaster();
+    void testNoData();
 
   private:
     QString mTestDataDir;
-    QString mReport;
     QgsRasterLayer *mDemRasterLayer = nullptr;
     QgsRasterLayer *mLandsatRasterLayer = nullptr;
-
+    QgsRasterLayer *mNoDataRasterLayer = nullptr;
 };
 
 //runs before all tests
@@ -81,50 +87,42 @@ void TestQgsVirtualRasterProvider::initTestCase()
   QgsApplication::initQgis();
 
   mTestDataDir = QStringLiteral( TEST_DATA_DIR ) + '/'; //defined in CmakeLists.txt
-  mReport = QStringLiteral( "<h1>Virtual Raster Provider Tests</h1>\n" );
 
   QString demFileName = mTestDataDir + "raster/dem.tif";
   QFileInfo demRasterFileInfo( demFileName );
-  mDemRasterLayer = new QgsRasterLayer( demRasterFileInfo.filePath(),
-                                        demRasterFileInfo.completeBaseName() );
+  mDemRasterLayer = new QgsRasterLayer( demRasterFileInfo.filePath(), demRasterFileInfo.completeBaseName() );
 
   QString landsatFileName = mTestDataDir + "landsat.tif";
   QFileInfo landsatRasterFileInfo( landsatFileName );
-  mLandsatRasterLayer = new QgsRasterLayer( landsatRasterFileInfo.filePath(),
-      landsatRasterFileInfo.completeBaseName() );
+  mLandsatRasterLayer = new QgsRasterLayer( landsatRasterFileInfo.filePath(), landsatRasterFileInfo.completeBaseName() );
+
+  QString nodataFileName = mTestDataDir + "raster/no_data.tif";
+  QFileInfo nodataRasterFileInfo( nodataFileName );
+  mNoDataRasterLayer = new QgsRasterLayer( nodataRasterFileInfo.filePath(), nodataRasterFileInfo.completeBaseName() );
 }
 
 void TestQgsVirtualRasterProvider::validLayer()
 {
   QgsRasterLayer::LayerOptions options;
 
-  std::unique_ptr< QgsRasterLayer > layer = std::make_unique< QgsRasterLayer >(
-        mTestDataDir + QStringLiteral( "raster/dem.tif" ),
-        QStringLiteral( "layer" ),
-        QStringLiteral( "virtualraster" ),
-        options
-      );
+  auto layer = std::make_unique<QgsRasterLayer>(
+    mTestDataDir + QStringLiteral( "raster/dem.tif" ),
+    QStringLiteral( "layer" ),
+    QStringLiteral( "virtualraster" ),
+    options
+  );
 
-  QVERIFY( ! layer->isValid() );
+  QVERIFY( !layer->isValid() );
 }
 
 //runs after all tests
 void TestQgsVirtualRasterProvider::cleanupTestCase()
 {
   QgsApplication::exitQgis();
-  QString myReportFile = QDir::tempPath() + "/qgistest.html";
-  QFile myFile( myReportFile );
-  if ( myFile.open( QIODevice::WriteOnly | QIODevice::Append ) )
-  {
-    QTextStream myQTextStream( &myFile );
-    myQTextStream << mReport;
-    myFile.close();
-  }
 }
 
 void TestQgsVirtualRasterProvider::testUriProviderDecoding()
 {
-
   QgsRasterDataProvider::VirtualRasterParameters decodedParams = QgsVirtualRasterProvider::decodeVirtualRasterProviderUri( QStringLiteral( "?crs=EPSG:4326&extent=18.6662979442000001,45.7767014376000034,18.7035979441999984,45.8117014376000000&width=373&height=350&formula=\"dem@1\" + 200&dem:uri=path/to/file&dem:provider=gdal&landsat:uri=path/to/landsat&landsat:provider=gdal" ) );
 
   QCOMPARE( decodedParams.width, 373 );
@@ -139,7 +137,6 @@ void TestQgsVirtualRasterProvider::testUriProviderDecoding()
   QCOMPARE( decodedParams.rInputLayers.at( 1 ).uri, QStringLiteral( "path/to/landsat" ) );
   QCOMPARE( decodedParams.rInputLayers.at( 0 ).provider, QStringLiteral( "gdal" ) );
   QCOMPARE( decodedParams.rInputLayers.at( 1 ).provider, QStringLiteral( "gdal" ) );
-
 }
 
 void TestQgsVirtualRasterProvider::testUriEncoding()
@@ -162,26 +159,52 @@ void TestQgsVirtualRasterProvider::testUriEncoding()
   QCOMPARE( QUrl::fromPercentEncoding( QgsVirtualRasterProvider::encodeVirtualRasterProviderUri( params ).toUtf8() ), expecetedEncodedUri );
 }
 
+void TestQgsVirtualRasterProvider::absoluteRelativeUri()
+{
+  QgsReadWriteContext context;
+  context.setPathResolver( QgsPathResolver( QStringLiteral( TEST_DATA_DIR ) + QStringLiteral( "/project.qgs" ) ) );
+
+  QString uriAbs = "?crs=EPSG:32633&"
+                   "extent=781662.375,3339523.125,793062.375,3350923.125&"
+                   "width=200&"
+                   "height=200&"
+                   "formula=%22landsat@1%22+1&"
+                   "landsat:uri="
+                   + QStringLiteral( TEST_DATA_DIR ) + "/landsat.tif&"
+                                                       "landsat:provider=gdal";
+
+  QString uriRel = "?crs=EPSG:32633&"
+                   "extent=781662.375,3339523.125,793062.375,3350923.125&"
+                   "width=200&"
+                   "height=200&"
+                   "formula=%22landsat@1%22+1&"
+                   "landsat:uri=./landsat.tif&"
+                   "landsat:provider=gdal";
+
+  QgsProviderMetadata *vrMetadata = QgsProviderRegistry::instance()->providerMetadata( "virtualraster" );
+  QVERIFY( vrMetadata );
+
+  QString absoluteUri = QUrl::toPercentEncoding( uriAbs );
+  QString relativeUri = QUrl::toPercentEncoding( uriRel );
+  QCOMPARE( vrMetadata->absoluteToRelativeUri( absoluteUri, context ), relativeUri );
+  QCOMPARE( vrMetadata->relativeToAbsoluteUri( relativeUri, context ), absoluteUri );
+}
+
 void TestQgsVirtualRasterProvider::testConstructorWrong()
 {
   //Giving an invalid uri, with more raster referencies compared to the raster.ref that are present in the formula
   QString str1 = QStringLiteral( "?crs=EPSG:4326&extent=18.6662979442000001,45.7767014376000034,18.7035979441999984,45.8117014376000000&width=373&height=350&formula=\"dem@1\" + 200&dem:provider=gdal&landsat:provider=gdal" );
-  QString uri = QString( "%1&%2&%3" ).arg( str1, QStringLiteral( "dem:uri=" ) % mTestDataDir % QStringLiteral( "raster/dem.tif" ),
-                QStringLiteral( "landsat:uri=" ) % mTestDataDir % QStringLiteral( "landsat.tif" ) );
-  std::unique_ptr< QgsRasterLayer > layer = std::make_unique< QgsRasterLayer >( uri,
-      QStringLiteral( "layer" ),
-      QStringLiteral( "virtualraster" ) );
+  QString uri = QString( "%1&%2&%3" ).arg( str1, QStringLiteral( "dem:uri=" ) % mTestDataDir % QStringLiteral( "raster/dem.tif" ), QStringLiteral( "landsat:uri=" ) % mTestDataDir % QStringLiteral( "landsat.tif" ) );
+  auto layer = std::make_unique<QgsRasterLayer>( uri, QStringLiteral( "layer" ), QStringLiteral( "virtualraster" ) );
 
-  QVERIFY( ! layer->isValid() );
+  QVERIFY( !layer->isValid() );
 }
 
 void TestQgsVirtualRasterProvider::testConstructor()
 {
   QString str1 = QStringLiteral( "?crs=EPSG:4326&extent=18.6662979442000001,45.7767014376000034,18.7035979441999984,45.8117014376000000&width=373&height=350&formula=\"dem@1\" + 200&dem:provider=gdal" );
   QString uri1 = QString( "%1&%2" ).arg( str1, QStringLiteral( "dem:uri=" ) % mTestDataDir % QStringLiteral( "raster/dem.tif" ) );
-  std::unique_ptr< QgsRasterLayer > layer_1 = std::make_unique< QgsRasterLayer >( uri1,
-      QStringLiteral( "layer_1" ),
-      QStringLiteral( "virtualraster" ) );
+  auto layer_1 = std::make_unique<QgsRasterLayer>( uri1, QStringLiteral( "layer_1" ), QStringLiteral( "virtualraster" ) );
 
   QVERIFY( layer_1->dataProvider()->isValid() );
   QVERIFY( layer_1->isValid() );
@@ -192,12 +215,19 @@ void TestQgsVirtualRasterProvider::testConstructor()
   QCOMPARE( sampledValueCalc_1, sampledValue + 200. );
   QCOMPARE( layer_1->dataProvider()->crs(), QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:4326" ) ) );
 
+  QTemporaryDir dir;
+  const QString landsatPath = dir.filePath( QStringLiteral( "landsat.tif" ) );
+  QVERIFY( QFile::copy( mTestDataDir + "landsat.tif", landsatPath ) );
+  // remove nodata values from layer for consistent test results
+  auto landsat = std::make_unique<QgsRasterLayer>( landsatPath, QString(), QStringLiteral( "gdal" ) );
+  QVERIFY( landsat->isValid() );
+  landsat->dataProvider()->setNoDataValue( 1, -999999 );
+  landsat->dataProvider()->setNoDataValue( 2, -999999 );
+  landsat.reset();
 
   QString str2 = QStringLiteral( "?crs=EPSG:32633&extent=781662.375,3339523.125,793062.375,3350923.125&width=200&height=200&formula=\"landsat@1\" + \"landsat@2\"&landsat:provider=gdal" );
-  QString uri2 = QString( "%1&%2" ).arg( str2, QStringLiteral( "landsat:uri=" ) % mTestDataDir % QStringLiteral( "landsat.tif" ) );
-  std::unique_ptr< QgsRasterLayer > layer_2 = std::make_unique< QgsRasterLayer >( uri2,
-      QStringLiteral( "layer_2" ),
-      QStringLiteral( "virtualraster" ) );
+  QString uri2 = QString( "%1&%2" ).arg( str2, QStringLiteral( "landsat:uri=" ) % landsatPath );
+  auto layer_2 = std::make_unique<QgsRasterLayer>( uri2, QStringLiteral( "layer_2" ), QStringLiteral( "virtualraster" ) );
 
   QVERIFY( layer_2->isValid() );
   QVERIFY( layer_2->dataProvider()->isValid() );
@@ -207,19 +237,16 @@ void TestQgsVirtualRasterProvider::testConstructor()
 
   //use wrong formula
   QString str3 = QStringLiteral( "?crs=EPSG:32633&extent=781662.375,3339523.125,793062.375,3350923.125&width=200&height=200&formula=\"landsat@1\" xxxxxx+ \"landsat@2\"&landsat:provider=gdal" );
-  QString uri3 = QString( "%1&%2" ).arg( str3, QStringLiteral( "landsat:uri=" ) % mTestDataDir % QStringLiteral( "landsat.tif" ) );
-  std::unique_ptr< QgsRasterLayer > layer_3 = std::make_unique< QgsRasterLayer >( uri3,
-      QStringLiteral( "layer_3" ),
-      QStringLiteral( "virtualraster" ) );
-  QVERIFY( ! layer_3->isValid() );
-
+  QString uri3 = QString( "%1&%2" ).arg( str3, QStringLiteral( "landsat:uri=" ) % landsatPath );
+  auto layer_3 = std::make_unique<QgsRasterLayer>( uri3, QStringLiteral( "layer_3" ), QStringLiteral( "virtualraster" ) );
+  QVERIFY( !layer_3->isValid() );
 }
 
 void TestQgsVirtualRasterProvider::testNewCalcNodeMethods()
 {
   QString formula( "\"landsat@1\" + \"landsat@2\"-\"landsat@3\"" );
   QString errorString;
-  std::unique_ptr< QgsRasterCalcNode > calcNodeApp( QgsRasterCalcNode::parseRasterCalcString( formula, errorString ) );
+  std::unique_ptr<QgsRasterCalcNode> calcNodeApp( QgsRasterCalcNode::parseRasterCalcString( formula, errorString ) );
 
   QStringList rLayers = calcNodeApp->referencedLayerNames();
   QStringList rasterRef = calcNodeApp->cleanRasterReferences();
@@ -237,13 +264,10 @@ void TestQgsVirtualRasterProvider::testNewCalcNodeMethods()
 
 void TestQgsVirtualRasterProvider::testSecondGenerationVirtualRaster()
 {
-
   // creation of the "first generation" virtual raster, meaning a virtual raster that comes directly from a file
   QString str = QStringLiteral( "?crs=EPSG:4326&extent=18.6662979442000001,45.7767014376000034,18.7035979441999984,45.8117014376000000&width=373&height=350&formula=\"dem@1\" + 200&dem:provider=gdal" );
   QString uri = QString( "%1&%2" ).arg( str, QStringLiteral( "dem:uri=" ) % mTestDataDir % QStringLiteral( "raster/dem.tif" ) );
-  std::unique_ptr< QgsRasterLayer > layerFirst = std::make_unique< QgsRasterLayer >( uri,
-      QStringLiteral( "firstGenerationLayer" ),
-      QStringLiteral( "virtualraster" ) );
+  auto layerFirst = std::make_unique<QgsRasterLayer>( uri, QStringLiteral( "firstGenerationLayer" ), QStringLiteral( "virtualraster" ) );
   QVERIFY( layerFirst->dataProvider()->isValid() );
   QVERIFY( layerFirst->isValid() );
 
@@ -263,9 +287,7 @@ void TestQgsVirtualRasterProvider::testSecondGenerationVirtualRaster()
   params.rInputLayers.append( rasterParams );
 
   QString uriSecond = QgsVirtualRasterProvider::encodeVirtualRasterProviderUri( params );
-  std::unique_ptr< QgsRasterLayer > layerSecond = std::make_unique< QgsRasterLayer >( uriSecond,
-      QStringLiteral( "SecondGenerationLayer" ),
-      QStringLiteral( "virtualraster" ) );
+  auto layerSecond = std::make_unique<QgsRasterLayer>( uriSecond, QStringLiteral( "SecondGenerationLayer" ), QStringLiteral( "virtualraster" ) );
   QVERIFY( layerSecond->dataProvider()->isValid() );
   QVERIFY( layerSecond->isValid() );
 
@@ -274,7 +296,35 @@ void TestQgsVirtualRasterProvider::testSecondGenerationVirtualRaster()
 
   QCOMPARE( sampledValueCalc_1, sampledValue + 200. );
   QCOMPARE( layerSecond->dataProvider()->crs(), QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:4326" ) ) );
-
 }
+
+void TestQgsVirtualRasterProvider::testNoData()
+{
+  double tlx = 415780.969;
+  double tly = 759360.133;
+  double cellSize = 0.1;
+
+  // nodata
+  //  0  NaN
+  // NaN  1
+  //  2  NaN
+  QString str = QStringLiteral( "?crs=EPSG:2105&extent=415780.96899999998277053,759359.8330999999307096,415781.16899999999441206,759360.13309999997727573&width=2&height=3&formula=\"nodata@1\" ^2 / \"nodata@1\"&nodata:provider=gdal" );
+
+  QString uri = QString( "%1&%2" ).arg( str, QStringLiteral( "nodata:uri=" ) % mTestDataDir % QStringLiteral( "raster/no_data.tif" ) );
+
+  auto layerNoData = std::make_unique<QgsRasterLayer>( uri, QStringLiteral( "no-data" ), QStringLiteral( "virtualraster" ) );
+  QVERIFY( layerNoData->dataProvider()->isValid() );
+  QVERIFY( layerNoData->isValid() );
+
+  QgsPointXY p11( tlx + .5 * cellSize, tly - .5 * cellSize );
+  QgsPointXY p12( tlx + 1.5 * cellSize, tly - .5 * cellSize );
+  QgsPointXY p31( tlx + .5 * cellSize, tly - 2.5 * cellSize );
+
+  Q_ASSERT( std::isnan( layerNoData->dataProvider()->sample( p11, 1 ) ) ); // 0^2/0
+  Q_ASSERT( std::isnan( layerNoData->dataProvider()->sample( p12, 1 ) ) ); // NaN^2/NaN
+  QCOMPARE( layerNoData->dataProvider()->sample( p31, 1 ), 2 );            // 2^2/2
+}
+
+
 QGSTEST_MAIN( TestQgsVirtualRasterProvider )
 #include "testqgsvirtualrasterprovider.moc"

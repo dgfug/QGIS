@@ -28,11 +28,10 @@
  * \ingroup core
  * \class QgsLayerMetadataFormatter
  * \brief Class for metadata formatter.
- * \since QGIS 3.0
  */
 class CORE_EXPORT QgsLayerMetadataFormatter
 {
-    Q_DECLARE_TR_FUNCTIONS( "QgsLayerMetadataFormatter" )
+    Q_DECLARE_TR_FUNCTIONS( QgsLayerMetadataFormatter )
 
   public:
 

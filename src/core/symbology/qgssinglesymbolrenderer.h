@@ -39,6 +39,7 @@ class CORE_EXPORT QgsSingleSymbolRenderer : public QgsFeatureRenderer
     QgsSingleSymbolRenderer( QgsSymbol *symbol SIP_TRANSFER );
     ~QgsSingleSymbolRenderer() override;
 
+    Qgis::FeatureRendererFlags flags() const override;
     QgsSymbol *symbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
     QgsSymbol *originalSymbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
     void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
@@ -72,7 +73,7 @@ class CORE_EXPORT QgsSingleSymbolRenderer : public QgsFeatureRenderer
      *
      * The caller takes ownership of the returned renderer.
      */
-    static QgsFeatureRenderer *createFromSld( QDomElement &element, QgsWkbTypes::GeometryType geomType ) SIP_FACTORY;
+    static QgsFeatureRenderer *createFromSld( QDomElement &element, Qgis::GeometryType geomType ) SIP_FACTORY;
 
     QgsFeatureRenderer::Capabilities capabilities() override { return SymbolLevels; }
     QgsSymbolList symbols( QgsRenderContext &context ) const override;
@@ -87,12 +88,12 @@ class CORE_EXPORT QgsSingleSymbolRenderer : public QgsFeatureRenderer
     QDomElement save( QDomDocument &doc, const QgsReadWriteContext &context ) override;
     QgsLegendSymbolList legendSymbolItems() const override;
     QSet< QString > legendKeysForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    QString legendKeyToExpression( const QString &key, QgsVectorLayer *layer, bool &ok ) const override;
     void setLegendSymbolItem( const QString &key, QgsSymbol *symbol SIP_TRANSFER ) override;
 
     /**
      * Creates a new single symbol renderer from an existing \a renderer.
      * \returns a new renderer if the conversion was possible, otherwise NULLPTR.
-     * \since QGIS 2.5
      */
     static QgsSingleSymbolRenderer *convertFromRenderer( const QgsFeatureRenderer *renderer ) SIP_FACTORY;
 
@@ -104,14 +105,12 @@ class CORE_EXPORT QgsSingleSymbolRenderer : public QgsFeatureRenderer
      * When renderer does not use data-defined size or does not use marker symbols, these settings will be ignored.
      * Takes ownership of the passed settings objects. NULLPTR is a valid input that disables data-defined
      * size legend.
-     * \since QGIS 3.0
      */
     void setDataDefinedSizeLegend( QgsDataDefinedSizeLegend *settings SIP_TRANSFER );
 
     /**
      * Returns configuration of appearance of legend when using data-defined size for marker symbols.
      * Will return NULLPTR if the functionality is disabled.
-     * \since QGIS 3.0
      */
     QgsDataDefinedSizeLegend *dataDefinedSizeLegend() const;
 

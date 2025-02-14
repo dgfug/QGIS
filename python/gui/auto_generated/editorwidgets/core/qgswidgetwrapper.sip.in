@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/editorwidgets/core/qgswidgetwrapper.h                        *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -48,7 +48,7 @@ changed status of the widget will be saved.
 %End
   public:
 
-    enum Property
+    enum class Property
     {
       RootPath,
       DocumentViewerContent,
@@ -58,8 +58,6 @@ changed status of the widget will be saved.
     static const QgsPropertiesDefinition &propertyDefinitions();
 %Docstring
 Returns the editor widget property definitions.
-
-.. versionadded:: 3.0
 %End
 
     explicit QgsWidgetWrapper( QgsVectorLayer *vl, QWidget *editor = 0, QWidget *parent = 0 );
@@ -136,8 +134,6 @@ If it cannot be used this is a hint to the caller that he may try to find
 another suitable widget type instead.
 
 :return: Validity status of this widget.
-
-.. versionadded:: 2.12
 %End
 
 
@@ -149,8 +145,6 @@ Returns a reference to the editor widget's property collection, used for data de
 .. seealso:: :py:func:`setDataDefinedProperties`
 
 .. seealso:: Property
-
-.. versionadded:: 3.0
 %End
 
     void setDataDefinedProperties( const QgsPropertyCollection &collection );
@@ -162,8 +156,6 @@ Sets the editor widget's property collection, used for data defined overrides.
 .. seealso:: :py:func:`dataDefinedProperties`
 
 .. seealso:: Property
-
-.. versionadded:: 3.0
 %End
 
     void notifyAboutToSave();
@@ -185,7 +177,6 @@ Signal when :py:class:`QgsAttributeEditorContext` mContext changed
 %End
 
   protected:
-
     virtual QWidget *createWidget( QWidget *parent ) = 0;
 %Docstring
 This method should create a new widget with the provided parent. This will only be called
@@ -234,5 +225,5 @@ By default this will not change the enabled state of the widget
  *                                                                      *
  * src/gui/editorwidgets/core/qgswidgetwrapper.h                        *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

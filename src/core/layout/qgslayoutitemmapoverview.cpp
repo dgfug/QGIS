@@ -16,13 +16,12 @@
  ***************************************************************************/
 
 #include "qgslayoutitemmapoverview.h"
+#include "moc_qgslayoutitemmapoverview.cpp"
 #include "qgslayoutitemmap.h"
 #include "qgslayout.h"
 #include "qgssymbollayerutils.h"
 #include "qgssymbol.h"
-#include "qgsmapsettings.h"
 #include "qgspainting.h"
-#include "qgspathresolver.h"
 #include "qgsreadwritecontext.h"
 #include "qgslayoututils.h"
 #include "qgsexception.h"
@@ -165,7 +164,7 @@ bool QgsLayoutItemMapOverview::writeXml( QDomElement &elem, QDomDocument &doc, c
   QDomElement overviewFrameElem = doc.createElement( QStringLiteral( "ComposerMapOverview" ) );
 
   overviewFrameElem.setAttribute( QStringLiteral( "frameMap" ), mFrameMap ? mFrameMap ->uuid() : QString() );
-  overviewFrameElem.setAttribute( QStringLiteral( "blendMode" ), QgsPainting::getBlendModeEnum( mBlendMode ) );
+  overviewFrameElem.setAttribute( QStringLiteral( "blendMode" ), static_cast< int >( QgsPainting::getBlendModeEnum( mBlendMode ) ) );
   overviewFrameElem.setAttribute( QStringLiteral( "inverted" ), mInverted );
   overviewFrameElem.setAttribute( QStringLiteral( "centered" ), mCentered );
 
@@ -190,7 +189,7 @@ bool QgsLayoutItemMapOverview::readXml( const QDomElement &itemElem, const QDomD
   mFrameMapUuid = itemElem.attribute( QStringLiteral( "frameMap" ) );
   setLinkedMap( nullptr );
 
-  mBlendMode = QgsPainting::getCompositionMode( static_cast< QgsPainting::BlendMode >( itemElem.attribute( QStringLiteral( "blendMode" ), QStringLiteral( "0" ) ).toUInt() ) );
+  mBlendMode = QgsPainting::getCompositionMode( static_cast< Qgis::BlendMode >( itemElem.attribute( QStringLiteral( "blendMode" ), QStringLiteral( "0" ) ).toUInt() ) );
   mInverted = ( itemElem.attribute( QStringLiteral( "inverted" ), QStringLiteral( "0" ) ) != QLatin1String( "0" ) );
   mCentered = ( itemElem.attribute( QStringLiteral( "centered" ), QStringLiteral( "0" ) ) != QLatin1String( "0" ) );
 
@@ -426,14 +425,14 @@ QgsLayoutItemMapOverview *QgsLayoutItemMapOverviewStack::overview( const int ind
   return qobject_cast<QgsLayoutItemMapOverview *>( item );
 }
 
-QgsLayoutItemMapOverview &QgsLayoutItemMapOverviewStack::operator[]( int idx )
+QgsLayoutItemMapOverview &QgsLayoutItemMapOverviewStack::operator[]( int idx ) // cppcheck-suppress duplInheritedMember
 {
   QgsLayoutItemMapItem *item = mItems.at( idx );
   QgsLayoutItemMapOverview *overview = qobject_cast<QgsLayoutItemMapOverview *>( item );
   return *overview;
 }
 
-QList<QgsLayoutItemMapOverview *> QgsLayoutItemMapOverviewStack::asList() const
+QList<QgsLayoutItemMapOverview *> QgsLayoutItemMapOverviewStack::asList() const // cppcheck-suppress duplInheritedMember
 {
   QList< QgsLayoutItemMapOverview * > list;
   QList< QgsLayoutItemMapItem * >::const_iterator it = mItems.begin();
@@ -477,6 +476,8 @@ QList<QgsMapLayer *> QgsLayoutItemMapOverviewStack::modifyMapLayerList( const QL
     QgsVectorLayer *l = static_cast< QgsLayoutItemMapOverview * >( item )->asMapLayer();
     if ( !l )
       continue;
+
+    l->setCustomProperty( QStringLiteral( "_noset_layer_expression_context" ), true );
 
     switch ( item->stackingPosition() )
     {

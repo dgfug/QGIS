@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgslightswidget.h"
+#include "moc_qgslightswidget.cpp"
 
 #include "qgs3dmapsettings.h"
 #include "qgsapplication.h"
@@ -71,7 +72,7 @@ QgsLightsWidget::QgsLightsWidget( QWidget *parent )
   connect( spinDirectionalIntensity, qOverload<double>( &QDoubleSpinBox::valueChanged ), this, &QgsLightsWidget::updateCurrentDirectionalLightParameters );
   connect( btnDirectionalColor, &QgsColorButton::colorChanged, this, &QgsLightsWidget::updateCurrentDirectionalLightParameters );
 
-  connect( dialAzimuth, &QSlider::valueChanged, [this]( int value ) {spinBoxAzimuth->setValue( ( value + 180 ) % 360 );} );
+  connect( dialAzimuth, &QSlider::valueChanged, this, [this]( int value ) { spinBoxAzimuth->setValue( ( value + 180 ) % 360 ); } );
   connect( sliderAltitude, &QSlider::valueChanged, spinBoxAltitude, &QgsDoubleSpinBox::setValue );
   connect( spinBoxAzimuth, qOverload<double>( &QDoubleSpinBox::valueChanged ), this, &QgsLightsWidget::onDirectionChange );
   connect( spinBoxAltitude, qOverload<double>( &QDoubleSpinBox::valueChanged ), this, &QgsLightsWidget::onDirectionChange );
@@ -80,22 +81,53 @@ QgsLightsWidget::QgsLightsWidget( QWidget *parent )
   selectedLightChanged( mLightsListView->selectionModel()->selection(), QItemSelection() );
 }
 
-void QgsLightsWidget::setLights( const QList<QgsPointLightSettings> &pointLights, const QList<QgsDirectionalLightSettings> &directionalLights )
+void QgsLightsWidget::setLights( const QList<QgsLightSource *> sources )
 {
+  QList<QgsPointLightSettings> pointLights;
+  QList<QgsDirectionalLightSettings> directionalLights;
+  for ( const QgsLightSource *source : sources )
+  {
+    switch ( source->type() )
+    {
+      case Qgis::LightSourceType::Point:
+        pointLights.append( *qgis::down_cast<const QgsPointLightSettings *>( source ) );
+        break;
+      case Qgis::LightSourceType::Directional:
+        directionalLights.append( *qgis::down_cast<const QgsDirectionalLightSettings *>( source ) );
+        break;
+    }
+  }
+
   mLightsModel->setPointLights( pointLights );
   mLightsModel->setDirectionalLights( directionalLights );
   mLightsListView->selectionModel()->select( mLightsModel->index( 0, 0 ), QItemSelectionModel::ClearAndSelect );
   selectedLightChanged( mLightsListView->selectionModel()->selection(), QItemSelection() );
 }
 
-QList<QgsPointLightSettings> QgsLightsWidget::pointLights()
+QList<QgsLightSource *> QgsLightsWidget::lightSources()
 {
-  return mLightsModel->pointLights();
+  QList<QgsLightSource *> res;
+  const QList<QgsPointLightSettings> pointLights = mLightsModel->pointLights();
+  const QList<QgsDirectionalLightSettings> directionalLights = mLightsModel->directionalLights();
+  for ( const QgsPointLightSettings &light : pointLights )
+  {
+    res.append( light.clone() );
+  }
+  for ( const QgsDirectionalLightSettings &light : directionalLights )
+  {
+    res.append( light.clone() );
+  }
+  return res;
 }
 
-QList<QgsDirectionalLightSettings> QgsLightsWidget::directionalLights()
+int QgsLightsWidget::directionalLightCount() const
 {
-  return mLightsModel->directionalLights();
+  return mLightsModel->directionalLights().count();
+}
+
+int QgsLightsWidget::lightSourceCount() const
+{
+  return mLightsModel->rowCount( QModelIndex() );
 }
 
 void QgsLightsWidget::selectedLightChanged( const QItemSelection &selected, const QItemSelection & )
@@ -106,7 +138,7 @@ void QgsLightsWidget::selectedLightChanged( const QItemSelection &selected, cons
     return;
   }
 
-  const QgsLightsModel::LightType lightType = static_cast< QgsLightsModel::LightType >( mLightsModel->data( selected.indexes().at( 0 ), QgsLightsModel::LightTypeRole ).toInt() );
+  const QgsLightsModel::LightType lightType = static_cast<QgsLightsModel::LightType>( mLightsModel->data( selected.indexes().at( 0 ), QgsLightsModel::LightTypeRole ).toInt() );
   const int listIndex = mLightsModel->data( selected.indexes().at( 0 ), QgsLightsModel::LightListIndex ).toInt();
 
   switch ( lightType )
@@ -229,14 +261,14 @@ void QgsLightsWidget::setAzimuthAltitude()
   double azimuthAngle;
   double altitudeAngle;
 
-  const double horizontalVectorMagnitude = sqrt( mDirectionX * mDirectionX + mDirectionZ * mDirectionZ );
+  const double horizontalVectorMagnitude = sqrt( mDirectionX * mDirectionX + mDirectionY * mDirectionY );
 
   if ( horizontalVectorMagnitude == 0 )
     azimuthAngle = 0;
   else
   {
     azimuthAngle = ( asin( -mDirectionX / horizontalVectorMagnitude ) ) / M_PI * 180;
-    if ( mDirectionZ < 0 )
+    if ( mDirectionY > 0 )
       azimuthAngle = 180 - azimuthAngle;
     azimuthAngle = std::fmod( azimuthAngle + 360.0, 360.0 );
   }
@@ -247,7 +279,7 @@ void QgsLightsWidget::setAzimuthAltitude()
   if ( horizontalVectorMagnitude == 0 )
     altitudeAngle = 90;
   else
-    altitudeAngle = -atan( mDirectionY / horizontalVectorMagnitude ) / M_PI * 180;
+    altitudeAngle = -atan( mDirectionZ / horizontalVectorMagnitude ) / M_PI * 180;
 
   whileBlocking( spinBoxAltitude )->setValue( altitudeAngle );
   whileBlocking( sliderAltitude )->setValue( altitudeAngle );
@@ -262,13 +294,12 @@ void QgsLightsWidget::onDirectionChange()
 
   const double horizontalVectorMagnitude = cos( altitudeValue / 180 * M_PI );
   mDirectionX = -horizontalVectorMagnitude * sin( azimuthValue / 180 * M_PI );
-  mDirectionZ = horizontalVectorMagnitude * cos( azimuthValue / 180 * M_PI );
-  mDirectionY = -sin( altitudeValue / 180 * M_PI );
+  mDirectionY = -horizontalVectorMagnitude * cos( azimuthValue / 180 * M_PI );
+  mDirectionZ = -sin( altitudeValue / 180 * M_PI );
 
   whileBlocking( sliderAltitude )->setValue( altitudeValue );
   updateCurrentDirectionalLightParameters();
 }
-
 
 
 //
@@ -277,7 +308,6 @@ void QgsLightsWidget::onDirectionChange()
 QgsLightsModel::QgsLightsModel( QObject *parent )
   : QAbstractListModel( parent )
 {
-
 }
 
 int QgsLightsModel::rowCount( const QModelIndex &parent ) const
@@ -349,24 +379,36 @@ bool QgsLightsModel::removeRows( int row, int count, const QModelIndex &parent )
 
 void QgsLightsModel::setPointLights( const QList<QgsPointLightSettings> &lights )
 {
-  beginRemoveRows( QModelIndex(), 0, mPointLights.size() - 1 );
-  mPointLights.clear();
-  endRemoveRows();
+  if ( !mPointLights.empty() )
+  {
+    beginRemoveRows( QModelIndex(), 0, mPointLights.size() - 1 );
+    mPointLights.clear();
+    endRemoveRows();
+  }
 
-  beginInsertRows( QModelIndex(), 0, lights.size() - 1 );
-  mPointLights = lights;
-  endInsertRows();
+  if ( !lights.empty() )
+  {
+    beginInsertRows( QModelIndex(), 0, lights.size() - 1 );
+    mPointLights = lights;
+    endInsertRows();
+  }
 }
 
 void QgsLightsModel::setDirectionalLights( const QList<QgsDirectionalLightSettings> &lights )
 {
-  beginRemoveRows( QModelIndex(), mPointLights.size(), mPointLights.size() + mDirectionalLights.size() - 1 );
-  mDirectionalLights.clear();
-  endRemoveRows();
+  if ( !mDirectionalLights.empty() )
+  {
+    beginRemoveRows( QModelIndex(), mPointLights.size(), mPointLights.size() + mDirectionalLights.size() - 1 );
+    mDirectionalLights.clear();
+    endRemoveRows();
+  }
 
-  beginInsertRows( QModelIndex(), mPointLights.size(), mPointLights.size() + lights.size() - 1 );
-  mDirectionalLights = lights;
-  endInsertRows();
+  if ( !lights.empty() )
+  {
+    beginInsertRows( QModelIndex(), mPointLights.size(), mPointLights.size() + lights.size() - 1 );
+    mDirectionalLights = lights;
+    endInsertRows();
+  }
 }
 
 QList<QgsPointLightSettings> QgsLightsModel::pointLights() const
@@ -381,12 +423,12 @@ QList<QgsDirectionalLightSettings> QgsLightsModel::directionalLights() const
 
 void QgsLightsModel::setPointLightSettings( int index, const QgsPointLightSettings &light )
 {
-  mPointLights[ index ] = light;
+  mPointLights[index] = light;
 }
 
 void QgsLightsModel::setDirectionalLightSettings( int index, const QgsDirectionalLightSettings &light )
 {
-  mDirectionalLights[ index ] = light;
+  mDirectionalLights[index] = light;
 }
 
 QModelIndex QgsLightsModel::addPointLight( const QgsPointLightSettings &light )

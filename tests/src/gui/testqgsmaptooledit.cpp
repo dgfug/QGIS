@@ -30,10 +30,10 @@ class TestQgsMapToolEdit : public QObject
     TestQgsMapToolEdit() = default;
 
   private slots:
-    void initTestCase(); // will be called before the first testfunction is executed.
+    void initTestCase();    // will be called before the first testfunction is executed.
     void cleanupTestCase(); // will be called after the last testfunction was executed.
-    void init(); // will be called before each testfunction is executed.
-    void cleanup(); // will be called after every testfunction.
+    void init();            // will be called before each testfunction is executed.
+    void cleanup();         // will be called after every testfunction.
 
     void checkDefaultZValue();
     void checkDefaultMValue();
@@ -41,7 +41,6 @@ class TestQgsMapToolEdit : public QObject
 
   private:
     QgsMapCanvas *mCanvas = nullptr;
-
 };
 
 void TestQgsMapToolEdit::initTestCase()
@@ -68,13 +67,13 @@ void TestQgsMapToolEdit::cleanup()
 
 void TestQgsMapToolEdit::checkDefaultZValue()
 {
-  QgsSettingsRegistryCore::settingsDigitizingDefaultZValue.remove();
+  QgsSettingsRegistryCore::settingsDigitizingDefaultZValue->remove();
 
   QgsMapToolEdit *tool = new QgsMapToolEdit( mCanvas );
   QCOMPARE( tool->defaultZValue(), Qgis::DEFAULT_Z_COORDINATE );
 
   const double z_value_for_test = Qgis::DEFAULT_Z_COORDINATE + 1;
-  QgsSettingsRegistryCore::settingsDigitizingDefaultZValue.setValue( z_value_for_test );
+  QgsSettingsRegistryCore::settingsDigitizingDefaultZValue->setValue( z_value_for_test );
 
   QCOMPARE( tool->defaultZValue(), z_value_for_test );
 }
@@ -82,13 +81,13 @@ void TestQgsMapToolEdit::checkDefaultZValue()
 void TestQgsMapToolEdit::checkDefaultMValue()
 {
   QgsSettings settings;
-  settings.remove( QStringLiteral( "/qgis/digitizing/default_m_value" ) );
+  QgsSettingsRegistryCore::settingsDigitizingDefaultMValue->remove();
 
   QgsMapToolEdit *tool = new QgsMapToolEdit( mCanvas );
   QCOMPARE( tool->defaultMValue(), Qgis::DEFAULT_M_COORDINATE );
 
   const double m_value_for_test = Qgis::DEFAULT_M_COORDINATE + 1;
-  settings.setValue( QStringLiteral( "/qgis/digitizing/default_m_value" ), m_value_for_test );
+  QgsSettingsRegistryCore::settingsDigitizingDefaultMValue->setValue( m_value_for_test );
 
   QCOMPARE( tool->defaultMValue(), m_value_for_test );
 }
@@ -101,13 +100,13 @@ void TestQgsMapToolEdit::checkLayers()
   QVERIFY( vl1->isValid() );
   QgsProject::instance()->addMapLayer( vl1 );
 
-  std::unique_ptr< QgsVectorLayer > vl2 = std::make_unique< QgsVectorLayer >( QStringLiteral( "Point?crs=epsg:3946&field=halig:string&field=valig:string" ), QStringLiteral( "vl2" ), QStringLiteral( "memory" ) );
+  auto vl2 = std::make_unique<QgsVectorLayer>( QStringLiteral( "Point?crs=epsg:3946&field=halig:string&field=valig:string" ), QStringLiteral( "vl2" ), QStringLiteral( "memory" ) );
   QVERIFY( vl2->isValid() );
 
-  std::unique_ptr< QgsMapCanvas > canvas = std::make_unique< QgsMapCanvas >();
+  auto canvas = std::make_unique<QgsMapCanvas>();
   canvas->setLayers( { vl1, vl2.get() } );
 
-  std::unique_ptr< QgsMapToolEdit > tool = std::make_unique< QgsMapToolEdit >( canvas.get() );
+  auto tool = std::make_unique<QgsMapToolEdit>( canvas.get() );
 
   // retrieving layer by id should work for both layers from the project AND for freestanding layers
   QCOMPARE( tool->layer( vl1->id() ), vl1 );

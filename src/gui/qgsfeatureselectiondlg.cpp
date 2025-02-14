@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsfeatureselectiondlg.h"
+#include "moc_qgsfeatureselectiondlg.cpp"
 
 #include "qgsvectorlayerselectionmanager.h"
 #include "qgsdistancearea.h"
@@ -75,9 +76,8 @@ void QgsFeatureSelectionDlg::setSelectedFeatures( const QgsFeatureIds &ids )
 
 void QgsFeatureSelectionDlg::showEvent( QShowEvent *event )
 {
-
   QWindow *mainWindow = nullptr;
-  for ( const auto &w : QgsApplication::instance()->topLevelWindows() )
+  for ( const auto &w : QgsApplication::topLevelWindows() )
   {
     if ( w->objectName() == QLatin1String( "QgisAppWindow" ) )
     {
@@ -92,8 +92,7 @@ void QgsFeatureSelectionDlg::showEvent( QShowEvent *event )
     const QSize innerWinSize( mainWindow->width(), mainWindow->height() );
     setMaximumSize( innerWinSize );
     const QSize minSize( scrollAreaWidgetContents->sizeHint() );
-    setMinimumSize( std::min( minSize.width() + margins.width( ), innerWinSize.width() ),
-                    std::min( minSize.height() + margins.width( ), innerWinSize.height() ) );
+    setMinimumSize( std::min( minSize.width() + margins.width(), innerWinSize.width() ), std::min( minSize.height() + margins.width(), innerWinSize.height() ) );
   }
 
   QDialog::showEvent( event );

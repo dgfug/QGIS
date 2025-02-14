@@ -48,10 +48,10 @@ class TestQgsOfflineEditing : public QObject
     QTemporaryDir tempDir;
 
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init(); // will be called before each testfunction is executed.
-    void cleanup(); // will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
+    void init();            // will be called before each testfunction is executed.
+    void cleanup();         // will be called after every testfunction.
 
     void createSpatialiteAndSynchronizeBack_data();
     void createGeopackageAndSynchronizeBack_data();
@@ -89,8 +89,7 @@ void TestQgsOfflineEditing::init()
   QFile::copy( myFileName + "/points.geojson", myTempDirName + "/points.geojson" );
   const QString myTempFileName = myTempDirName + "/points.geojson";
   const QFileInfo myMapFileInfo( myTempFileName );
-  mpLayer = new QgsVectorLayer( myMapFileInfo.filePath(),
-                                myMapFileInfo.completeBaseName(), QStringLiteral( "ogr" ) );
+  mpLayer = new QgsVectorLayer( myMapFileInfo.filePath(), myMapFileInfo.completeBaseName(), QStringLiteral( "ogr" ) );
   QgsProject::instance()->addMapLayer( mpLayer );
 
   numberOfFeatures = mpLayer->featureCount();
@@ -123,7 +122,7 @@ void TestQgsOfflineEditing::createSpatialiteAndSynchronizeBack_data()
 
   QTest::newRow( "no suffix" ) << QString( "no suffix" ) << QStringLiteral( " (offline)" ); //default value expected
   QTest::newRow( "null suffix" ) << QString() << QString();
-  QTest::newRow( "empty suffix" ) << QStringLiteral( "" ) << QStringLiteral( "" );
+  QTest::newRow( "empty suffix" ) << QString() << QString();
   QTest::newRow( "part of name suffix" ) << QStringLiteral( "point" ) << QStringLiteral( "point" );
   QTest::newRow( "another suffix" ) << QStringLiteral( "another suffix" ) << QStringLiteral( "another suffix" );
 }
@@ -135,14 +134,14 @@ void TestQgsOfflineEditing::createGeopackageAndSynchronizeBack_data()
 
   QTest::newRow( "no suffix" ) << QStringLiteral( "no suffix" ) << QStringLiteral( " (offline)" ); //default value expected
   QTest::newRow( "null suffix" ) << QString() << QString();
-  QTest::newRow( "empty suffix" ) << QStringLiteral( "" ) << QStringLiteral( "" );
+
+  QTest::newRow( "empty suffix" ) << QString() << QString();
   QTest::newRow( "part of name suffix" ) << QStringLiteral( "point" ) << QStringLiteral( "point" );
   QTest::newRow( "another suffix" ) << QStringLiteral( "another suffix" ) << QStringLiteral( "another suffix" );
 }
 
 void TestQgsOfflineEditing::createSpatialiteAndSynchronizeBack()
 {
-
   QFETCH( QString, suffix_input );
   QFETCH( QString, suffix_result );
 
@@ -198,7 +197,7 @@ void TestQgsOfflineEditing::createGeopackageAndSynchronizeBack()
   QgsFeatureIterator it = mpLayer->getFeatures();
   it.nextFeature( firstFeatureBeforeAction );
 
-  connect( mOfflineEditing, &QgsOfflineEditing::warning, this, []( const QString & title, const QString & message ) { qDebug() << title << message; } );
+  connect( mOfflineEditing, &QgsOfflineEditing::warning, this, []( const QString &title, const QString &message ) { qDebug() << title << message; } );
 
   //set on LayerTreeNode showFeatureCount property
   QgsLayerTreeLayer *layerTreelayer = QgsProject::instance()->layerTreeRoot()->findLayer( mpLayer->id() );

@@ -26,12 +26,13 @@
 
 QgsGeorefTransform::QgsGeorefTransform( const QgsGeorefTransform &other )
 {
-  selectTransformParametrisation( other.mTransformParametrisation );
+  setMethod( other.mTransformParametrisation );
+  mRasterChangeCoords = other.mRasterChangeCoords;
 }
 
 QgsGeorefTransform::QgsGeorefTransform( TransformMethod parametrisation )
 {
-  selectTransformParametrisation( parametrisation );
+  setMethod( parametrisation );
 }
 
 QgsGeorefTransform::QgsGeorefTransform() = default;
@@ -43,7 +44,7 @@ QgsGeorefTransform::TransformMethod QgsGeorefTransform::transformParametrisation
   return mTransformParametrisation;
 }
 
-void QgsGeorefTransform::selectTransformParametrisation( TransformMethod parametrisation )
+void QgsGeorefTransform::setMethod( TransformMethod parametrisation )
 {
   if ( parametrisation != mTransformParametrisation )
   {
@@ -53,16 +54,19 @@ void QgsGeorefTransform::selectTransformParametrisation( TransformMethod paramet
   }
 }
 
-void QgsGeorefTransform::setRasterChangeCoords( const QString &fileRaster )
+void QgsGeorefTransform::loadRaster( const QString &fileRaster )
 {
-  mRasterChangeCoords.setRaster( fileRaster );
+  mRasterChangeCoords.loadRaster( fileRaster );
+}
+
+QgsPointXY QgsGeorefTransform::toSourceCoordinate( const QgsPointXY &pixel ) const
+{
+  return mRasterChangeCoords.toXY( pixel );
 }
 
 bool QgsGeorefTransform::providesAccurateInverseTransformation() const
 {
-  return ( mTransformParametrisation == TransformMethod::Linear
-           || mTransformParametrisation == TransformMethod::Helmert
-           || mTransformParametrisation == TransformMethod::PolynomialOrder1 );
+  return ( mTransformParametrisation == TransformMethod::Linear || mTransformParametrisation == TransformMethod::Helmert || mTransformParametrisation == TransformMethod::PolynomialOrder1 );
 }
 
 bool QgsGeorefTransform::parametersInitialized() const
@@ -72,7 +76,7 @@ bool QgsGeorefTransform::parametersInitialized() const
 
 QgsGcpTransformerInterface *QgsGeorefTransform::clone() const
 {
-  std::unique_ptr< QgsGeorefTransform > res( new QgsGeorefTransform( *this ) );
+  auto res = std::make_unique<QgsGeorefTransform>( *this );
   res->updateParametersFromGcps( mSourceCoordinates, mDestinationCoordinates, mInvertYAxis );
   return res.release();
 }
@@ -89,16 +93,16 @@ bool QgsGeorefTransform::updateParametersFromGcps( const QVector<QgsPointXY> &so
   }
   if ( sourceCoordinates.size() != destinationCoordinates.size() ) // Defensive sanity check
   {
-    throw ( std::domain_error( "Internal error: GCP mapping is not one-to-one" ) );
+    throw( std::domain_error( "Internal error: GCP mapping is not one-to-one" ) );
   }
   if ( sourceCoordinates.size() < minimumGcpCount() )
   {
     return false;
   }
-  if ( mRasterChangeCoords.hasCrs() )
+  if ( mRasterChangeCoords.hasExistingGeoreference() )
   {
-    const QVector<QgsPointXY> pixelCoordsCorrect = mRasterChangeCoords.getPixelCoords( sourceCoordinates );
-    mParametersInitialized = mGeorefTransformImplementation->updateParametersFromGcps( sourceCoordinates, pixelCoordsCorrect, invertYAxis );
+    const QVector<QgsPointXY> sourcePixelCoordinates = mRasterChangeCoords.getPixelCoords( sourceCoordinates );
+    mParametersInitialized = mGeorefTransformImplementation->updateParametersFromGcps( sourcePixelCoordinates, destinationCoordinates, invertYAxis );
   }
   else
   {
@@ -131,12 +135,12 @@ bool QgsGeorefTransform::transformRasterToWorld( const QgsPointXY &raster, QgsPo
 {
   // flip y coordinate due to different CS orientation
   const QgsPointXY raster_flipped( raster.x(), -raster.y() );
-  return gdal_transform( raster_flipped, world, 0 );
+  return transformPrivate( raster_flipped, world, false );
 }
 
 bool QgsGeorefTransform::transformWorldToRaster( const QgsPointXY &world, QgsPointXY &raster )
 {
-  const bool success = gdal_transform( world, raster, 1 );
+  const bool success = transformPrivate( world, raster, true );
   // flip y coordinate due to different CS orientation
   raster.setY( -raster.y() );
   return success;
@@ -163,7 +167,6 @@ bool QgsGeorefTransform::getLinearOriginScale( QgsPointXY &origin, double &scale
 
 bool QgsGeorefTransform::getOriginScaleRotation( QgsPointXY &origin, double &scaleX, double &scaleY, double &rotation ) const
 {
-
   if ( mTransformParametrisation == TransformMethod::Linear )
   {
     rotation = 0.0;
@@ -174,7 +177,7 @@ bool QgsGeorefTransform::getOriginScaleRotation( QgsPointXY &origin, double &sca
   {
     double scale;
     QgsHelmertGeorefTransform *transform = dynamic_cast<QgsHelmertGeorefTransform *>( mGeorefTransformImplementation.get() );
-    if ( !transform || ! transform->getOriginScaleRotation( origin, scale, rotation ) )
+    if ( !transform || !transform->getOriginScaleRotation( origin, scale, rotation ) )
     {
       return false;
     }
@@ -186,18 +189,16 @@ bool QgsGeorefTransform::getOriginScaleRotation( QgsPointXY &origin, double &sca
 }
 
 
-bool QgsGeorefTransform::gdal_transform( const QgsPointXY &src, QgsPointXY &dst, int dstToSrc ) const
+bool QgsGeorefTransform::transformPrivate( const QgsPointXY &src, QgsPointXY &dst, bool inverseTransform ) const
 {
   // Copy the source coordinate for inplace transform
   double x = src.x();
   double y = src.y();
 
-  if ( !QgsGcpTransformerInterface::transform( x, y, dstToSrc == 1 ) )
+  if ( !QgsGcpTransformerInterface::transform( x, y, inverseTransform ) )
     return false;
 
   dst.setX( x );
   dst.setY( y );
   return true;
 }
-
-

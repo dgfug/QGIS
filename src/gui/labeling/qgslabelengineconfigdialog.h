@@ -57,7 +57,7 @@ class GUI_EXPORT QgsLabelEngineConfigWidget : public QgsPanelWidget, private Ui:
     QgsMessageBar *mMessageBar = nullptr;
     QMenu *mWidgetMenu = nullptr;
 
-    QgsLabelingEngineSettings::PlacementEngineVersion mPreviousEngineVersion = QgsLabelingEngineSettings::PlacementEngineVersion2;
+    Qgis::LabelPlacementEngineVersion mPreviousEngineVersion = Qgis::LabelPlacementEngineVersion::Version2;
 };
 
 /**
@@ -76,9 +76,9 @@ class GUI_EXPORT QgsLabelEngineConfigDialog : public QDialog
     QgsLabelEngineConfigDialog( QgsMapCanvas *canvas, QWidget *parent = nullptr );
 
     void accept() override;
+
   private:
     QgsLabelEngineConfigWidget *mWidget = nullptr;
-
 };
 
 #endif // QGSLABELENGINECONFIGDIALOG_H

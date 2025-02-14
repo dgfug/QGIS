@@ -14,6 +14,8 @@
  ***************************************************************************/
 #include "qgspointcloudrendererregistry.h"
 #include "qgspointcloudrenderer.h"
+#include "qgsapplication.h"
+#include "qgscolorschemeregistry.h"
 
 // default renderers
 #include "qgspointcloudattributebyramprenderer.h"
@@ -82,14 +84,23 @@ QStringList QgsPointCloudRendererRegistry::renderersList() const
   return renderers;
 }
 
-QgsPointCloudRenderer *QgsPointCloudRendererRegistry::defaultRenderer( const QgsPointCloudDataProvider *provider )
+QgsPointCloudRenderer *QgsPointCloudRendererRegistry::defaultRenderer( const QgsPointCloudLayer *layer )
 {
+  const QgsPointCloudDataProvider *provider = layer->dataProvider();
   if ( !provider )
     return new QgsPointCloudAttributeByRampRenderer();
+
+  const QgsPointCloudStatistics stats = layer->statistics();
 
   if ( ( provider->name() == QLatin1String( "pdal" ) ) && ( !provider->hasValidIndex() ) )
   {
     // for now, default to extent renderer only for las/laz files
+    return new QgsPointCloudExtentRenderer();
+  }
+
+  // If we are calculating statistics, we default to the extent renderer until the statistics calculation finishes
+  if ( layer->statisticsCalculationState() == QgsPointCloudLayer::PointCloudStatisticsCalculationState::Calculating )
+  {
     return new QgsPointCloudExtentRenderer();
   }
 
@@ -98,15 +109,15 @@ QgsPointCloudRenderer *QgsPointCloudRendererRegistry::defaultRenderer( const Qgs
   //if red/green/blue attributes are present, then default to a RGB renderer
   if ( attributes.indexOf( QLatin1String( "Red" ) ) >= 0 && attributes.indexOf( QLatin1String( "Green" ) ) >= 0 && attributes.indexOf( QLatin1String( "Blue" ) ) >= 0 )
   {
-    std::unique_ptr< QgsPointCloudRgbRenderer > renderer = std::make_unique< QgsPointCloudRgbRenderer >();
+    auto renderer = std::make_unique< QgsPointCloudRgbRenderer >();
 
     // set initial guess for rgb ranges
-    const QVariant redMax = provider->metadataStatistic( QStringLiteral( "Red" ), QgsStatisticalSummary::Max );
-    const QVariant greenMax = provider->metadataStatistic( QStringLiteral( "Red" ), QgsStatisticalSummary::Max );
-    const QVariant blueMax = provider->metadataStatistic( QStringLiteral( "Red" ), QgsStatisticalSummary::Max );
-    if ( redMax.isValid() && greenMax.isValid() && blueMax.isValid() )
+    const double redMax = stats.maximum( QStringLiteral( "Red" ) );
+    const double greenMax = stats.maximum( QStringLiteral( "Red" ) );
+    const double blueMax = stats.maximum( QStringLiteral( "Red" ) );
+    if ( !std::isnan( redMax ) && !std::isnan( greenMax ) && !std::isnan( blueMax ) )
     {
-      const int maxValue = std::max( blueMax.toInt(), std::max( redMax.toInt(), greenMax.toInt() ) );
+      const int maxValue = std::max( blueMax, std::max( redMax, greenMax ) );
 
       if ( maxValue == 0 )
       {
@@ -133,6 +144,16 @@ QgsPointCloudRenderer *QgsPointCloudRendererRegistry::defaultRenderer( const Qgs
         }
       }
     }
+    else
+    {
+      QgsContrastEnhancement contrast( Qgis::DataType::UInt16 );
+      contrast.setMinimumValue( std::numeric_limits<uint16_t>::lowest() );
+      contrast.setMaximumValue( std::numeric_limits<uint16_t>::max() );
+      contrast.setContrastEnhancementAlgorithm( QgsContrastEnhancement::StretchToMinimumMaximum );
+      renderer->setRedContrastEnhancement( new QgsContrastEnhancement( contrast ) );
+      renderer->setGreenContrastEnhancement( new QgsContrastEnhancement( contrast ) );
+      renderer->setBlueContrastEnhancement( new QgsContrastEnhancement( contrast ) );
+    }
 
     if ( renderer )
       return renderer.release();
@@ -142,36 +163,58 @@ QgsPointCloudRenderer *QgsPointCloudRendererRegistry::defaultRenderer( const Qgs
   if ( attributes.indexOf( QLatin1String( "Classification" ) ) >= 0 )
   {
     // are any classifications present?
-    QVariantList classes = provider->metadataClasses( QStringLiteral( "Classification" ) );
+    QList<int> classes = stats.classesOf( QStringLiteral( "Classification" ) );
     // ignore "not classified" classes, and see if any are left...
     classes.removeAll( 0 );
     classes.removeAll( 1 );
     if ( !classes.empty() )
     {
-      std::unique_ptr< QgsPointCloudClassifiedRenderer > renderer = std::make_unique< QgsPointCloudClassifiedRenderer >();
-      renderer->setAttribute( QStringLiteral( "Classification" ) );
+      const QgsPointCloudCategoryList categories = classificationAttributeCategories( layer );
+      auto renderer = std::make_unique< QgsPointCloudClassifiedRenderer >( QLatin1String( "Classification" ), categories );
       return renderer.release();
     }
   }
 
   // fallback to shading by Z
-  std::unique_ptr< QgsPointCloudAttributeByRampRenderer > renderer = std::make_unique< QgsPointCloudAttributeByRampRenderer >();
+  auto renderer = std::make_unique< QgsPointCloudAttributeByRampRenderer >();
   renderer->setAttribute( QStringLiteral( "Z" ) );
 
   // set initial range for z values if possible
-  const QVariant zMin = provider->metadataStatistic( QStringLiteral( "Z" ), QgsStatisticalSummary::Min );
-  const QVariant zMax = provider->metadataStatistic( QStringLiteral( "Z" ), QgsStatisticalSummary::Max );
-  if ( zMin.isValid() && zMax.isValid() )
+  const double zMin = stats.minimum( QStringLiteral( "Z" ) );
+  const double zMax = stats.maximum( QStringLiteral( "Z" ) );
+  if ( !std::isnan( zMin ) && !std::isnan( zMax ) )
   {
-    renderer->setMinimum( zMin.toDouble() );
-    renderer->setMaximum( zMax.toDouble() );
+    renderer->setMinimum( zMin );
+    renderer->setMaximum( zMax );
 
     QgsColorRampShader shader = renderer->colorRampShader();
-    shader.setMinimumValue( zMin.toDouble() );
-    shader.setMaximumValue( zMax.toDouble() );
+    shader.setMinimumValue( zMin );
+    shader.setMaximumValue( zMax );
     shader.classifyColorRamp( 5, -1, QgsRectangle(), nullptr );
     renderer->setColorRampShader( shader );
   }
   return renderer.release();
 }
 
+QgsPointCloudCategoryList QgsPointCloudRendererRegistry::classificationAttributeCategories( const QgsPointCloudLayer *layer )
+{
+  if ( !layer )
+    return QgsPointCloudCategoryList();
+
+  const QgsPointCloudStatistics stats = layer->statistics();
+  const QList<int> layerClasses = stats.classesOf( QStringLiteral( "Classification" ) );
+  const QgsPointCloudCategoryList defaultCategories = QgsPointCloudClassifiedRenderer::defaultCategories();
+
+  if ( layerClasses.isEmpty() )
+    return defaultCategories;
+
+  QgsPointCloudCategoryList categories;
+  for ( const int &layerClass : layerClasses )
+  {
+    const bool isDefaultCategory = layerClass >= 0 && layerClass < defaultCategories.size();
+    const QColor color = isDefaultCategory ? defaultCategories.at( layerClass ).color() : QgsApplication::colorSchemeRegistry()->fetchRandomStyleColor();
+    const QString label = isDefaultCategory ? QgsPointCloudDataProvider::translatedLasClassificationCodes().value( layerClass, QString::number( layerClass ) ) : QString::number( layerClass );
+    categories.append( QgsPointCloudCategory( layerClass, color, label ) );
+  }
+  return categories;
+}

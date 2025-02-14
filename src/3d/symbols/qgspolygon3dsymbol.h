@@ -32,12 +32,10 @@ class QgsAbstractMaterialSettings;
  * \warning This is not considered stable API, and may change in future QGIS releases. It is
  * exposed to the Python bindings as a tech preview only.
  *
- * \since QGIS 3.0
  */
 class _3D_EXPORT QgsPolygon3DSymbol : public QgsAbstract3DSymbol SIP_NODEFAULTCTORS
 {
   public:
-    //! Constructor for QgsPolygon3DSymbol
     QgsPolygon3DSymbol();
     ~QgsPolygon3DSymbol() override;
 
@@ -46,7 +44,8 @@ class _3D_EXPORT QgsPolygon3DSymbol : public QgsAbstract3DSymbol SIP_NODEFAULTCT
 
     void writeXml( QDomElement &elem, const QgsReadWriteContext &context ) const override;
     void readXml( const QDomElement &elem, const QgsReadWriteContext &context ) override;
-    QList< QgsWkbTypes::GeometryType > compatibleGeometryTypes() const override;
+    QList<Qgis::GeometryType> compatibleGeometryTypes() const override;
+    void setDefaultPropertiesFromLayer( const QgsVectorLayer *layer ) override;
 
     /**
      * Creates a new QgsPolygon3DSymbol.
@@ -56,34 +55,57 @@ class _3D_EXPORT QgsPolygon3DSymbol : public QgsAbstract3DSymbol SIP_NODEFAULTCT
     static QgsAbstract3DSymbol *create() SIP_FACTORY;
 
     //! Returns method that determines altitude (whether to clamp to feature to terrain)
-    Qgs3DTypes::AltitudeClamping altitudeClamping() const { return mAltClamping; }
+    Qgis::AltitudeClamping altitudeClamping() const { return mAltClamping; }
     //! Sets method that determines altitude (whether to clamp to feature to terrain)
-    void setAltitudeClamping( Qgs3DTypes::AltitudeClamping altClamping ) { mAltClamping = altClamping; }
+    void setAltitudeClamping( Qgis::AltitudeClamping altClamping ) { mAltClamping = altClamping; }
 
     //! Returns method that determines how altitude is bound to individual vertices
-    Qgs3DTypes::AltitudeBinding altitudeBinding() const { return mAltBinding; }
+    Qgis::AltitudeBinding altitudeBinding() const { return mAltBinding; }
     //! Sets method that determines how altitude is bound to individual vertices
-    void setAltitudeBinding( Qgs3DTypes::AltitudeBinding altBinding ) { mAltBinding = altBinding; }
+    void setAltitudeBinding( Qgis::AltitudeBinding altBinding ) { mAltBinding = altBinding; }
 
-    //! Returns height (altitude) of the symbol (in map units)
-    float height() const { return mHeight; }
-    //! Sets height (altitude) of the symbol (in map units)
-    void setHeight( float height ) { mHeight = height; }
+    /**
+     * Returns height (altitude) of the symbol (in map units)
+     *
+     * \deprecated QGIS 3.36. Use offset() instead.
+     */
+    Q_DECL_DEPRECATED float height() const SIP_DEPRECATED { return mOffset; }
+
+    /**
+     * Sets height (altitude) of the symbol (in map units)
+     *
+     * \deprecated QGIS 3.36. Use setOffset() instead.
+     */
+    Q_DECL_DEPRECATED void setHeight( float height ) SIP_DEPRECATED { mOffset = height; }
+
+    /**
+     * Returns vertical offset of the symbol (in map units)
+     *
+     * \since QGIS 3.36
+     */
+    float offset() const { return mOffset; }
+
+    /**
+     * Sets vertical offset of the symbol (in map units)
+     *
+     * \since QGIS 3.36
+     */
+    void setOffset( float offset ) { mOffset = offset; }
 
     //! Returns extrusion height (in map units)
     float extrusionHeight() const { return mExtrusionHeight; }
     //! Sets extrusion height (in map units)
     void setExtrusionHeight( float extrusionHeight ) { mExtrusionHeight = extrusionHeight; }
 
-    //! Returns material used for shading of the symbol
-    QgsAbstractMaterialSettings *material() const;
+    //! Returns material settings used for shading of the symbol
+    QgsAbstractMaterialSettings *materialSettings() const;
 
     /**
      * Sets the \a material settings used for shading of the symbol.
      *
      * Ownership of \a material is transferred to the symbol.
      */
-    void setMaterial( QgsAbstractMaterialSettings *material SIP_TRANSFER );
+    void setMaterialSettings( QgsAbstractMaterialSettings *materialSettings SIP_TRANSFER );
 
     //! Returns front/back culling mode
     Qgs3DTypes::CullingMode cullingMode() const { return mCullingMode; }
@@ -164,20 +186,20 @@ class _3D_EXPORT QgsPolygon3DSymbol : public QgsAbstract3DSymbol SIP_NODEFAULTCT
 
   private:
     //! how to handle altitude of vector features
-    Qgs3DTypes::AltitudeClamping mAltClamping = Qgs3DTypes::AltClampRelative;
+    Qgis::AltitudeClamping mAltClamping = Qgis::AltitudeClamping::Absolute;
     //! how to handle clamping of vertices of individual features
-    Qgs3DTypes::AltitudeBinding mAltBinding = Qgs3DTypes::AltBindCentroid;
+    Qgis::AltitudeBinding mAltBinding = Qgis::AltitudeBinding::Centroid;
 
-    float mHeight = 0.0f;           //!< Base height of polygons
-    float mExtrusionHeight = 0.0f;  //!< How much to extrude (0 means no walls)
-    std::unique_ptr< QgsAbstractMaterialSettings > mMaterial; //!< Defines appearance of objects
-    Qgs3DTypes::CullingMode mCullingMode = Qgs3DTypes::NoCulling;  //!< Front/back culling mode
+    float mOffset = 0.0f;                                           //!< Vertical offset of polygons
+    float mExtrusionHeight = 0.0f;                                  //!< How much to extrude (0 means no walls)
+    std::unique_ptr<QgsAbstractMaterialSettings> mMaterialSettings; //!< Defines appearance of objects
+    Qgs3DTypes::CullingMode mCullingMode = Qgs3DTypes::NoCulling;   //!< Front/back culling mode
     bool mInvertNormals = false;
     bool mAddBackFaces = false;
     int mRenderedFacade = 3;
 
-    bool mEdgesEnabled = false;  //!< Whether to highlight edges
-    float mEdgeWidth = 1.f;  //!< Width of edges in pixels
+    bool mEdgesEnabled = false;    //!< Whether to highlight edges
+    float mEdgeWidth = 1.f;        //!< Width of edges in pixels
     QColor mEdgeColor = Qt::black; //!< Color of edge lines
 };
 

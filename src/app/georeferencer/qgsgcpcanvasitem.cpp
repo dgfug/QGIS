@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsgcpcanvasitem.h"
+#include "qgsmapcanvas.h"
 #include "qgsgeorefdatapoint.h"
 #include "qgsproject.h"
 #include "qgsrasterlayer.h"
@@ -25,7 +26,7 @@
 QgsGCPCanvasItem::QgsGCPCanvasItem( QgsMapCanvas *mapCanvas, QgsGeorefDataPoint *dataPoint, bool isGCPSource )
   : QgsMapCanvasItem( mapCanvas )
   , mDataPoint( dataPoint )
-  , mPointBrush( Qt::red )
+  , mPointBrush( mDataPoint && mDataPoint->id() < 0 ? QColor( 0, 200, 0 ) : Qt::red )
   , mLabelBrush( Qt::yellow )
   , mIsGCPSource( isGCPSource )
 {
@@ -54,7 +55,7 @@ void QgsGCPCanvasItem::paint( QPainter *p )
   if ( mDataPoint )
   {
     enabled = mDataPoint->isEnabled();
-    worldCoords = mDataPoint->canvasCoords();
+    worldCoords = mDataPoint->destinationPoint();
     id = mDataPoint->id();
   }
   p->setOpacity( enabled ? 1.0 : 0.3 );
@@ -63,6 +64,10 @@ void QgsGCPCanvasItem::paint( QPainter *p )
   p->setPen( Qt::black );
   p->setBrush( mPointBrush );
   p->drawEllipse( -2, -2, 5, 5 );
+
+  // Don't draw point tip for temporary points
+  if ( id < 0 )
+    return;
 
   const QgsSettings s;
   const bool showIDs = s.value( QStringLiteral( "/Plugin-GeoReferencer/Config/ShowId" ) ).toBool();
@@ -89,8 +94,7 @@ void QgsGCPCanvasItem::paint( QPainter *p )
     textFont.setPixelSize( fontSizePainterUnits( 12, context ) );
     p->setFont( textFont );
     const QRectF textBounds = p->boundingRect( 3 * context.scaleFactor(), 3 * context.scaleFactor(), 5 * context.scaleFactor(), 5 * context.scaleFactor(), Qt::AlignLeft, msg );
-    mTextBoxRect = QRectF( textBounds.x() - context.scaleFactor() * 1, textBounds.y() - context.scaleFactor() * 1,
-                           textBounds.width() + 2 * context.scaleFactor(), textBounds.height() + 2 * context.scaleFactor() );
+    mTextBoxRect = QRectF( textBounds.x() - context.scaleFactor() * 1, textBounds.y() - context.scaleFactor() * 1, textBounds.width() + 2 * context.scaleFactor(), textBounds.height() + 2 * context.scaleFactor() );
     p->drawRect( mTextBoxRect );
     p->drawText( textBounds, Qt::AlignLeft, msg );
   }
@@ -163,17 +167,21 @@ void QgsGCPCanvasItem::updatePosition()
 
   if ( mIsGCPSource )
   {
-    setPos( toCanvasCoordinates( mDataPoint->pixelCoords() ) );
-    return;
+    setPos( toCanvasCoordinates( mDataPoint->sourcePoint() ) );
   }
-  if ( mDataPoint->canvasCoords().isEmpty() )
+  else
   {
-    const QgsCoordinateReferenceSystem mapCrs = mMapCanvas->mapSettings().destinationCrs();
-    const QgsCoordinateTransform transf( mDataPoint->crs(), mapCrs, QgsProject::instance() );
-    const QgsPointXY mapCoords  = transf.transform( mDataPoint->mapCoords() );
-    mDataPoint->setCanvasCoords( mapCoords );
+    const QgsCoordinateTransform pointToCanvasTransform( mDataPoint->destinationPointCrs(), mMapCanvas->mapSettings().destinationCrs(), QgsProject::instance() );
+    try
+    {
+      const QgsPointXY canvasMapCoords = pointToCanvasTransform.transform( mDataPoint->destinationPoint() );
+      const QPointF canvasCoordinatesInPixels = toCanvasCoordinates( canvasMapCoords );
+
+      setPos( canvasCoordinatesInPixels );
+    }
+    catch ( QgsCsException & )
+    {}
   }
-  setPos( toCanvasCoordinates( mDataPoint->canvasCoords() ) );
 }
 
 void QgsGCPCanvasItem::drawResidualArrow( QPainter *p, const QgsRenderContext &context )
@@ -189,7 +197,6 @@ void QgsGCPCanvasItem::drawResidualArrow( QPainter *p, const QgsRenderContext &c
   const double rf = residualToScreenFactor();
   p->setPen( mResidualPen );
   p->drawLine( QPointF( 0, 0 ), QPointF( residual.rx() * rf, residual.ry() * rf ) );
-
 }
 
 double QgsGCPCanvasItem::residualToScreenFactor() const
@@ -216,7 +223,7 @@ double QgsGCPCanvasItem::residualToScreenFactor() const
     }
   }
 
-  return 1.0 / ( mapUnitsPerScreenPixel * mapUnitsPerRasterPixel );
+  return mapUnitsPerRasterPixel / mapUnitsPerScreenPixel;
 }
 
 void QgsGCPCanvasItem::checkBoundingRectChange()
@@ -233,4 +240,3 @@ double QgsGCPCanvasItem::fontSizePainterUnits( double points, const QgsRenderCon
 {
   return points * 0.3527 * c.scaleFactor();
 }
-

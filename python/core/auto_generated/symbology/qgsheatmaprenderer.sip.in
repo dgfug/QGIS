@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/symbology/qgsheatmaprenderer.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -12,8 +12,6 @@ class QgsHeatmapRenderer : QgsFeatureRenderer
 {
 %Docstring(signature="appended")
 A renderer which draws points as a live heatmap
-
-.. versionadded:: 2.7
 %End
 
 %TypeHeaderCode
@@ -62,6 +60,8 @@ Creates a new heatmap renderer instance from XML
     static QgsHeatmapRenderer *convertFromRenderer( const QgsFeatureRenderer *renderer ) /Factory/;
     virtual bool accept( QgsStyleEntityVisitorInterface *visitor ) const;
 
+    virtual QList<QgsLayerTreeModelLegendNode *> createLegendNodes( QgsLayerTreeLayer *nodeLayer ) const /Factory/;
+
 
     virtual void modifyRequestExtent( QgsRectangle &extent, QgsRenderContext &context );
 
@@ -83,6 +83,24 @@ Sets the color ramp to use for shading the heatmap.
 :param ramp: color ramp for heatmap. Ownership of ramp is transferred to the renderer.
 
 .. seealso:: :py:func:`colorRamp`
+%End
+
+    const QgsColorRampLegendNodeSettings &legendSettings() const;
+%Docstring
+Returns the color ramp legend settings.
+
+.. seealso:: :py:func:`setLegendSettings`
+
+.. versionadded:: 3.38
+%End
+
+    void setLegendSettings( const QgsColorRampLegendNodeSettings &settings );
+%Docstring
+Sets the color ramp legend ``settings``.
+
+.. seealso:: :py:func:`legendSettings`
+
+.. versionadded:: 3.38
 %End
 
     double radius() const;
@@ -111,7 +129,7 @@ Sets the radius for the heatmap
 .. seealso:: :py:func:`setRadiusMapUnitScale`
 %End
 
-    QgsUnitTypes::RenderUnit radiusUnit() const;
+    Qgis::RenderUnit radiusUnit() const;
 %Docstring
 Returns the units used for the heatmap's radius
 
@@ -124,7 +142,7 @@ Returns the units used for the heatmap's radius
 .. seealso:: :py:func:`radiusMapUnitScale`
 %End
 
-    void setRadiusUnit( const QgsUnitTypes::RenderUnit unit );
+    void setRadiusUnit( const Qgis::RenderUnit unit );
 %Docstring
 Sets the units used for the heatmap's radius
 
@@ -229,5 +247,5 @@ Sets the expression used for weighting points when generating the heatmap.
  *                                                                      *
  * src/core/symbology/qgsheatmaprenderer.h                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

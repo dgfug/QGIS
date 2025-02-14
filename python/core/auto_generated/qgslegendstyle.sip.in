@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgslegendstyle.h                                            *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -43,22 +43,48 @@ Contains detailed styling information relating to how a layout legend should be 
 
     QgsLegendStyle();
 
-    QFont font() const;
+ QFont font() const /Deprecated="Since 3.40. Use textFormat() instead."/;
 %Docstring
 Returns the font used for rendering this legend component.
 
 .. seealso:: :py:func:`setFont`
+
+.. deprecated:: 3.40
+
+   Use :py:func:`~QgsLegendStyle.textFormat` instead.
 %End
 
-    void setFont( const QFont &font );
+ void setFont( const QFont &font ) /Deprecated="Since 3.40. Use setTextFormat() instead."/;
 %Docstring
 Sets the ``font`` used for rendering this legend component.
 
 .. seealso:: :py:func:`font`
+
+.. deprecated:: 3.40
+
+   Use :py:func:`~QgsLegendStyle.setTextFormat` instead.
+%End
+
+    QgsTextFormat &textFormat();
+%Docstring
+Returns the text format used for rendering this legend component.
+
+.. seealso:: :py:func:`setTextFormat`
+
+.. versionadded:: 3.30
 %End
 
 
-    double margin( Side side );
+    void setTextFormat( const QgsTextFormat &format );
+%Docstring
+Sets the text ``format`` used for rendering this legend component.
+
+.. seealso:: :py:func:`textFormat`
+
+.. versionadded:: 3.30
+%End
+
+    double margin( Side side ) const;
 %Docstring
 Returns the margin (in mm) for the specified ``side`` of the component.
 
@@ -105,7 +131,7 @@ Sets the alignment for the legend component.
 .. versionadded:: 3.10
 %End
 
-    double indent();
+    double indent() const;
 %Docstring
 Returns the indent (in mm) of a group or subgroup.
 
@@ -169,5 +195,5 @@ Returns a translated string representing a style component, for use in UI.
  *                                                                      *
  * src/core/qgslegendstyle.h                                            *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

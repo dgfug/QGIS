@@ -42,7 +42,7 @@
        <item>
         <widget class="QStackedWidget" name="mPreviewStackedWidget">
          <property name="currentIndex">
-          <number>4</number>
+          <number>0</number>
          </property>
          <widget class="QWidget" name="page">
           <layout class="QHBoxLayout" name="horizontalLayout_3">
@@ -200,11 +200,39 @@
            </item>
           </layout>
          </widget>
+         <widget class="QWidget" name="page_7">
+          <layout class="QVBoxLayout" name="verticalLayout_7">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QgsCodeEditorR" name="mRPreview" native="true">
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>100</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="pageBash"/>
+         <widget class="QWidget" name="pageBatch"/>
         </widget>
        </item>
       </layout>
      </widget>
-     <widget class="QScrollArea" name="scrollArea">
+     <widget class="QgsScrollArea" name="scrollArea">
       <property name="frameShape">
        <enum>QFrame::NoFrame</enum>
       </property>
@@ -216,8 +244,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>663</width>
-         <height>549</height>
+         <width>677</width>
+         <height>531</height>
         </rect>
        </property>
        <layout class="QGridLayout" name="gridLayout">
@@ -797,6 +825,20 @@
              </property>
             </widget>
            </item>
+           <item row="12" column="5">
+            <widget class="QgsColorButton" name="mColorSearchResult">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="12" column="4">
+            <widget class="QLabel" name="label_35">
+             <property name="text">
+              <string>Search result</string>
+             </property>
+            </widget>
+           </item>
           </layout>
          </widget>
         </item>
@@ -809,8 +851,14 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>QgsScrollArea</class>
+   <extends>QScrollArea</extends>
+   <header>qgsscrollarea.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
    <class>QgsColorButton</class>
-   <extends>QPushButton</extends>
+   <extends>QToolButton</extends>
    <header>qgscolorbutton.h</header>
    <container>1</container>
   </customwidget>
@@ -853,6 +901,12 @@
    <class>QgsCodeEditorJavascript</class>
    <extends>QWidget</extends>
    <header>qgscodeeditorjs.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>QgsCodeEditorR</class>
+   <extends>QWidget</extends>
+   <header>qgscodeeditorr.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

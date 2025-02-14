@@ -7,7 +7,7 @@
         size="64"
       ></v-progress-circular>
     </v-overlay>
-    <Error v-if="error.length > 0" :error="error" />
+    <MyError v-if="error.length > 0" :error="error" />
     <template v-else>
       <v-app-bar app dense collapse-on-scroll clipped-left color="green" dark>
         <v-app-bar-nav-icon
@@ -42,7 +42,13 @@
               v-resize="onResize"
               @ready="setMap"
               style="z-index: 0"
+              maxZoom="22"
+              :options="{attributionControl: false}"
             >
+              <l-control-attribution
+                position="bottomright"
+                :options="{prefix: false}"
+              ></l-control-attribution>
               <l-tile-layer
                 :visible="baseMap == 'openstreetmap'"
                 url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -51,6 +57,7 @@
                   project.capabilities.wmsOutputCrsList.includes('EPSG:3857')
                 "
                 attribution="&copy; &lt;a href='https://www.openstreetmap.org/copyright'&gt;OpenStreetMap&lt;/a&gt; contributors"
+                :options="{maxZoom: 22, maxNativeZoom: 19}"
               ></l-tile-layer>
             </l-map>
           </v-layout>
@@ -76,8 +83,8 @@ import MapToolbar from "@/components/MapToolbar.vue";
 import MapFooter from "@/components/MapFooter.vue";
 import LeftSidebar from "@/components/LeftSidebar.vue";
 import AttributeTable from "@/components/AttributeTable.vue";
-import Error from "@/components/Error.vue";
-import { LMap, LTileLayer } from "vue2-leaflet";
+import MyError from "@/components/MyError.vue";
+import { LMap, LControlAttribution, LTileLayer } from "vue2-leaflet";
 import WmsSource from "@/js/WmsSource.js";
 import "leaflet/dist/leaflet.css";
 import { latLng, Polygon } from "leaflet";
@@ -103,10 +110,11 @@ export default {
   props: { projectId: String },
   components: {
     LMap,
+    LControlAttribution,
     LTileLayer,
     MapToolbar,
     MapFooter,
-    Error,
+    MyError,
     LeftSidebar,
     AttributeTable,
   },
@@ -317,6 +325,7 @@ export default {
         tileSize: 512,
         transparent: true,
         format: "image/png",
+        maxZoom: 22,
         dpi: window.devicePixelRatio * 96,
         onGetFeatureInfo: this.onGetFeatureInfo,
         onGetFeatureInfoStarted: this.onGetFeatureInfoStarted,

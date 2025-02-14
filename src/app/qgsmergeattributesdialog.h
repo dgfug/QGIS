@@ -21,7 +21,6 @@
 
 #include "ui_qgsmergeattributesdialogbase.h"
 #include "qgsfeature.h"
-#include "qgsstatisticalsummary.h"
 #include "qgsfields.h"
 #include "qgis_app.h"
 
@@ -33,11 +32,10 @@ class QgsAttributeTableConfig;
 
 
 //! A dialog to insert the merge behavior for attributes (e.g. for the union features editing tool)
-class APP_EXPORT QgsMergeAttributesDialog: public QDialog, private Ui::QgsMergeAttributesDialogBase
+class APP_EXPORT QgsMergeAttributesDialog : public QDialog, private Ui::QgsMergeAttributesDialogBase
 {
     Q_OBJECT
   public:
-
     enum ItemDataRole
     {
       FieldIndex = Qt::UserRole //!< Index of corresponding field in source table for table header
@@ -48,6 +46,18 @@ class APP_EXPORT QgsMergeAttributesDialog: public QDialog, private Ui::QgsMergeA
     ~QgsMergeAttributesDialog() override;
 
     QgsAttributes mergedAttributes() const;
+
+    /**
+     * Returns the id of the target feature.
+     * By default it is the first feature of the list. Otherwise the feature explicitly selected
+     * with buttons "Take attributes from selected feature" or "Take attributes from feature with
+     * the largest area".
+     *
+     * \returns The id of the target feature.
+     *
+     * \since QGIS 3.30
+     */
+    QgsFeatureId targetFeatureId() const;
 
     /**
      * Returns a list of attribute indexes which should be skipped when merging (e.g., attributes
@@ -63,12 +73,12 @@ class APP_EXPORT QgsMergeAttributesDialog: public QDialog, private Ui::QgsMergeA
     void setAllToSkip();
 
   private slots:
-    void comboValueChanged( const QString &text );
     void selectedRowChanged();
     void mFromSelectedPushButton_clicked();
     void mFromLargestPushButton_clicked();
     void mRemoveFeatureFromSelectionButton_clicked();
-    void tableWidgetCellChanged( int row, int column );
+    void tableWidgetCellClicked( int row, int column );
+    void updateManualWidget( int column, bool isManual );
 
   private:
     QgsMergeAttributesDialog(); //default constructor forbidden
@@ -76,7 +86,7 @@ class APP_EXPORT QgsMergeAttributesDialog: public QDialog, private Ui::QgsMergeA
     void setAttributeTableConfig( const QgsAttributeTableConfig &config );
 
     //! Create new combo box with the options for featureXX / mean / min / max
-    QComboBox *createMergeComboBox( QVariant::Type columnType ) const;
+    QComboBox *createMergeComboBox( QMetaType::Type columnType, int column );
 
     /**
      * Returns the table widget column index of a combo box
@@ -96,12 +106,13 @@ class APP_EXPORT QgsMergeAttributesDialog: public QDialog, private Ui::QgsMergeA
      * Calculates a summary statistic for a column. Returns null if no valid numerical
      * values found in column.
      */
-    QVariant calcStatistic( int col, QgsStatisticalSummary::Statistic stat );
+    QVariant calcStatistic( int col, Qgis::Statistic stat );
 
     //! Sets mSelectionRubberBand to a new feature
     void createRubberBandForFeature( QgsFeatureId featureId );
 
     QgsFeatureList mFeatureList;
+    QgsFeatureId mTargetFeatureId = FID_NULL;
     QgsVectorLayer *mVectorLayer = nullptr;
     QgsMapCanvas *mMapCanvas = nullptr;
     //! Item that highlights the selected feature in the merge table
@@ -109,11 +120,10 @@ class APP_EXPORT QgsMergeAttributesDialog: public QDialog, private Ui::QgsMergeA
 
     QgsFields mFields;
     QSet<int> mHiddenAttributes;
-    QMap< QString, int > mFieldToColumnMap;
+    QMap<QString, int> mFieldToColumnMap;
     bool mUpdating = false;
 
-    static const QList< QgsStatisticalSummary::Statistic > DISPLAY_STATS;
-
+    static const QList<Qgis::Statistic> DISPLAY_STATS;
 };
 
 #endif // QGSMERGEATTRIBUTESDIALOG_H

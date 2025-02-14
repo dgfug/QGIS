@@ -36,6 +36,7 @@ class QButtonGroup;
 class QgsTreeWidgetItem;
 class QDomDocument;
 class QDomElement;
+class QgsOWSSourceWidget;
 
 
 /**
@@ -56,17 +57,20 @@ class GUI_EXPORT QgsOWSSourceSelect : public QgsAbstractDataSourceWidget, protec
     //! Formats supported by provider
     struct SupportedFormat
     {
-      QString format;
-      QString label;
+        QString format;
+        QString label;
     };
 
     //! Constructor
-    QgsOWSSourceSelect( const QString &service, QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
+    QgsOWSSourceSelect( const QString &service, QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Standalone );
 
     //! Triggered when the provider's connections need to be refreshed
     void refresh() override;
 
     void reset() override;
+
+    void setMapCanvas( QgsMapCanvas *mapCanvas ) override;
+
 
   protected slots:
     //! show whatever error is exposed.
@@ -76,7 +80,6 @@ class GUI_EXPORT QgsOWSSourceSelect : public QgsAbstractDataSourceWidget, protec
     void showStatusMessage( const QString &message );
 
   protected:
-
     /**
      * List of image formats (encodings) supported by provider
      * \returns list of format/label pairs
@@ -132,8 +135,6 @@ class GUI_EXPORT QgsOWSSourceSelect : public QgsAbstractDataSourceWidget, protec
 
     /**
      * \brief Populate the layer list.
-     *
-     * \returns FALSE if the layers could not be retrieved or parsed
      */
     virtual void populateLayerList();
 
@@ -141,12 +142,7 @@ class GUI_EXPORT QgsOWSSourceSelect : public QgsAbstractDataSourceWidget, protec
      * create an item including possible parents
      * \note not available in Python bindings
      */
-    QgsTreeWidgetItem *createItem( int id,
-                                   const QStringList &names,
-                                   QMap<int, QgsTreeWidgetItem *> &items,
-                                   int &layerAndStyleCount,
-                                   const QMap<int, int> &layerParents,
-                                   const QMap<int, QStringList> &layerParentNames ) SIP_FACTORY SIP_SKIP;
+    QgsTreeWidgetItem *createItem( int id, const QStringList &names, QMap<int, QgsTreeWidgetItem *> &items, int &layerAndStyleCount, const QMap<int, int> &layerParents, const QMap<int, QStringList> &layerParentNames ) SIP_FACTORY SIP_SKIP;
 
     //! Returns a textual description for the authority id
     QString descriptionForAuthId( const QString &authId );
@@ -169,6 +165,15 @@ class GUI_EXPORT QgsOWSSourceSelect : public QgsAbstractDataSourceWidget, protec
 
     //! Returns currently selected cache load control
     QNetworkRequest::CacheLoadControl selectedCacheLoadControl();
+
+    /**
+     * Prepares the spatial extent box with the general settings
+     * including original crs, destination crs and the map
+     * canvas if it is available.
+     *
+     * \since QGIS 3.26
+     */
+    void prepareExtent();
 
     QList<QTreeWidgetItem *> mCurrentSelection;
     QTableWidgetItem *mCurrentTileset = nullptr;

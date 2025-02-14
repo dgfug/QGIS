@@ -42,17 +42,17 @@ QgsMapCanvasSymbolItem::~QgsMapCanvasSymbolItem() = default;
 QgsRenderContext QgsMapCanvasSymbolItem::renderContext( QPainter *painter )
 {
   QgsExpressionContext context;
-  context << QgsExpressionContextUtils::globalScope()
-          << QgsExpressionContextUtils::projectScope( QgsProject::instance() )
-          << QgsExpressionContextUtils::atlasScope( nullptr );
+
   if ( mMapCanvas )
   {
-    context << QgsExpressionContextUtils::mapSettingsScope( mMapCanvas->mapSettings() )
-            << new QgsExpressionContextScope( mMapCanvas->expressionContextScope() );
+    context = mMapCanvas->createExpressionContext();
   }
   else
   {
-    context << QgsExpressionContextUtils::mapSettingsScope( QgsMapSettings() );
+    context << QgsExpressionContextUtils::globalScope()
+            << QgsExpressionContextUtils::projectScope( QgsProject::instance() )
+            << QgsExpressionContextUtils::atlasScope( nullptr )
+            << QgsExpressionContextUtils::mapSettingsScope( QgsMapSettings() );
   }
   //context << QgsExpressionContextUtils::layerScope( mLayer );
   context.setFeature( mFeature );
@@ -94,12 +94,12 @@ void QgsMapCanvasSymbolItem::paint( QPainter *painter )
   }
 }
 
-void QgsMapCanvasSymbolItem::setSymbol( std::unique_ptr< QgsSymbol > symbol )
+void QgsMapCanvasSymbolItem::setSymbol( std::unique_ptr<QgsSymbol> symbol )
 {
   mSymbol = std::move( symbol );
 }
 
-const QgsSymbol *QgsMapCanvasSymbolItem::symbol() const
+QgsSymbol *QgsMapCanvasSymbolItem::symbol()
 {
   return mSymbol.get();
 }
@@ -126,40 +126,48 @@ double QgsMapCanvasSymbolItem::opacity() const
 QgsMapCanvasMarkerSymbolItem::QgsMapCanvasMarkerSymbolItem( QgsMapCanvas *canvas )
   : QgsMapCanvasSymbolItem( canvas )
 {
-  setSymbol( std::make_unique< QgsMarkerSymbol >() );
+  setSymbol( std::make_unique<QgsMarkerSymbol>() );
 }
 
 
 void QgsMapCanvasMarkerSymbolItem::setPointLocation( const QgsPointXY &p )
 {
-  mLocation = toCanvasCoordinates( p );
+  prepareGeometryChange();
+  mMapLocation = p;
 }
 
 void QgsMapCanvasMarkerSymbolItem::updateSize()
 {
   QgsRenderContext rc = renderContext( nullptr );
   markerSymbol()->startRender( rc, mFeature.fields() );
-  const QRectF bounds = markerSymbol()->bounds( mLocation, rc, mFeature );
+  setPos( toCanvasCoordinates( mMapLocation ) );
+  prepareGeometryChange();
+  mCanvasBounds = markerSymbol()->bounds( QPointF( 0, 0 ), rc, mFeature );
   markerSymbol()->stopRender( rc );
-  const QgsRectangle r( mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( static_cast<int>( bounds.x() ),
-                        static_cast<int>( bounds.y() ) ),
-                        mMapCanvas->mapSettings().mapToPixel().toMapCoordinates( static_cast<int>( bounds.x() + bounds.width() * 2 ),
-                            static_cast<int>( bounds.y() + bounds.height() * 2 ) ) );
-  setRect( r );
+  update();
 }
 
 void QgsMapCanvasMarkerSymbolItem::renderSymbol( QgsRenderContext &context, const QgsFeature &feature )
 {
-  markerSymbol()->renderPoint( mLocation - pos(), &feature, context );
+  markerSymbol()->renderPoint( QPointF( 0, 0 ), &feature, context );
+}
+
+QRectF QgsMapCanvasMarkerSymbolItem::boundingRect() const
+{
+  return mCanvasBounds;
+}
+
+void QgsMapCanvasMarkerSymbolItem::updatePosition()
+{
+  updateSize();
 }
 
 QgsMarkerSymbol *QgsMapCanvasMarkerSymbolItem::markerSymbol()
 {
-  QgsMarkerSymbol *marker = dynamic_cast< QgsMarkerSymbol * >( mSymbol.get() );
+  QgsMarkerSymbol *marker = dynamic_cast<QgsMarkerSymbol *>( mSymbol.get() );
   Q_ASSERT( marker );
   return marker;
 }
-
 
 
 //
@@ -169,7 +177,7 @@ QgsMarkerSymbol *QgsMapCanvasMarkerSymbolItem::markerSymbol()
 QgsMapCanvasLineSymbolItem::QgsMapCanvasLineSymbolItem( QgsMapCanvas *canvas )
   : QgsMapCanvasSymbolItem( canvas )
 {
-  setSymbol( std::make_unique< QgsLineSymbol >() );
+  setSymbol( std::make_unique<QgsLineSymbol>() );
 }
 
 void QgsMapCanvasLineSymbolItem::setLine( const QPolygonF &line )
@@ -197,9 +205,7 @@ void QgsMapCanvasLineSymbolItem::renderSymbol( QgsRenderContext &context, const 
 
 QgsLineSymbol *QgsMapCanvasLineSymbolItem::lineSymbol()
 {
-  QgsLineSymbol *symbol = dynamic_cast< QgsLineSymbol * >( mSymbol.get() );
+  QgsLineSymbol *symbol = dynamic_cast<QgsLineSymbol *>( mSymbol.get() );
   Q_ASSERT( symbol );
   return symbol;
 }
-
-

@@ -18,12 +18,15 @@
 #include "qgspointcloudrenderer.h"
 #include "qgspointcloudrendererregistry.h"
 #include "qgsapplication.h"
+#include "qgselevationmap.h"
 #include "qgssymbollayerutils.h"
 #include "qgspointcloudlayer.h"
 #include "qgspointcloudindex.h"
-#include "qgspointcloudlayerelevationproperties.h"
 #include "qgslogger.h"
 #include "qgscircle.h"
+#include "qgsunittypes.h"
+#include "qgsvirtualpointcloudprovider.h"
+
 #include <QThread>
 #include <QPointer>
 
@@ -59,6 +62,16 @@ void QgsPointCloudRenderContext::setAttributes( const QgsPointCloudAttributeColl
   attributes.find( QStringLiteral( "Z" ), mZOffset );
 }
 
+QgsPointCloudRenderer::QgsPointCloudRenderer()
+{
+  QgsTextFormat textFormat = QgsStyle::defaultStyle()->defaultTextFormat();
+  QgsTextBufferSettings settings;
+  settings.setEnabled( true );
+  settings.setSize( 1 );
+  textFormat.setBuffer( settings );
+  mLabelTextFormat = textFormat;
+}
+
 QgsPointCloudRenderer *QgsPointCloudRenderer::load( QDomElement &element, const QgsReadWriteContext &context )
 {
   if ( element.isNull() )
@@ -80,6 +93,11 @@ QSet<QString> QgsPointCloudRenderer::usedAttributes( const QgsPointCloudRenderCo
   return QSet< QString >();
 }
 
+std::unique_ptr<QgsPreparedPointCloudRendererData> QgsPointCloudRenderer::prepare()
+{
+  return nullptr;
+}
+
 void QgsPointCloudRenderer::startRender( QgsPointCloudRenderContext &context )
 {
 #ifdef QGISDEBUG
@@ -93,16 +111,16 @@ void QgsPointCloudRenderer::startRender( QgsPointCloudRenderContext &context )
   }
 #endif
 
-  mPainterPenWidth = context.renderContext().convertToPainterUnits( pointSize(), pointSizeUnit(), pointSizeMapUnitScale() );
+  mDefaultPainterPenWidth = context.renderContext().convertToPainterUnits( pointSize(), pointSizeUnit(), pointSizeMapUnitScale() );
 
   switch ( mPointSymbol )
   {
-    case Square:
+    case Qgis::PointCloudSymbol::Square:
       // for square point we always disable antialiasing -- it's not critical here and we benefit from the performance boost disabling it gives
       context.renderContext().painter()->setRenderHint( QPainter::Antialiasing, false );
       break;
 
-    case Circle:
+    case Qgis::PointCloudSymbol::Circle:
       break;
   }
 }
@@ -134,12 +152,12 @@ void QgsPointCloudRenderer::setMaximumScreenError( double error )
   mMaximumScreenError = error;
 }
 
-QgsUnitTypes::RenderUnit QgsPointCloudRenderer::maximumScreenErrorUnit() const
+Qgis::RenderUnit QgsPointCloudRenderer::maximumScreenErrorUnit() const
 {
   return mMaximumScreenErrorUnit;
 }
 
-void QgsPointCloudRenderer::setMaximumScreenErrorUnit( QgsUnitTypes::RenderUnit unit )
+void QgsPointCloudRenderer::setMaximumScreenErrorUnit( Qgis::RenderUnit unit )
 {
   mMaximumScreenErrorUnit = unit;
 }
@@ -154,6 +172,36 @@ QStringList QgsPointCloudRenderer::legendRuleKeys() const
   return QStringList();
 }
 
+void QgsPointCloudRenderer::drawPointToElevationMap( double x, double y, double z, QgsPointCloudRenderContext &context ) const
+{
+  drawPointToElevationMap( x, y, z, mDefaultPainterPenWidth, context );
+}
+
+void QgsPointCloudRenderer::drawPointToElevationMap( double x, double y, double z, int width, QgsPointCloudRenderContext &context ) const
+{
+  const QPointF originalXY( x, y );
+  context.renderContext().mapToPixel().transformInPlace( x, y );
+  QPainter *elevationPainter = context.renderContext().elevationMap()->painter();
+
+  QBrush brush( QgsElevationMap::encodeElevation( z ) );
+  switch ( mPointSymbol )
+  {
+    case Qgis::PointCloudSymbol::Square:
+      elevationPainter->fillRect( QRectF( x - width * 0.5,
+                                          y - width * 0.5,
+                                          width, width ), brush );
+      break;
+
+    case Qgis::PointCloudSymbol::Circle:
+      elevationPainter->setBrush( brush );
+      elevationPainter->setPen( Qt::NoPen );
+      elevationPainter->drawEllipse( QRectF( x - width * 0.5,
+                                             y - width * 0.5,
+                                             width, width ) );
+      break;
+  };
+}
+
 void QgsPointCloudRenderer::copyCommonProperties( QgsPointCloudRenderer *destination ) const
 {
   destination->setPointSize( mPointSize );
@@ -162,9 +210,19 @@ void QgsPointCloudRenderer::copyCommonProperties( QgsPointCloudRenderer *destina
   destination->setMaximumScreenError( mMaximumScreenError );
   destination->setMaximumScreenErrorUnit( mMaximumScreenErrorUnit );
   destination->setPointSymbol( mPointSymbol );
+  destination->setDrawOrder2d( mDrawOrder2d );
+
+  destination->setRenderAsTriangles( mRenderAsTriangles );
+  destination->setHorizontalTriangleFilter( mHorizontalTriangleFilter );
+  destination->setHorizontalTriangleFilterThreshold( mHorizontalTriangleFilterThreshold );
+  destination->setHorizontalTriangleFilterUnit( mHorizontalTriangleFilterUnit );
+
+  destination->setShowLabels( mShowLabels );
+  destination->setLabelTextFormat( mLabelTextFormat );
+  destination->setZoomOutBehavior( mZoomOutBehavior );
 }
 
-void QgsPointCloudRenderer::restoreCommonProperties( const QDomElement &element, const QgsReadWriteContext & )
+void QgsPointCloudRenderer::restoreCommonProperties( const QDomElement &element, const QgsReadWriteContext &context )
 {
   mPointSize = element.attribute( QStringLiteral( "pointSize" ), QStringLiteral( "1" ) ).toDouble();
   mPointSizeUnit = QgsUnitTypes::decodeRenderUnit( element.attribute( QStringLiteral( "pointSizeUnit" ), QStringLiteral( "MM" ) ) );
@@ -172,10 +230,24 @@ void QgsPointCloudRenderer::restoreCommonProperties( const QDomElement &element,
 
   mMaximumScreenError = element.attribute( QStringLiteral( "maximumScreenError" ), QStringLiteral( "0.3" ) ).toDouble();
   mMaximumScreenErrorUnit = QgsUnitTypes::decodeRenderUnit( element.attribute( QStringLiteral( "maximumScreenErrorUnit" ), QStringLiteral( "MM" ) ) );
-  mPointSymbol = static_cast< PointSymbol >( element.attribute( QStringLiteral( "pointSymbol" ), QStringLiteral( "0" ) ).toInt() );
+  mPointSymbol = static_cast< Qgis::PointCloudSymbol >( element.attribute( QStringLiteral( "pointSymbol" ), QStringLiteral( "0" ) ).toInt() );
+  mDrawOrder2d = static_cast< Qgis::PointCloudDrawOrder >( element.attribute( QStringLiteral( "drawOrder2d" ), QStringLiteral( "0" ) ).toInt() );
+
+  mRenderAsTriangles = element.attribute( QStringLiteral( "renderAsTriangles" ), QStringLiteral( "0" ) ).toInt();
+  mHorizontalTriangleFilter = element.attribute( QStringLiteral( "horizontalTriangleFilter" ), QStringLiteral( "0" ) ).toInt();
+  mHorizontalTriangleFilterThreshold = element.attribute( QStringLiteral( "horizontalTriangleFilterThreshold" ), QStringLiteral( "5" ) ).toDouble();
+  mHorizontalTriangleFilterUnit = QgsUnitTypes::decodeRenderUnit( element.attribute( QStringLiteral( "horizontalTriangleFilterUnit" ), QStringLiteral( "MM" ) ) );
+
+  mShowLabels = element.attribute( QStringLiteral( "showLabels" ), QStringLiteral( "0" ) ).toInt();
+  if ( !element.firstChildElement( QStringLiteral( "text-style" ) ).isNull() )
+  {
+    mLabelTextFormat = QgsTextFormat();
+    mLabelTextFormat.readXml( element.firstChildElement( QStringLiteral( "text-style" ) ), context );
+  }
+  mZoomOutBehavior = qgsEnumKeyToValue( element.attribute( QStringLiteral( "zoomOutBehavior" ) ), Qgis::PointCloudZoomOutRenderBehavior::RenderExtents );
 }
 
-void QgsPointCloudRenderer::saveCommonProperties( QDomElement &element, const QgsReadWriteContext & ) const
+void QgsPointCloudRenderer::saveCommonProperties( QDomElement &element, const QgsReadWriteContext &context ) const
 {
   element.setAttribute( QStringLiteral( "pointSize" ), qgsDoubleToString( mPointSize ) );
   element.setAttribute( QStringLiteral( "pointSizeUnit" ), QgsUnitTypes::encodeUnit( mPointSizeUnit ) );
@@ -183,55 +255,79 @@ void QgsPointCloudRenderer::saveCommonProperties( QDomElement &element, const Qg
 
   element.setAttribute( QStringLiteral( "maximumScreenError" ), qgsDoubleToString( mMaximumScreenError ) );
   element.setAttribute( QStringLiteral( "maximumScreenErrorUnit" ), QgsUnitTypes::encodeUnit( mMaximumScreenErrorUnit ) );
-  element.setAttribute( QStringLiteral( "pointSymbol" ), QString::number( mPointSymbol ) );
+  element.setAttribute( QStringLiteral( "pointSymbol" ), QString::number( static_cast< int >( mPointSymbol ) ) );
+  element.setAttribute( QStringLiteral( "drawOrder2d" ), QString::number( static_cast< int >( mDrawOrder2d ) ) );
+
+  element.setAttribute( QStringLiteral( "renderAsTriangles" ), QString::number( static_cast< int >( mRenderAsTriangles ) ) );
+  element.setAttribute( QStringLiteral( "horizontalTriangleFilter" ), QString::number( static_cast< int >( mHorizontalTriangleFilter ) ) );
+  element.setAttribute( QStringLiteral( "horizontalTriangleFilterThreshold" ), qgsDoubleToString( mHorizontalTriangleFilterThreshold ) );
+  element.setAttribute( QStringLiteral( "horizontalTriangleFilterUnit" ), QgsUnitTypes::encodeUnit( mHorizontalTriangleFilterUnit ) );
+
+  if ( mShowLabels )
+    element.setAttribute( QStringLiteral( "showLabels" ), QStringLiteral( "1" ) );
+  if ( mLabelTextFormat.isValid() )
+  {
+    QDomDocument doc = element.ownerDocument();
+    element.appendChild( mLabelTextFormat.writeXml( doc, context ) );
+  }
+  if ( mZoomOutBehavior != Qgis::PointCloudZoomOutRenderBehavior::RenderExtents )
+    element.setAttribute( QStringLiteral( "zoomOutBehavior" ), qgsEnumValueToKey( mZoomOutBehavior ) );
 }
 
-QgsPointCloudRenderer::PointSymbol QgsPointCloudRenderer::pointSymbol() const
+Qgis::PointCloudSymbol QgsPointCloudRenderer::pointSymbol() const
 {
   return mPointSymbol;
 }
 
-void QgsPointCloudRenderer::setPointSymbol( PointSymbol symbol )
+void QgsPointCloudRenderer::setPointSymbol( Qgis::PointCloudSymbol symbol )
 {
   mPointSymbol = symbol;
+}
+
+Qgis::PointCloudDrawOrder QgsPointCloudRenderer::drawOrder2d() const
+{
+  return mDrawOrder2d;
+}
+
+void QgsPointCloudRenderer::setDrawOrder2d( Qgis::PointCloudDrawOrder order )
+{
+  mDrawOrder2d = order;
 }
 
 QVector<QVariantMap> QgsPointCloudRenderer::identify( QgsPointCloudLayer *layer, const QgsRenderContext &renderContext, const QgsGeometry &geometry, double toleranceForPointIdentification )
 {
   QVector<QVariantMap> selectedPoints;
 
-  QgsPointCloudIndex *index = layer->dataProvider()->index();
-  const IndexedPointCloudNode root = index->root();
-
   const double maxErrorPixels = renderContext.convertToPainterUnits( maximumScreenError(), maximumScreenErrorUnit() );// in pixels
 
-  const QgsRectangle rootNodeExtentLayerCoords = index->nodeMapExtent( root );
-  QgsRectangle rootNodeExtentMapCoords;
-  try
+  const QgsRectangle layerExtentLayerCoords = layer->dataProvider()->extent();
+  QgsRectangle layerExtentMapCoords = layerExtentLayerCoords;
+  if ( !renderContext.coordinateTransform().isShortCircuited() )
   {
-    rootNodeExtentMapCoords = renderContext.coordinateTransform().transformBoundingBox( rootNodeExtentLayerCoords );
+    try
+    {
+      QgsCoordinateTransform extentTransform = renderContext.coordinateTransform();
+      extentTransform.setBallparkTransformsAreAppropriate( true );
+      layerExtentMapCoords = extentTransform.transformBoundingBox( layerExtentLayerCoords );
+    }
+    catch ( QgsCsException & )
+    {
+      QgsDebugError( QStringLiteral( "Could not transform node extent to map CRS" ) );
+    }
   }
-  catch ( QgsCsException & )
-  {
-    QgsDebugMsg( QStringLiteral( "Could not transform node extent to map CRS" ) );
-    rootNodeExtentMapCoords = rootNodeExtentLayerCoords;
-  }
-
-  const double rootErrorInMapCoordinates = rootNodeExtentMapCoords.width() / index->span();
-  const double rootErrorInLayerCoordinates = rootNodeExtentLayerCoords.width() / index->span();
 
   const double mapUnitsPerPixel = renderContext.mapToPixel().mapUnitsPerPixel();
-  if ( ( rootErrorInMapCoordinates < 0.0 ) || ( mapUnitsPerPixel < 0.0 ) || ( maxErrorPixels < 0.0 ) )
+  if ( ( mapUnitsPerPixel < 0.0 ) || ( maxErrorPixels < 0.0 ) )
   {
-    QgsDebugMsg( QStringLiteral( "invalid screen error" ) );
+    QgsDebugError( QStringLiteral( "invalid screen error" ) );
     return selectedPoints;
   }
 
   const double maxErrorInMapCoordinates = maxErrorPixels * mapUnitsPerPixel;
-  const double maxErrorInLayerCoordinates = maxErrorInMapCoordinates * rootErrorInLayerCoordinates / rootErrorInMapCoordinates;
+  const double maxErrorInLayerCoordinates = maxErrorInMapCoordinates * layerExtentLayerCoords.width() / layerExtentMapCoords.width();
 
   QgsGeometry selectionGeometry = geometry;
-  if ( geometry.type() == QgsWkbTypes::PointGeometry )
+  if ( geometry.type() == Qgis::GeometryType::Point )
   {
     const double x = geometry.asPoint().x();
     const double y = geometry.asPoint().y();
@@ -239,7 +335,7 @@ QVector<QVariantMap> QgsPointCloudRenderer::identify( QgsPointCloudLayer *layer,
     const double pointSizePixels = renderContext.convertToPainterUnits( mPointSize, mPointSizeUnit, mPointSizeMapUnitScale );
     switch ( pointSymbol() )
     {
-      case QgsPointCloudRenderer::PointSymbol::Square:
+      case Qgis::PointCloudSymbol::Square:
       {
         const QgsPointXY deviceCoords = renderContext.mapToPixel().transform( QgsPointXY( x, y ) );
         const QgsPointXY point1( deviceCoords.x() - std::max( toleranceInPixels, pointSizePixels / 2.0 ), deviceCoords.y() - std::max( toleranceInPixels, pointSizePixels / 2.0 ) );
@@ -250,7 +346,7 @@ QVector<QVariantMap> QgsPointCloudRenderer::identify( QgsPointCloudLayer *layer,
         selectionGeometry = QgsGeometry::fromRect( pointRect );
         break;
       }
-      case QgsPointCloudRenderer::PointSymbol::Circle:
+      case Qgis::PointCloudSymbol::Circle:
       {
         const QgsPoint centerMapCoords( x, y );
         const QgsPointXY deviceCoords = renderContext.mapToPixel().transform( centerMapCoords );
@@ -274,7 +370,7 @@ QVector<QVariantMap> QgsPointCloudRenderer::identify( QgsPointCloudLayer *layer,
   }
   catch ( QgsCsException & )
   {
-    QgsDebugMsg( QStringLiteral( "Could not transform geometry to layer CRS" ) );
+    QgsDebugError( QStringLiteral( "Could not transform geometry to layer CRS" ) );
     return selectedPoints;
   }
 
@@ -284,3 +380,8 @@ QVector<QVariantMap> QgsPointCloudRenderer::identify( QgsPointCloudLayer *layer,
 
   return selectedPoints;
 }
+
+//
+// QgsPreparedPointCloudRendererData
+//
+QgsPreparedPointCloudRendererData::~QgsPreparedPointCloudRendererData() = default;

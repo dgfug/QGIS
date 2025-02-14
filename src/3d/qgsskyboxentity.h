@@ -51,6 +51,7 @@ class _3D_EXPORT QgsSkyboxEntity : public Qt3DCore::QEntity
       PanoramicSkybox,
       DistinctTexturesSkybox
     };
+
   public:
     //! Constructor
     QgsSkyboxEntity( QNode *parent = nullptr );
@@ -77,6 +78,8 @@ class _3D_EXPORT QgsSkyboxEntity : public Qt3DCore::QEntity
  */
 class _3D_EXPORT QgsPanoramicSkyboxEntity : public QgsSkyboxEntity
 {
+    Q_OBJECT
+
   public:
     //! Construct a skybox from a panoramic 360 image
     QgsPanoramicSkyboxEntity( const QString &texturePath, Qt3DCore::QNode *parent = nullptr );
@@ -88,6 +91,7 @@ class _3D_EXPORT QgsPanoramicSkyboxEntity : public QgsSkyboxEntity
 
   private:
     void reloadTexture();
+
   private:
     QString mTexturePath;
     Qt3DRender::QTextureLoader *mLoadedTexture = nullptr;
@@ -102,6 +106,8 @@ class _3D_EXPORT QgsPanoramicSkyboxEntity : public QgsSkyboxEntity
  */
 class _3D_EXPORT QgsCubeFacesSkyboxEntity : public QgsSkyboxEntity
 {
+    Q_OBJECT
+
   public:
     //! Constructs a skybox from 6 different images
     QgsCubeFacesSkyboxEntity( const QString &posX, const QString &posY, const QString &posZ, const QString &negX, const QString &negY, const QString &negZ, Qt3DCore::QNode *parent = nullptr );
@@ -112,6 +118,7 @@ class _3D_EXPORT QgsCubeFacesSkyboxEntity : public QgsSkyboxEntity
   private:
     void init();
     void reloadTexture();
+
   private:
     QMap<Qt3DRender::QTextureCubeMap::CubeMapFace, QString> mCubeFacesPaths;
     Qt3DRender::QShaderProgram *mGlShader = nullptr;

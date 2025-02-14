@@ -24,18 +24,21 @@ Email                : nyall dot dawson at gmail dot com
 #include <geos_c.h>
 
 
-class TestQgsGeometrySnapper : public QObject
+class TestQgsGeometrySnapper : public QgsTest
 {
     Q_OBJECT
 
   public:
-
+  public:
+    TestQgsGeometrySnapper()
+      : QgsTest( QStringLiteral( "Geometry Snapper Tests" ), QStringLiteral( "3d" ) )
+    {}
 
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init() ;// will be called before each testfunction is executed.
-    void cleanup() ;// will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
+    void init();            // will be called before each testfunction is executed.
+    void cleanup();         // will be called after every testfunction.
     //! Our tests proper begin here
     void snapPolygonToPolygon();
     void snapPolygonToLine();
@@ -53,10 +56,9 @@ class TestQgsGeometrySnapper : public QObject
     void insertExtra();
     void duplicateNodes();
     void snapMultiPolygonToPolygon();
-
 };
 
-void  TestQgsGeometrySnapper::initTestCase()
+void TestQgsGeometrySnapper::initTestCase()
 {
   //
   // Runs once before any tests are run
@@ -65,20 +67,20 @@ void  TestQgsGeometrySnapper::initTestCase()
   QgsApplication::init();
   QgsApplication::initQgis();
 }
-void  TestQgsGeometrySnapper::cleanupTestCase()
+void TestQgsGeometrySnapper::cleanupTestCase()
 {
   QgsApplication::exitQgis();
 }
-void  TestQgsGeometrySnapper::init()
+void TestQgsGeometrySnapper::init()
 {
 }
-void  TestQgsGeometrySnapper::cleanup()
+void TestQgsGeometrySnapper::cleanup()
 {
 }
 
 void TestQgsGeometrySnapper::snapPolygonToPolygon()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
   QgsFeature ff( 0 );
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "Polygon((0 0, 10 0, 10 10, 0 10, 0 0))" ) );
   ff.setGeometry( refGeom );
@@ -87,7 +89,7 @@ void TestQgsGeometrySnapper::snapPolygonToPolygon()
   rl->dataProvider()->addFeatures( flist );
 
   const QgsGeometry polygonGeom = QgsGeometry::fromWkt( QStringLiteral( "Polygon((0.1 -0.1, 10.1 0, 9.9 10.1, 0 10, 0.1 -0.1))" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( polygonGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "Polygon ((0 0, 10 0, 10 10, 0 10, 0 0))" ) );
 
@@ -108,7 +110,7 @@ void TestQgsGeometrySnapper::snapPolygonToPolygon()
 
 void TestQgsGeometrySnapper::snapLineToLine()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
   QgsFeature ff( 0 );
 
   // closed linestrings
@@ -119,7 +121,7 @@ void TestQgsGeometrySnapper::snapLineToLine()
   rl->dataProvider()->addFeatures( flist );
 
   const QgsGeometry lineGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(0.1 -0.1, 10.1 0, 9.9 10.1, 0 10, 0.1 -0.1)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( lineGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "LineString (0 0, 10 0, 10 10, 0 10, 0 0)" ) );
 
@@ -160,7 +162,7 @@ void TestQgsGeometrySnapper::snapLineToLine()
 
 void TestQgsGeometrySnapper::snapLineToPolygon()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
   QgsFeature ff( 0 );
 
   // closed linestrings
@@ -171,7 +173,7 @@ void TestQgsGeometrySnapper::snapLineToPolygon()
   rl->dataProvider()->addFeatures( flist );
 
   const QgsGeometry lineGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(0.1 -0.1, 10.1 0, 9.9 10.1, 0 10, 0.1 -0.1)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( lineGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "LineString (0 0, 10 0, 10 10, 0 10, 0 0)" ) );
 
@@ -212,7 +214,7 @@ void TestQgsGeometrySnapper::snapLineToPolygon()
 
 void TestQgsGeometrySnapper::snapLineToPoint()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Point" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Point" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
 
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(0 0)" ) );
   QgsFeature ff( 0 );
@@ -225,7 +227,7 @@ void TestQgsGeometrySnapper::snapLineToPoint()
   rl->dataProvider()->addFeatures( flist );
 
   const QgsGeometry lineGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(0.1 -0.1, 10.1 0, 10 10, 0 10)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( lineGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "LineString (0 0, 10 0, 10 10, 0 10)" ) );
 
@@ -241,7 +243,7 @@ void TestQgsGeometrySnapper::snapLineToPoint()
 
 void TestQgsGeometrySnapper::snapPolygonToLine()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
 
   // closed linestring
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(0 0, 10 0, 10 10, 0 10, 0 0)" ) );
@@ -258,7 +260,7 @@ void TestQgsGeometrySnapper::snapPolygonToLine()
 
   // snapping to closed linestring
   const QgsGeometry polygonGeom = QgsGeometry::fromWkt( QStringLiteral( "Polygon((0.1 -0.1, 10.1 0, 9.9 10.1, 0 10, 0.1 -0.1))" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( polygonGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "Polygon ((0 0, 10 0, 10 10, 0 10, 0 0))" ) );
 
@@ -299,7 +301,7 @@ void TestQgsGeometrySnapper::snapPolygonToLine()
 
 void TestQgsGeometrySnapper::snapPolygonToPoint()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Point" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Point" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
 
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(0 0)" ) );
   QgsFeature ff( 0 );
@@ -312,7 +314,7 @@ void TestQgsGeometrySnapper::snapPolygonToPoint()
   rl->dataProvider()->addFeatures( flist );
 
   const QgsGeometry polygonGeom = QgsGeometry::fromWkt( QStringLiteral( "Polygon((0.1 -0.1, 10.1 0, 10 10, 0 10, 0.1 -0.1))" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( polygonGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "Polygon ((0 0, 10 0, 10 10, 0 10, 0 0))" ) );
 
@@ -328,7 +330,7 @@ void TestQgsGeometrySnapper::snapPolygonToPoint()
 
 void TestQgsGeometrySnapper::snapPointToPoint()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Point" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Point" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
 
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(0 0)" ) );
   QgsFeature ff( 0 );
@@ -341,7 +343,7 @@ void TestQgsGeometrySnapper::snapPointToPoint()
   rl->dataProvider()->addFeatures( flist );
 
   QgsGeometry pointGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(0.1 -0.1)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( pointGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "Point (0 0)" ) );
 
@@ -352,7 +354,7 @@ void TestQgsGeometrySnapper::snapPointToPoint()
 
 void TestQgsGeometrySnapper::snapPointToLine()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
 
   // closed linestring
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(0 0, 10 0, 10 10, 0 10, 0 0)" ) );
@@ -363,7 +365,7 @@ void TestQgsGeometrySnapper::snapPointToLine()
   rl->dataProvider()->addFeatures( flist );
 
   QgsGeometry pointGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(0.1 -0.1)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( pointGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "Point (0 0)" ) );
 
@@ -374,11 +376,15 @@ void TestQgsGeometrySnapper::snapPointToLine()
   pointGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(0.5 0.5)" ) );
   result = snapper.snapGeometry( pointGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "Point (0 0)" ) );
+
+  pointGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(3 3)" ) );
+  result = snapper.snapGeometry( pointGeom, 4 );
+  QCOMPARE( result.asWkt(), QStringLiteral( "Point (3 0)" ) );
 }
 
 void TestQgsGeometrySnapper::snapPointToLinePreferNearest()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
 
   // closed linestring
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(0 0, 10 0, 10 10, 0 10, 0 0)" ) );
@@ -389,14 +395,14 @@ void TestQgsGeometrySnapper::snapPointToLinePreferNearest()
   rl->dataProvider()->addFeatures( flist );
 
   const QgsGeometry pointGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(0.5 0.5)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   const QgsGeometry result = snapper.snapGeometry( pointGeom, 1, QgsGeometrySnapper::PreferClosest );
   QCOMPARE( result.asWkt(), QStringLiteral( "Point (0.5 0)" ) );
 }
 
 void TestQgsGeometrySnapper::snapPointToPolygon()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
 
   // closed linestring
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "Polygon((0 0, 10 0, 10 10, 0 10, 0 0))" ) );
@@ -407,7 +413,7 @@ void TestQgsGeometrySnapper::snapPointToPolygon()
   rl->dataProvider()->addFeatures( flist );
 
   QgsGeometry pointGeom = QgsGeometry::fromWkt( QStringLiteral( "Point(0.1 -0.1)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( pointGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "Point (0 0)" ) );
 
@@ -418,7 +424,7 @@ void TestQgsGeometrySnapper::snapPointToPolygon()
 
 void TestQgsGeometrySnapper::endPointSnap()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
   QgsFeature ff( 0 );
 
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(0 0, 100 0, 100 100, 0 100)" ) );
@@ -428,7 +434,7 @@ void TestQgsGeometrySnapper::endPointSnap()
   rl->dataProvider()->addFeatures( flist );
 
   const QgsGeometry lineGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(1 -1, 102 0, 98 102, 0 101)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( lineGeom, 10, QgsGeometrySnapper::EndPointPreferNodes );
   QCOMPARE( result.asWkt(), QStringLiteral( "LineString (0 0, 102 0, 98 102, 0 100)" ) );
 
@@ -443,7 +449,7 @@ void TestQgsGeometrySnapper::endPointSnap()
 
 void TestQgsGeometrySnapper::endPointToEndPoint()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Linestring" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
   QgsFeature ff( 0 );
 
   // closed linestrings
@@ -454,7 +460,7 @@ void TestQgsGeometrySnapper::endPointToEndPoint()
   rl->dataProvider()->addFeatures( flist );
 
   const QgsGeometry lineGeom = QgsGeometry::fromWkt( QStringLiteral( "LineString(1 -1, 102 0, 98 102, 0 101)" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   QgsGeometry result = snapper.snapGeometry( lineGeom, 10, QgsGeometrySnapper::EndPointToEndPoint );
   QCOMPARE( result.asWkt(), QStringLiteral( "LineString (0 0, 102 0, 98 102, 0 100)" ) );
 
@@ -584,7 +590,6 @@ void TestQgsGeometrySnapper::insertExtra()
   f2.setGeometry( refGeom );
   result = snapper.snapFeature( f2 );
   QCOMPARE( result.asWkt( 1 ), QStringLiteral( "LineString (-7 -2, 0 0)" ) );
-
 }
 
 void TestQgsGeometrySnapper::duplicateNodes()
@@ -611,12 +616,11 @@ void TestQgsGeometrySnapper::duplicateNodes()
 
   result = snapper.snapFeature( f2 );
   QCOMPARE( result.asWkt( 1 ), QStringLiteral( "LineString (10 10, 20 0)" ) );
-
 }
 
 void TestQgsGeometrySnapper::snapMultiPolygonToPolygon()
 {
-  QgsVectorLayer *rl = new QgsVectorLayer( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
+  auto rl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Polygon" ), QStringLiteral( "x" ), QStringLiteral( "memory" ) );
   QgsFeature ff( 0 );
   const QgsGeometry refGeom = QgsGeometry::fromWkt( QStringLiteral( "Polygon((0 0, 10 0, 10 10, 0 10, 0 0))" ) );
   ff.setGeometry( refGeom );
@@ -626,10 +630,9 @@ void TestQgsGeometrySnapper::snapMultiPolygonToPolygon()
 
   // test MultiPolygon that could be removed in the process https://github.com/qgis/QGIS/issues/26385
   const QgsGeometry polygonGeom = QgsGeometry::fromWkt( QStringLiteral( "MultiPolygon(((0.1 -0.1, 5 0.1, 9.9 0.1, 0.1 -0.1)))" ) );
-  const QgsGeometrySnapper snapper( rl );
+  const QgsGeometrySnapper snapper( rl.get() );
   const QgsGeometry result = snapper.snapGeometry( polygonGeom, 1 );
   QCOMPARE( result.asWkt(), QStringLiteral( "MultiPolygon (((0 0, 5 0, 10 0, 0 0)))" ) );
-
 }
 
 

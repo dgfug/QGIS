@@ -14,13 +14,14 @@
  ***************************************************************************/
 
 #include "qgsmaprendererstagedrenderjob.h"
+#include "moc_qgsmaprendererstagedrenderjob.cpp"
 
 #include "qgsfeedback.h"
 #include "qgslabelingengine.h"
 #include "qgslogger.h"
 #include "qgsproject.h"
 #include "qgsmaplayerrenderer.h"
-#include "qgsmaplayerlistutils.h"
+#include "qgsmaplayerlistutils_p.h"
 #include "qgsrendereditemresults.h"
 
 QgsMapRendererStagedRenderJob::QgsMapRendererStagedRenderJob( const QgsMapSettings &settings, Flags flags )
@@ -103,6 +104,7 @@ bool QgsMapRendererStagedRenderJob::renderCurrentPart( QPainter *painter )
   if ( mJobIt != mLayerJobs.end() )
   {
     LayerRenderJob &job = *mJobIt;
+    emit layerRenderingStarted( job.layerId );
     job.renderer->renderContext()->setPainter( painter );
 
     if ( job.context()->useAdvancedEffects() )
@@ -110,6 +112,12 @@ bool QgsMapRendererStagedRenderJob::renderCurrentPart( QPainter *painter )
       // Set the QPainter composition mode so that this layer is rendered using
       // the desired blending mode
       painter->setCompositionMode( job.blendMode );
+    }
+
+    if ( job.previewRenderImage && !job.previewRenderImageInitialized )
+    {
+      job.previewRenderImage->fill( 0 );
+      job.previewRenderImageInitialized = true;
     }
 
     if ( job.img )
@@ -128,6 +136,8 @@ bool QgsMapRendererStagedRenderJob::renderCurrentPart( QPainter *painter )
       painter->setOpacity( 1.0 );
     }
     job.context()->setPainter( nullptr );
+
+    emit layerRendered( job.layerId );
   }
   else
   {
@@ -154,7 +164,7 @@ bool QgsMapRendererStagedRenderJob::renderCurrentPart( QPainter *painter )
       mLabelJob.context.setPainter( painter );
       drawLabeling( mLabelJob.context, mLabelingEngineV2.get(), painter );
       mLabelJob.complete = true;
-      mLabelJob.participatingLayers = _qgis_listRawToQPointer( mLabelingEngineV2->participatingLayers() );
+      mLabelJob.participatingLayers = participatingLabelLayers( mLabelingEngineV2.get() );
       mLabelJob.context.setPainter( nullptr );
     }
   }

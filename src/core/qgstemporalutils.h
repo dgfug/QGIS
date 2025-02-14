@@ -158,14 +158,34 @@ class CORE_EXPORT QgsTemporalUtils
       /**
        * The filename template for exporting the frames.
        *
-       * This must be in format prefix####.format, where number of
-       * \a # characters represents how many 0's should be left-padded to the frame number
-       * e.g. my###.jpg will create frames my001.jpg, my002.jpg, etc
+       * This must be in format ``prefix####.format``, where number of
+       * \a ``#`` characters represents how many 0's should be left-padded to the frame number
+       * e.g. ``my###.jpg`` will create frames ``my001.jpg``, ``my002.jpg``, etc
        */
       QString fileNameTemplate;
 
       //! List of decorations to draw onto exported frames.
       QList<QgsMapDecoration *> decorations;
+
+      /**
+       * Contains the list of all available temporal ranges which have data available.
+       *
+       * The list can be a list of non-contiguous ranges (i.e. containing gaps)
+       * which together describe the complete range of times which contain data.
+       *
+       * This list is required whenever the QgsUnitTypes::TemporalIrregularStep interval is used
+       * for an animation.
+       *
+       * \since QGIS 3.30
+       */
+      QList<QgsDateTimeRange> availableTemporalRanges;
+
+      /**
+       * Target animation frame rate in frames per second.
+       *
+       * \since QGIS 3.26
+       */
+      double frameRate = 30;
 
     };
 

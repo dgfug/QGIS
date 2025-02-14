@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgsdatadefinedsizelegend.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -18,8 +18,6 @@ Object that keeps configuration of appearance of marker symbol's data-defined si
 
 For example: the list of classes (size values), whether the classes should appear in separate
 legend nodes or whether to collapse them into one legend node.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -35,9 +33,6 @@ Constructor for QgsDataDefinedSizeLegend.
     ~QgsDataDefinedSizeLegend();
 
     QgsDataDefinedSizeLegend( const QgsDataDefinedSizeLegend &other );
-%Docstring
-Copy constructor
-%End
 
     enum LegendType
     {
@@ -201,5 +196,5 @@ Writes configuration to the given XML element.
  *                                                                      *
  * src/core/qgsdatadefinedsizelegend.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

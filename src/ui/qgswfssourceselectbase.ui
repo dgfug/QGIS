@@ -14,16 +14,33 @@
    <string>Add WFS Layer from a Server</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <item row="2" column="0">
+   <item row="6" column="0">
+    <widget class="QCheckBox" name="mHoldDialogOpen">
+     <property name="text">
+      <string>Keep dialog open</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="0">
+    <widget class="QgsFilterLineEdit" name="lineFilter">
+     <property name="showSearchIcon" stdset="0">
+      <bool>true</bool>
+     </property>
+     <property name="qgisRelation" stdset="0">
+      <string notr="true"/>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0">
     <widget class="QTreeView" name="treeView">
      <property name="editTriggers">
-      <set>QAbstractItemView::NoEditTriggers</set>
+      <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
      </property>
      <property name="alternatingRowColors">
       <bool>true</bool>
      </property>
      <property name="selectionMode">
-      <enum>QAbstractItemView::ExtendedSelection</enum>
+      <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
      </property>
      <property name="sortingEnabled">
       <bool>true</bool>
@@ -33,14 +50,14 @@
      </attribute>
     </widget>
    </item>
-   <item row="5" column="0">
+   <item row="7" column="0">
     <widget class="QCheckBox" name="cbxFeatureCurrentViewExtent">
      <property name="text">
       <string>Only request features overlapping the view extent</string>
      </property>
     </widget>
    </item>
-   <item row="0" column="0">
+   <item row="2" column="0">
     <widget class="QGroupBox" name="GroupBox1">
      <property name="title">
       <string>Server Connections</string>
@@ -103,10 +120,10 @@
         <item>
          <spacer>
           <property name="orientation">
-           <enum>Qt::Horizontal</enum>
+           <enum>Qt::Orientation::Horizontal</enum>
           </property>
           <property name="sizeType">
-           <enum>QSizePolicy::Expanding</enum>
+           <enum>QSizePolicy::Policy::Expanding</enum>
           </property>
           <property name="sizeHint" stdset="0">
            <size>
@@ -142,46 +159,19 @@
     </widget>
    </item>
    <item row="1" column="0">
-    <layout class="QHBoxLayout" name="horizontalLayoutFilter">
-     <item>
-      <widget class="QLabel" name="labelFilter">
-       <property name="enabled">
-        <bool>true</bool>
-       </property>
-       <property name="text">
-        <string>Filter</string>
-       </property>
-       <property name="buddy">
-        <cstring>lineFilter</cstring>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QLineEdit" name="lineFilter">
-       <property name="enabled">
-        <bool>true</bool>
-       </property>
-       <property name="toolTip">
-        <string>Display WFS FeatureTypes containing this word in the title, name or abstract</string>
-       </property>
-       <property name="whatsThis">
-        <string>Display WFS FeatureTypes containing this word in the title, name or abstract</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
+    <layout class="QHBoxLayout" name="horizontalLayoutFilter"/>
    </item>
-   <item row="7" column="0">
+   <item row="9" column="0">
     <widget class="QDialogButtonBox" name="buttonBox">
      <property name="orientation">
-      <enum>Qt::Horizontal</enum>
+      <enum>Qt::Orientation::Horizontal</enum>
      </property>
      <property name="standardButtons">
-      <set>QDialogButtonBox::Help</set>
+      <set>QDialogButtonBox::StandardButton::Help</set>
      </property>
     </widget>
    </item>
-   <item row="6" column="0">
+   <item row="8" column="0">
     <widget class="QGroupBox" name="gbCRS">
      <property name="title">
       <string>Coordinate Reference System</string>
@@ -212,10 +202,10 @@
       <item>
        <spacer>
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
         <property name="sizeType">
-         <enum>QSizePolicy::Expanding</enum>
+         <enum>QSizePolicy::Policy::Expanding</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
@@ -238,39 +228,15 @@
      </layout>
     </widget>
    </item>
-   <item row="4" column="0">
-    <layout class="QHBoxLayout" name="horizontalLayout_4">
-     <item>
-      <widget class="QCheckBox" name="cbxUseTitleLayerName">
-       <property name="text">
-        <string>Use title for layer name</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QCheckBox" name="mHoldDialogOpen">
-       <property name="text">
-        <string>Keep dialog open</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QgsFilterLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>qgsfilterlineedit.h</header>
+  </customwidget>
+ </customwidgets>
  <tabstops>
   <tabstop>cmbConnections</tabstop>
   <tabstop>btnConnect</tabstop>
@@ -279,10 +245,7 @@
   <tabstop>btnDelete</tabstop>
   <tabstop>btnLoad</tabstop>
   <tabstop>btnSave</tabstop>
-  <tabstop>lineFilter</tabstop>
   <tabstop>treeView</tabstop>
-  <tabstop>cbxUseTitleLayerName</tabstop>
-  <tabstop>mHoldDialogOpen</tabstop>
   <tabstop>cbxFeatureCurrentViewExtent</tabstop>
   <tabstop>btnChangeSpatialRefSys</tabstop>
  </tabstops>

@@ -29,7 +29,6 @@
  *
  * A registry of QgsColorScheme color schemes. This class can be created directly, or
  * accessed via a QgsApplication::colorSchemeRegistry().
- * \since QGIS 2.5
  */
 class CORE_EXPORT QgsColorSchemeRegistry
 {
@@ -109,7 +108,7 @@ class CORE_EXPORT QgsColorSchemeRegistry
      * \note not available in Python bindings
      */
 #ifndef SIP_RUN
-    template<class T> void schemes( QList<T *> &schemeList )
+    template<class T> void schemes( QList<T *> &schemeList ) const
     {
       schemeList.clear();
       QList<QgsColorScheme *> schemeInstanceList = schemes();

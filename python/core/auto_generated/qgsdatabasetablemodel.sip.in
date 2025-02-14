@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgsdatabasetablemodel.h                                     *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -27,16 +27,17 @@ called.
 %End
   public:
 
-    enum Role
+
+    enum class CustomRole
     {
-      RoleTableName,
-      RoleSchema,
-      RoleTableFlags,
-      RoleComment,
-      RoleCustomInfo,
-      RoleWkbType,
-      RoleCrs,
-      RoleEmpty,
+      TableName,
+      Schema,
+      TableFlags,
+      Comment,
+      CustomInfo,
+      WkbType,
+      Crs,
+      Empty,
     };
 
     explicit QgsDatabaseTableModel( const QString &provider, const QString &connection, const QString &schema = QString(), QObject *parent /TransferThis/ = 0 );
@@ -99,5 +100,5 @@ Refreshes the table list by querying the underlying connection.
  *                                                                      *
  * src/core/qgsdatabasetablemodel.h                                     *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/geometry/qgscircularstring.h                                *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -15,8 +15,6 @@ class QgsCircularString: QgsCurve
 {
 %Docstring(signature="appended")
 Circular string geometry type
-
-.. versionadded:: 2.10
 %End
 
 %TypeHeaderCode
@@ -75,6 +73,12 @@ to ``p2`` will be used (i.e. winding the other way around the circle).
 
 .. versionadded:: 3.2
 %End
+
+
+  public:
+    virtual bool fuzzyEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const /HoldGIL/;
+
+    virtual bool fuzzyDistanceEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const /HoldGIL/;
 
     virtual bool equals( const QgsCurve &other ) const;
 
@@ -135,7 +139,6 @@ Appends the contents of another circular ``string`` to the end of this circular 
    It is the caller's responsibility to ensure that the first point in the appended
    ``string`` matches the last point in the existing curve, or the result will be undefined.
 
-
 .. versionadded:: 3.20
 %End
 
@@ -147,7 +150,9 @@ Appends the contents of another circular ``string`` to the end of this circular 
 
     virtual QgsLineString *curveToLine( double tolerance = M_PI_2 / 90, SegmentationToleranceType toleranceType = MaximumAngle ) const /Factory/;
 
-    virtual QgsCircularString *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0 ) const /Factory/;
+    virtual QgsCircularString *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0, bool removeRedundantPoints = false ) const /Factory/;
+
+    virtual QgsAbstractGeometry *simplifyByDistance( double tolerance ) const /Factory/;
 
     virtual bool removeDuplicateNodes( double epsilon = 4 * DBL_EPSILON, bool useZValues = false );
 
@@ -200,6 +205,10 @@ Appends the contents of another circular ``string`` to the end of this circular 
 
     virtual double yAt( int index ) const /HoldGIL/;
 
+    virtual double zAt( int index ) const /HoldGIL/;
+
+    virtual double mAt( int index ) const /HoldGIL/;
+
 
     virtual bool transform( QgsAbstractGeometryTransformer *transformer, QgsFeedback *feedback = 0 );
 
@@ -221,7 +230,7 @@ Appends the contents of another circular ``string`` to the end of this circular 
   protected:
 
     int compareToSameClass( const QgsAbstractGeometry *other ) const final;
-    virtual QgsRectangle calculateBoundingBox() const;
+    virtual QgsBox3D calculateBoundingBox3D() const;
 
 
 };
@@ -232,5 +241,5 @@ Appends the contents of another circular ``string`` to the end of this circular 
  *                                                                      *
  * src/core/geometry/qgscircularstring.h                                *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -11,6 +11,7 @@
 #include "frmts/mdal_binary_dat.hpp"
 #include "frmts/mdal_selafin.hpp"
 #include "frmts/mdal_esri_tin.hpp"
+#include "frmts/mdal_mike21.hpp"
 #include "frmts/mdal_dynamic_driver.hpp"
 #include "mdal_utils.hpp"
 
@@ -26,6 +27,7 @@
 
 #ifdef HAVE_GDAL
 #include "frmts/mdal_gdal_grib.hpp"
+#include "frmts/mdal_h2i.hpp"
 #endif
 
 #ifdef HAVE_NETCDF
@@ -247,6 +249,7 @@ MDAL::DriverManager::DriverManager()
 
 #ifdef HAVE_GDAL
   mDrivers.push_back( std::make_shared<MDAL::DriverGdalGrib>() );
+  mDrivers.push_back( std::make_shared<MDAL::DriverH2i>() );
 #endif
 
   // DATASET DRIVERS
@@ -259,6 +262,8 @@ MDAL::DriverManager::DriverManager()
 #if defined HAVE_HDF5 && defined HAVE_XML
   mDrivers.push_back( std::make_shared<MDAL::DriverXdmf>() );
 #endif
+
+  mDrivers.push_back( std::make_shared<MDAL::DriverMike21>() );
 
   loadDynamicDrivers();
 }

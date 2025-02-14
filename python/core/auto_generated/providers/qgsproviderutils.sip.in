@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/providers/qgsproviderutils.h                                *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -36,7 +36,7 @@ Returns ``True`` if the sublayer ``details`` are incomplete, and require a more 
 scan.
 
 For instance, if the details contain any vector sublayers with unknown geometry types
-then a query with the Qgis.SublayerQueryFlag.ResolveGeometryType flag is required.
+then a query with the :py:class:`Qgis`.SublayerQueryFlag.ResolveGeometryType flag is required.
 
 The ``flags`` argument can be used to control the level of completeness required during the test.
 %End
@@ -65,5 +65,5 @@ QFlags<QgsProviderUtils::SublayerCompletenessFlag> operator|(QgsProviderUtils::S
  *                                                                      *
  * src/core/providers/qgsproviderutils.h                                *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

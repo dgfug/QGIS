@@ -19,6 +19,7 @@
 #include "qgis_3d.h"
 
 #include <QObject>
+#include <QElapsedTimer>
 
 #define SIP_NO_FILE
 
@@ -36,9 +37,9 @@ namespace Qt3DRender
   class QRenderSettings;
   class QCamera;
   class QFrameGraphNode;
-}
+} // namespace Qt3DRender
 
-class QgsShadowRenderingFrameGraph;
+class QgsFrameGraph;
 
 /**
  * \ingroup 3d
@@ -60,7 +61,6 @@ class _3D_EXPORT QgsAbstract3DEngine : public QObject
 {
     Q_OBJECT
   public:
-
     /**
      * Constructor for QgsAbstract3DEngine with the specified \a parent object.
      */
@@ -83,6 +83,13 @@ class _3D_EXPORT QgsAbstract3DEngine : public QObject
     virtual void setSize( QSize s ) = 0;
 
     /**
+     * Starts a request for an image containing the depth buffer data of the engine.
+     * The function does not block - when the depth buffer image is captured, it is returned in depthBufferCaptured() signal.
+     * Only one image request can be active at a time.
+     */
+    void requestDepthBufferCapture();
+
+    /**
      * Starts a request for an image rendered by the engine.
      * The function does not block - when the rendered image is captured, it is returned in imageCaptured() signal.
      * Only one image request can be active at a time.
@@ -101,7 +108,7 @@ class _3D_EXPORT QgsAbstract3DEngine : public QObject
      *
      * \since QGIS 3.18
      */
-    QgsShadowRenderingFrameGraph *frameGraph() { return mFrameGraph; }
+    QgsFrameGraph *frameGraph() { return mFrameGraph; }
 
     /**
      * Sets whether it will be possible to render to an image
@@ -117,12 +124,37 @@ class _3D_EXPORT QgsAbstract3DEngine : public QObject
      * \since QGIS 3.18
      */
     bool renderCaptureEnabled() const;
+
+    /**
+     * Dump the current frame graph and scene graph to the console
+     */
+    void dumpFrameGraphToConsole() const;
+
+    //! Dump frame graph as string
+    QString dumpFrameGraph() const;
+
+    //! Dump scene graph as string
+    QString dumpSceneGraph() const;
+
   signals:
     //! Emitted after a call to requestCaptureImage() to return the captured image.
     void imageCaptured( const QImage &image );
 
+    /**
+     *  Emitted after a call to requestDepthBufferCapture() to return the captured depth buffer.
+     *  \note The depth buffer values are encoded into RGB channels and should be decoded with Qgs3DUtils::decodeDepth()
+     *  \since QGIS 3.24
+     */
+    void depthBufferCaptured( const QImage &image );
+
+    /**
+     *  Emitted after a call to setSize()
+     *  \since QGIS 3.30
+     */
+    void sizeChanged();
+
   protected:
-    QgsShadowRenderingFrameGraph *mFrameGraph = nullptr;
+    QgsFrameGraph *mFrameGraph = nullptr;
 };
 
 

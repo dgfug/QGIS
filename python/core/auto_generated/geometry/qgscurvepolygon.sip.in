@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/geometry/qgscurvepolygon.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -14,8 +14,6 @@ class QgsCurvePolygon: QgsSurface
 {
 %Docstring(signature="appended")
 Curve polygon geometry type
-
-.. versionadded:: 2.10
 %End
 
 %TypeHeaderCode
@@ -25,10 +23,12 @@ Curve polygon geometry type
     QgsCurvePolygon();
     QgsCurvePolygon( const QgsCurvePolygon &p );
 
+  public:
+    virtual bool fuzzyEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const /HoldGIL/;
+    virtual bool fuzzyDistanceEqual( const QgsAbstractGeometry &other, double epsilon = 1e-8 ) const /HoldGIL/;
     virtual bool operator==( const QgsAbstractGeometry &other ) const;
 
     virtual bool operator!=( const QgsAbstractGeometry &other ) const;
-
 
     ~QgsCurvePolygon();
 
@@ -60,19 +60,25 @@ Curve polygon geometry type
 
     void normalize() final /HoldGIL/;
 
+    virtual QgsPolygon *surfaceToPolygon() const /Factory/;
+%Docstring
+Gets a polygon representation of this surface.
+Ownership is transferred to the caller.
+%End
+
     virtual double area() const /HoldGIL/;
 
     virtual double perimeter() const /HoldGIL/;
 
-    virtual QgsPolygon *surfaceToPolygon() const /Factory/;
-
     virtual QgsAbstractGeometry *boundary() const /Factory/;
 
-    virtual QgsCurvePolygon *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0 ) const /Factory/;
+    virtual QgsCurvePolygon *snappedToGrid( double hSpacing, double vSpacing, double dSpacing = 0, double mSpacing = 0, bool removeRedundantPoints = false ) const /Factory/;
+
+    virtual QgsCurvePolygon *simplifyByDistance( double tolerance ) const /Factory/;
 
     virtual bool removeDuplicateNodes( double epsilon = 4 * DBL_EPSILON, bool useZValues = false );
 
-    virtual bool boundingBoxIntersects( const QgsRectangle &rectangle ) const /HoldGIL/;
+    virtual bool boundingBoxIntersects( const QgsBox3D &box3d ) const /HoldGIL/;
 
 
     double roundness() const;
@@ -183,8 +189,6 @@ parameter is specified then only rings smaller than this minimum
 area will be removed.
 
 .. seealso:: :py:func:`removeInteriorRing`
-
-.. versionadded:: 3.0
 %End
 
     void removeInvalidRings();
@@ -192,8 +196,6 @@ area will be removed.
 Removes any interior rings which are not valid from the polygon.
 
 For example, this removes unclosed rings and rings with less than 4 vertices.
-
-.. versionadded:: 3.0
 %End
 
     void forceRHR();
@@ -342,7 +344,7 @@ Returns approximate rotation angle for a vertex. Usually average angle between a
   protected:
 
 
-    virtual QgsRectangle calculateBoundingBox() const;
+    virtual QgsBox3D calculateBoundingBox3D() const;
 
 };
 
@@ -352,5 +354,5 @@ Returns approximate rotation angle for a vertex. Usually average angle between a
  *                                                                      *
  * src/core/geometry/qgscurvepolygon.h                                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

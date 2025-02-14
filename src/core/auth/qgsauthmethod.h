@@ -23,11 +23,7 @@
 #include <QNetworkRequest>
 #include <QStringList>
 #include <QUrl>
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-#include <QMutex>
-#else
 #include <QRecursiveMutex>
-#endif
 
 #include "qgsconfig.h"
 #include "qgis_core.h"
@@ -53,7 +49,7 @@ class CORE_EXPORT QgsAuthMethod : public QObject
      * \note When adding an 'update' member function, also add the corresponding Expansion flag.
      * \note These flags will be added to as new update points are added
      */
-    enum Expansion
+    enum Expansion SIP_ENUM_BASETYPE( IntFlag )
     {
       // TODO: Figure out all different authentication expansions current layer providers use
       NetworkRequest       = 0x1,
@@ -206,11 +202,7 @@ class CORE_EXPORT QgsAuthMethod : public QObject
     QgsAuthMethod::Expansions mExpansions = QgsAuthMethod::Expansions();
     QStringList mDataProviders;
     int mVersion = 0;
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    QMutex mMutex;
-#else
     QRecursiveMutex mMutex;
-#endif
 };
 Q_DECLARE_OPERATORS_FOR_FLAGS( QgsAuthMethod::Expansions )
 

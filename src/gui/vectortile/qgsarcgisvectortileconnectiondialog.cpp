@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsarcgisvectortileconnectiondialog.h"
+#include "moc_qgsarcgisvectortileconnectiondialog.cpp"
 #include "qgsvectortileconnection.h"
 #include "qgsgui.h"
 #include "qgshelp.h"
@@ -35,8 +36,7 @@ QgsArcgisVectorTileConnectionDialog::QgsArcgisVectorTileConnectionDialog( QWidge
   mSpinZMax->setClearValue( 14 );
 
   buttonBox->button( QDialogButtonBox::Ok )->setDisabled( true );
-  connect( buttonBox, &QDialogButtonBox::helpRequested, this,  [ = ]
-  {
+  connect( buttonBox, &QDialogButtonBox::helpRequested, this, [=] {
     QgsHelp::openHelp( QStringLiteral( "managing_data_source/opening_data.html#using-vector-tiles-services" ) );
   } );
   connect( mEditName, &QLineEdit::textChanged, this, &QgsArcgisVectorTileConnectionDialog::updateOkButtonState );
@@ -57,7 +57,7 @@ void QgsArcgisVectorTileConnectionDialog::setConnection( const QString &name, co
 
   mAuthSettings->setUsername( conn.username );
   mAuthSettings->setPassword( conn.password );
-  mEditReferer->setText( conn.referer );
+  mEditReferer->setText( conn.httpHeaders[QgsHttpHeaders::KEY_REFERER].toString() );
   mAuthSettings->setConfigId( conn.authCfg );
 
   mEditStyleUrl->setText( conn.styleUrl );
@@ -79,8 +79,8 @@ QString QgsArcgisVectorTileConnectionDialog::connectionUri() const
 
   conn.username = mAuthSettings->username();
   conn.password = mAuthSettings->password();
-  conn.referer = mEditReferer->text();
-  conn.authCfg = mAuthSettings->configId( );
+  conn.httpHeaders[QgsHttpHeaders::KEY_REFERER] = mEditReferer->text();
+  conn.authCfg = mAuthSettings->configId();
 
   conn.styleUrl = mEditStyleUrl->text();
 

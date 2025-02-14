@@ -58,7 +58,7 @@
         itemsPerPageText: ''
       }"
       >
-        <template v-slot:item.zoomToFeature="{ item }">
+        <template v-slot:[`item.zoomToFeature`]="{ item }">
           <v-icon @click="zoomToFeature(item.feature)">mdi-magnify</v-icon>
         </template>
       </v-data-table>
@@ -67,7 +67,7 @@
 </template>
 
 <script>
-const uuidv4 = require("uuid/v4");
+import { v4 as uuidv4 } from 'uuid';
 export default {
   name: "AttributeTable",
   props: {

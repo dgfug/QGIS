@@ -22,6 +22,8 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 
+#include "qgscrashreport.h"
+
 #include "ui_qgscrashdialog.h"
 
 /**
@@ -31,7 +33,6 @@ class QgsCrashDialog : public QDialog, private Ui::QgsCrashDialog
 {
     Q_OBJECT
   public:
-
     /**
      * A dialog to show a nicer crash dialog to the user.
      */
@@ -40,15 +41,20 @@ class QgsCrashDialog : public QDialog, private Ui::QgsCrashDialog
     void setBugReport( const QString &reportData );
     void setReloadArgs( const QString &reloadArgs );
 
+    void setPythonFault( const QgsCrashReport::PythonFault &fault );
+
   private slots:
     void showReportWidget();
     void createBugReport();
     void reloadQGIS();
-    void on_mUserFeedbackText_textChanged();
+    void userFeedbackText_textChanged();
 
   private:
+    static QStringList splitCommand( const QString &command );
+
     QString mReportData;
     QString mReloadArgs;
+    QgsCrashReport::PythonFault mPythonFault;
 };
 
 #endif // QGSCRASHDIALOG_H

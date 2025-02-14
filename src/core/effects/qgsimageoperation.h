@@ -42,7 +42,6 @@ class QgsFeedback;
  * Operations are written to either modify an image in place or return a new image, depending
  * on which is faster for the particular operation.
  *
- * \since QGIS 2.7
  */
 class CORE_EXPORT QgsImageOperation
 {
@@ -195,7 +194,6 @@ class CORE_EXPORT QgsImageOperation
      * it will be centered in the returned rectangle.
      * \param center return rectangle will be centered on the center of the original image if set to TRUE
      * \see cropTransparent
-     * \since QGIS 2.9
      */
     static QRect nonTransparentImageRect( const QImage &image, QSize minSize = QSize(), bool center = false );
 
@@ -206,7 +204,6 @@ class CORE_EXPORT QgsImageOperation
      * cropped image is smaller than the minimum size, it will be centered
      * in the returned image.
      * \param center cropped image will be centered on the center of the original image if set to TRUE
-     * \since QGIS 2.9
      */
     static QImage cropTransparent( const QImage &image, QSize minSize = QSize(), bool center = false );
 
@@ -310,7 +307,7 @@ class CORE_EXPORT QgsImageOperation
           : mMode( mode )
         {  }
 
-        void operator()( QRgb &rgb, int x, int y );
+        void operator()( QRgb &rgb, int x, int y ) const;
 
       private:
         GrayscaleMode mMode;
@@ -328,7 +325,7 @@ class CORE_EXPORT QgsImageOperation
           , mContrast( contrast )
         {  }
 
-        void operator()( QRgb &rgb, int x, int y );
+        void operator()( QRgb &rgb, int x, int y ) const;
 
       private:
         int mBrightness;
@@ -433,7 +430,7 @@ class CORE_EXPORT QgsImageOperation
 
         typedef void result_type;
 
-        LineOperationDirection direction() { return mDirection; }
+        LineOperationDirection direction() const { return mDirection; }
 
         void operator()( QRgb *startRef, int lineLength, int bytesPerLine )
         {
@@ -445,7 +442,7 @@ class CORE_EXPORT QgsImageOperation
           int increment = ( mDirection == QgsImageOperation::ByRow ) ? 4 : bytesPerLine;
           if ( !mForwardDirection )
           {
-            p += ( lineLength - 1 ) * increment;
+            p += static_cast< std::size_t >( lineLength - 1 ) * increment;
             increment = -increment;
           }
 
@@ -502,8 +499,8 @@ class CORE_EXPORT QgsImageOperation
         double *mKernel = nullptr;
         QgsFeedback *mFeedback = nullptr;
 
-        inline QRgb gaussianBlurVertical( int posy, unsigned char *sourceFirstLine, int sourceBpl, int height );
-        inline QRgb gaussianBlurHorizontal( int posx, unsigned char *sourceFirstLine, int width );
+        inline QRgb gaussianBlurVertical( int posy, unsigned char *sourceFirstLine, int sourceBpl, int height ) const;
+        inline QRgb gaussianBlurHorizontal( int posx, unsigned char *sourceFirstLine, int width ) const;
     };
 
     //flip
@@ -518,9 +515,9 @@ class CORE_EXPORT QgsImageOperation
 
         typedef void result_type;
 
-        LineOperationDirection direction() { return mDirection; }
+        LineOperationDirection direction() const { return mDirection; }
 
-        void operator()( QRgb *startRef, int lineLength, int bytesPerLine );
+        void operator()( QRgb *startRef, int lineLength, int bytesPerLine ) const;
 
       private:
         LineOperationDirection mDirection;

@@ -21,6 +21,7 @@
 #include <QRegularExpression>
 
 #include "qgspgnewconnection.h"
+#include "moc_qgspgnewconnection.cpp"
 #include "qgsprovidermetadata.h"
 #include "qgsproviderregistry.h"
 #include "qgspostgresproviderconnection.h"
@@ -55,6 +56,7 @@ QgsPgNewConnection::QgsPgNewConnection( QWidget *parent, const QString &connName
   cbxSSLmode->addItem( tr( "require" ), QgsDataSourceUri::SslRequire );
   cbxSSLmode->addItem( tr( "verify-ca" ), QgsDataSourceUri::SslVerifyCa );
   cbxSSLmode->addItem( tr( "verify-full" ), QgsDataSourceUri::SslVerifyFull );
+  cbxSSLmode->setCurrentIndex( cbxSSLmode->findData( QgsDataSourceUri::SslPrefer ) );
 
   mAuthSettings->setDataprovider( QStringLiteral( "postgres" ) );
   mAuthSettings->showStoreCheckboxes( true );
@@ -75,15 +77,18 @@ QgsPgNewConnection::QgsPgNewConnection( QWidget *parent, const QString &connName
     }
     txtPort->setText( port );
     txtDatabase->setText( settings.value( key + "/database" ).toString() );
+    txtSessionRole->setText( settings.value( key + "/session_role" ).toString() );
     cb_publicSchemaOnly->setChecked( settings.value( key + "/publicOnly", false ).toBool() );
     cb_geometryColumnsOnly->setChecked( settings.value( key + "/geometryColumnsOnly", true ).toBool() );
     cb_dontResolveType->setChecked( settings.value( key + "/dontResolveType", false ).toBool() );
     cb_allowGeometrylessTables->setChecked( settings.value( key + "/allowGeometrylessTables", false ).toBool() );
+    cb_allowRasterOverviewTables->setChecked( settings.value( key + "/allowRasterOverviewTables", false ).toBool() );
     // Ensure that cb_publicSchemaOnly is set correctly
     cb_geometryColumnsOnly_clicked();
 
     cb_useEstimatedMetadata->setChecked( settings.value( key + "/estimatedMetadata", false ).toBool() );
     cb_projectsInDatabase->setChecked( settings.value( key + "/projectsInDatabase", false ).toBool() );
+    cb_metadataInDatabase->setChecked( settings.value( key + "/metadataInDatabase", false ).toBool() );
 
     cbxSSLmode->setCurrentIndex( cbxSSLmode->findData( settings.enumValue( key + "/sslmode", QgsDataSourceUri::SslPrefer ) ) );
 
@@ -128,23 +133,13 @@ void QgsPgNewConnection::accept()
   bool hasAuthConfigID = !mAuthSettings->configId().isEmpty();
   testConnection();
 
-  if ( !hasAuthConfigID && mAuthSettings->storePasswordIsChecked( ) &&
-       QMessageBox::question( this,
-                              tr( "Saving Passwords" ),
-                              tr( "WARNING: You have opted to save your password. It will be stored in unsecured plain text in your project files and in your home directory (Unix-like OS) or user profile (Windows). If you want to avoid this, press Cancel and either:\n\na) Don't save a password in the connection settings — it will be requested interactively when needed;\nb) Use the Configuration tab to add your credentials in an HTTP Basic Authentication method and store them in an encrypted database." ),
-                              QMessageBox::Ok | QMessageBox::Cancel ) == QMessageBox::Cancel )
+  if ( !hasAuthConfigID && mAuthSettings->storePasswordIsChecked() && QMessageBox::question( this, tr( "Saving Passwords" ), tr( "WARNING: You have opted to save your password. It will be stored in unsecured plain text in your project files and in your home directory (Unix-like OS) or user profile (Windows). If you want to avoid this, press Cancel and either:\n\na) Don't save a password in the connection settings — it will be requested interactively when needed;\nb) Use the Configuration tab to add your credentials in an HTTP Basic Authentication method and store them in an encrypted database." ), QMessageBox::Ok | QMessageBox::Cancel ) == QMessageBox::Cancel )
   {
     return;
   }
 
   // warn if entry was renamed to an existing connection
-  if ( ( mOriginalConnName.isNull() || mOriginalConnName.compare( txtName->text(), Qt::CaseInsensitive ) != 0 ) &&
-       ( settings.contains( baseKey + txtName->text() + "/service" ) ||
-         settings.contains( baseKey + txtName->text() + "/host" ) ) &&
-       QMessageBox::question( this,
-                              tr( "Save Connection" ),
-                              tr( "Should the existing connection %1 be overwritten?" ).arg( txtName->text() ),
-                              QMessageBox::Ok | QMessageBox::Cancel ) == QMessageBox::Cancel )
+  if ( ( mOriginalConnName.isNull() || mOriginalConnName.compare( txtName->text(), Qt::CaseInsensitive ) != 0 ) && ( settings.contains( baseKey + txtName->text() + "/service" ) || settings.contains( baseKey + txtName->text() + "/host" ) ) && QMessageBox::question( this, tr( "Save Connection" ), tr( "Should the existing connection %1 be overwritten?" ).arg( txtName->text() ), QMessageBox::Ok | QMessageBox::Cancel ) == QMessageBox::Cancel )
   {
     return;
   }
@@ -161,18 +156,12 @@ void QgsPgNewConnection::accept()
   settings.setValue( baseKey + "/host", txtHost->text() );
   settings.setValue( baseKey + "/port", txtPort->text() );
   settings.setValue( baseKey + "/database", txtDatabase->text() );
-  settings.setValue( baseKey + "/username", mAuthSettings->storeUsernameIsChecked( ) ? mAuthSettings->username() : QString() );
-  settings.setValue( baseKey + "/password", mAuthSettings->storePasswordIsChecked( ) && !hasAuthConfigID ? mAuthSettings->password() : QString() );
+  settings.setValue( baseKey + "/username", mAuthSettings->storeUsernameIsChecked() ? mAuthSettings->username() : QString() );
+  settings.setValue( baseKey + "/password", mAuthSettings->storePasswordIsChecked() && !hasAuthConfigID ? mAuthSettings->password() : QString() );
   settings.setValue( baseKey + "/authcfg", mAuthSettings->configId() );
-  settings.setValue( baseKey + "/publicOnly", cb_publicSchemaOnly->isChecked() );
-  settings.setValue( baseKey + "/geometryColumnsOnly", cb_geometryColumnsOnly->isChecked() );
-  settings.setValue( baseKey + "/dontResolveType", cb_dontResolveType->isChecked() );
-  settings.setValue( baseKey + "/allowGeometrylessTables", cb_allowGeometrylessTables->isChecked() );
   settings.setValue( baseKey + "/sslmode", cbxSSLmode->currentData().toInt() );
-  settings.setValue( baseKey + "/saveUsername", mAuthSettings->storeUsernameIsChecked( ) ? "true" : "false" );
-  settings.setValue( baseKey + "/savePassword", mAuthSettings->storePasswordIsChecked( ) && !hasAuthConfigID ? "true" : "false" );
-  settings.setValue( baseKey + "/estimatedMetadata", cb_useEstimatedMetadata->isChecked() );
-  settings.setValue( baseKey + "/projectsInDatabase", cb_projectsInDatabase->isChecked() );
+  settings.setValue( baseKey + "/saveUsername", mAuthSettings->storeUsernameIsChecked() ? "true" : "false" );
+  settings.setValue( baseKey + "/savePassword", mAuthSettings->storePasswordIsChecked() ? "true" : "false" );
 
   // remove old save setting
   settings.remove( baseKey + "/save" );
@@ -183,16 +172,19 @@ void QgsPgNewConnection::accept()
   configuration.insert( "dontResolveType", cb_dontResolveType->isChecked() );
   configuration.insert( "allowGeometrylessTables", cb_allowGeometrylessTables->isChecked() );
   configuration.insert( "sslmode", cbxSSLmode->currentData().toInt() );
-  configuration.insert( "saveUsername", mAuthSettings->storeUsernameIsChecked( ) ? "true" : "false" );
-  configuration.insert( "savePassword", mAuthSettings->storePasswordIsChecked( ) && !hasAuthConfigID ? "true" : "false" );
+  configuration.insert( "saveUsername", mAuthSettings->storeUsernameIsChecked() ? "true" : "false" );
+  configuration.insert( "savePassword", mAuthSettings->storePasswordIsChecked() && !hasAuthConfigID ? "true" : "false" );
   configuration.insert( "estimatedMetadata", cb_useEstimatedMetadata->isChecked() );
   configuration.insert( "projectsInDatabase", cb_projectsInDatabase->isChecked() );
+  configuration.insert( "metadataInDatabase", cb_metadataInDatabase->isChecked() );
+  configuration.insert( "session_role", txtSessionRole->text() );
+  configuration.insert( "allowRasterOverviewTables", cb_allowRasterOverviewTables->isChecked() );
 
   QgsProviderMetadata *providerMetadata = QgsProviderRegistry::instance()->providerMetadata( QStringLiteral( "postgres" ) );
-  QgsPostgresProviderConnection *providerConnection =  static_cast<QgsPostgresProviderConnection *>( providerMetadata->createConnection( txtName->text() ) );
+  std::unique_ptr<QgsPostgresProviderConnection> providerConnection( qgis::down_cast<QgsPostgresProviderConnection *>( providerMetadata->createConnection( txtName->text() ) ) );
   providerConnection->setUri( QgsPostgresConn::connUri( txtName->text() ).uri( false ) );
   providerConnection->setConfiguration( configuration );
-  providerMetadata->saveConnection( providerConnection, txtName->text() );
+  providerMetadata->saveConnection( providerConnection.get(), txtName->text() );
 
   QDialog::accept();
 }
@@ -219,20 +211,19 @@ void QgsPgNewConnection::testConnection()
   QgsDataSourceUri uri;
   if ( !txtService->text().isEmpty() )
   {
-    uri.setConnection( txtService->text(), txtDatabase->text(),
-                       mAuthSettings->username(), mAuthSettings->password(),
-                       ( QgsDataSourceUri::SslMode ) cbxSSLmode->currentData().toInt(),
-                       mAuthSettings->configId() );
+    uri.setConnection( txtService->text(), txtDatabase->text(), mAuthSettings->username(), mAuthSettings->password(), ( QgsDataSourceUri::SslMode ) cbxSSLmode->currentData().toInt(), mAuthSettings->configId() );
   }
   else
   {
-    uri.setConnection( txtHost->text(), txtPort->text(), txtDatabase->text(),
-                       mAuthSettings->username(), mAuthSettings->password(),
-                       ( QgsDataSourceUri::SslMode ) cbxSSLmode->currentData().toInt(),
-                       mAuthSettings->configId() );
+    uri.setConnection( txtHost->text(), txtPort->text(), txtDatabase->text(), mAuthSettings->username(), mAuthSettings->password(), ( QgsDataSourceUri::SslMode ) cbxSSLmode->currentData().toInt(), mAuthSettings->configId() );
   }
 
-  QgsPostgresConn *conn = QgsPostgresConn::connectDb( uri.connectionInfo( false ), true );
+  if ( !txtSessionRole->text().isEmpty() )
+  {
+    uri.setParam( QStringLiteral( "session_role" ), txtSessionRole->text() );
+  }
+
+  QgsPostgresConn *conn = QgsPostgresConn::connectDb( uri, true );
 
   if ( conn )
   {
@@ -241,24 +232,27 @@ void QgsPgNewConnection::testConnection()
       cb_projectsInDatabase->setEnabled( false );
       cb_projectsInDatabase->setChecked( false );
       cb_projectsInDatabase->setToolTip( tr( "Saving projects in databases not available for PostgreSQL databases earlier than 9.5" ) );
+      cb_metadataInDatabase->setEnabled( false );
+      cb_metadataInDatabase->setChecked( false );
+      cb_metadataInDatabase->setToolTip( tr( "Saving metadata in databases not available for PostgreSQL databases earlier than 9.5" ) );
     }
     else
     {
       cb_projectsInDatabase->setEnabled( true );
       cb_projectsInDatabase->setToolTip( QString() );
+      cb_metadataInDatabase->setEnabled( true );
+      cb_metadataInDatabase->setToolTip( QString() );
     }
 
     // Database successfully opened; we can now issue SQL commands.
-    bar->pushMessage( tr( "Connection to %1 was successful." ).arg( txtName->text() ),
-                      Qgis::MessageLevel::Info );
+    bar->pushMessage( tr( "Connection to %1 was successful." ).arg( txtName->text() ), Qgis::MessageLevel::Success );
 
     // free pg connection resources
     conn->unref();
   }
   else
   {
-    bar->pushMessage( tr( "Connection failed - consult message log for details." ),
-                      Qgis::MessageLevel::Warning );
+    bar->pushMessage( tr( "Connection failed - consult message log for details." ), Qgis::MessageLevel::Warning );
   }
 }
 
@@ -269,8 +263,6 @@ void QgsPgNewConnection::showHelp()
 
 void QgsPgNewConnection::updateOkButtonState()
 {
-  bool enabled = !txtName->text().isEmpty() && (
-                   !txtService->text().isEmpty() ||
-                   !txtDatabase->text().isEmpty() );
+  bool enabled = !txtName->text().isEmpty() && ( !txtService->text().isEmpty() || !txtDatabase->text().isEmpty() );
   buttonBox->button( QDialogButtonBox::Ok )->setEnabled( enabled );
 }

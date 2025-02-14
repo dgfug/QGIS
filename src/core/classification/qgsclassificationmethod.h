@@ -35,6 +35,7 @@ class QgsRendererRange;
 #include "qgsclassificationprettybreaks.h"
 #include "qgsclassificationquantile.h"
 #include "qgsclassificationstandarddeviation.h"
+#include "qgsclassificationfixedinterval.h"
 % End
 #endif
 
@@ -99,6 +100,8 @@ class CORE_EXPORT QgsClassificationMethod SIP_ABSTRACT
       sipType = sipType_QgsClassificationQuantile;
     else if ( dynamic_cast<QgsClassificationStandardDeviation *>( sipCpp ) )
       sipType = sipType_QgsClassificationStandardDeviation;
+    else if ( dynamic_cast<QgsClassificationFixedInterval *>( sipCpp ) )
+      sipType = sipType_QgsClassificationFixedInterval;
     else
       sipType = 0;
     SIP_END
@@ -107,11 +110,12 @@ class CORE_EXPORT QgsClassificationMethod SIP_ABSTRACT
   public:
 
     //! Flags for the classification method
-    enum MethodProperty
+    enum MethodProperty SIP_ENUM_BASETYPE( IntFlag )
     {
       NoFlag                 = 0,       //!< No flag
       ValuesNotRequired      = 1 << 1,  //!< Deprecated since QGIS 3.12
       SymmetricModeAvailable = 1 << 2,  //!< This allows using symmetric classification
+      IgnoresClassCount      = 1 << 3,  //!< The classification method does not compute classes based on a class count \since QGIS 3.26
     };
     Q_DECLARE_FLAGS( MethodProperties, MethodProperty )
 
@@ -137,7 +141,7 @@ class CORE_EXPORT QgsClassificationMethod SIP_ABSTRACT
      * Returns a clone of the method.
      * Implementation can take advantage of copyBase method which copies the parameters of the base class
      */
-    virtual QgsClassificationMethod *clone() const = 0 SIP_FACTORY;
+    virtual std::unique_ptr< QgsClassificationMethod > clone() const = 0;
 
     //! The readable and translate name of the method
     virtual QString name() const = 0;
@@ -147,6 +151,13 @@ class CORE_EXPORT QgsClassificationMethod SIP_ABSTRACT
 
     //! The icon of the method
     virtual QIcon icon() const {return QIcon();}
+
+    /**
+     * Returns the classification flags.
+     *
+     * \since QGIS 3.26
+     */
+    QgsClassificationMethod::MethodProperties flags() const { return mFlags; }
 
     /**
      * Returns the label for a range
@@ -224,8 +235,24 @@ class CORE_EXPORT QgsClassificationMethod SIP_ABSTRACT
      * \param layer The vector layer
      * \param expression The name of the field on which the classes are calculated
      * \param nclasses The number of classes to be returned
+     *
+     * \deprecated QGIS 3.38. Use classesV2() instead.
      */
-    QList<QgsClassificationRange> classes( const QgsVectorLayer *layer, const QString &expression, int nclasses );
+    Q_DECL_DEPRECATED QList<QgsClassificationRange> classes( const QgsVectorLayer *layer, const QString &expression, int nclasses ) SIP_DEPRECATED;
+
+    /**
+     * This will calculate the classes for a given layer to define the classes.
+     *
+     * \param layer The vector layer
+     * \param expression The name of the field on which the classes are calculated
+     * \param nclasses The number of classes to be returned
+     * \param error will be set to error string if an error occurred while generating the classes
+     *
+     * \returns list of generated classes
+     *
+     * \since QGIS 3.38
+     */
+    QList<QgsClassificationRange> classesV2( const QgsVectorLayer *layer, const QString &expression, int nclasses, QString &error SIP_OUT );
 
     /**
      * This will calculate the classes for a list of values.
@@ -255,7 +282,7 @@ class CORE_EXPORT QgsClassificationMethod SIP_ABSTRACT
      * \param element the DOM element
      * \param context the read/write context
      */
-    static QgsClassificationMethod *create( const QDomElement &element, const QgsReadWriteContext &context ) SIP_FACTORY;
+    static std::unique_ptr< QgsClassificationMethod > create( const QDomElement &element, const QgsReadWriteContext &context );
 
     /**
      * Remove the breaks that are above the existing opposite sign classes to keep colors symmetrically balanced around symmetryPoint
@@ -324,7 +351,7 @@ class CORE_EXPORT QgsClassificationMethod SIP_ABSTRACT
      * The maximum value is expected to be added at the end of the list, but not the minimum
      */
     virtual QList<double> calculateBreaks( double &minimum, double &maximum,
-                                           const QList<double> &values, int nclasses ) = 0;
+                                           const QList<double> &values, int nclasses, QString &error ) = 0;
 
     //! This is called after calculating the breaks or restoring from XML, so it can rely on private variables
     virtual QString valueToLabel( double value ) const {return formatNumber( value );}

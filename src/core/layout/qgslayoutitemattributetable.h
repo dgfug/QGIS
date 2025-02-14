@@ -20,16 +20,15 @@
 
 #include "qgis_core.h"
 #include "qgis_sip.h"
+#include "qgslayoutitemmap.h"
 #include "qgslayouttable.h"
 #include "qgsvectorlayerref.h"
 
-class QgsLayoutItemMap;
 class QgsVectorLayer;
 
 /**
  * \ingroup core
  * \brief A layout table subclass that displays attributes from a vector layer.
- * \since QGIS 3.0
 */
 class CORE_EXPORT QgsLayoutItemAttributeTable: public QgsLayoutTable
 {
@@ -279,12 +278,13 @@ class CORE_EXPORT QgsLayoutItemAttributeTable: public QgsLayoutTable
     bool getTableContents( QgsLayoutTableContents &contents ) override;
 
     QgsConditionalStyle conditionalCellStyle( int row, int column ) const override;
+    QgsTextFormat textFormatForCell( int row, int column ) const override;
     QgsExpressionContextScope *scopeForCell( int row, int column ) const override SIP_FACTORY;
 
     QgsExpressionContext createExpressionContext() const override;
     void finalizeRestoreFromXml() override;
 
-    void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::AllProperties ) override;
+    void refreshDataDefinedProperty( QgsLayoutObject::DataDefinedProperty property = QgsLayoutObject::DataDefinedProperty::AllProperties ) override;
 
     /**
      * Returns TRUE if the attribute table will be rendered using the conditional styling
@@ -330,7 +330,7 @@ class CORE_EXPORT QgsLayoutItemAttributeTable: public QgsLayoutTable
     QgsVectorLayer *mCurrentAtlasLayer = nullptr;
 
     //! Associated map (used to display the visible features)
-    QgsLayoutItemMap *mMap = nullptr;
+    QPointer< QgsLayoutItemMap > mMap = nullptr;
     QString mMapUuid;
 
     //! Maximum number of features that is displayed
@@ -357,6 +357,7 @@ class CORE_EXPORT QgsLayoutItemAttributeTable: public QgsLayoutTable
 
     QList< QList< QgsConditionalStyle > > mConditionalStyles;
     QList< QgsFeature > mFeatures;
+    QMap<QString, QVariant> mLayerCache;
 
     struct Cell
     {

@@ -25,17 +25,18 @@
 /**
  * \ingroup gui
  * \brief A widget renderer for detailed item views.
- * \see also QgsDetailedItem and QgsDetailedItemData.
+ * \see QgsDetailedItem
+ * \see QgsDetailedItemData
  */
 class GUI_EXPORT QgsDetailedItemWidget : public QWidget, private Ui::QgsDetailedItemWidgetBase
 {
     Q_OBJECT
   public:
-
     //! Constructor for QgsDetailedItemWidget
     QgsDetailedItemWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
     void setData( const QgsDetailedItemData &data );
     void setChecked( bool flag );
+
   private:
     QgsDetailedItemData mData;
 };

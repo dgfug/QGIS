@@ -37,8 +37,8 @@ class APP_EXPORT QgsRelationManagerDialog : public QWidget, private Ui::QgsRelat
 
     bool addRelation( const QgsRelation &rel );
     int addPolymorphicRelation( const QgsPolymorphicRelation &relation );
-    QList< QgsRelation > relations();
-    QList< QgsPolymorphicRelation > polymorphicRelations();
+    QList<QgsRelation> relations();
+    QList<QgsPolymorphicRelation> polymorphicRelations();
 
   private slots:
     void mBtnAddRelation_clicked();
@@ -52,8 +52,29 @@ class APP_EXPORT QgsRelationManagerDialog : public QWidget, private Ui::QgsRelat
     bool addRelationPrivate( const QgsRelation &rel, QTreeWidgetItem *parentItem = nullptr );
 
     QgsRelationManager *mRelationManager = nullptr;
-    QList< QgsVectorLayer * > mLayers;
+    QList<QgsVectorLayer *> mLayers;
     QString getUniqueId( const QString &idTmpl, const QString &ids ) const;
+};
+
+class RelationNameEditorDelegate : public QStyledItemDelegate
+{
+    Q_OBJECT
+  public:
+    RelationNameEditorDelegate( const QList<int> &editableColumns, QObject *parent = nullptr )
+      : QStyledItemDelegate( parent )
+      , mEditableColumns( editableColumns )
+    {}
+
+    virtual QWidget *createEditor( QWidget *parentWidget, const QStyleOptionViewItem &option, const QModelIndex &index ) const
+    {
+      if ( mEditableColumns.contains( index.column() ) )
+        return QStyledItemDelegate::createEditor( parentWidget, option, index );
+
+      return nullptr;
+    }
+
+  private:
+    QList<int> mEditableColumns;
 };
 
 #endif // QGSRELATIONMANAGERDIALOG_H

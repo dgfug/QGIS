@@ -35,6 +35,8 @@
 #include "qgstemporalrangeobject.h"
 #include "qgsmapclippingregion.h"
 #include "qgsvectorsimplifymethod.h"
+#include "qgselevationshadingrenderer.h"
+#include "qgsmaskrendersettings.h"
 
 class QPainter;
 
@@ -71,6 +73,7 @@ class CORE_EXPORT QgsLabelBlockingRegion
 /**
  * \ingroup core
  * \brief The QgsMapSettings class contains configuration for rendering of the map.
+ *
  * The rendering itself is done by QgsMapRendererJob subclasses.
  *
  * In order to set up QgsMapSettings instance, it is necessary to set at least
@@ -83,7 +86,6 @@ class CORE_EXPORT QgsLabelBlockingRegion
  * To properly render the map on such systems, the map settings device pixel
  * ratio shall be set accordingly.
  *
- * \since QGIS 2.4
  */
 class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
 {
@@ -178,14 +180,12 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
     /**
      * Returns the rotation of the resulting map image, in degrees clockwise.
      * \see setRotation()
-     * \since QGIS 2.8
      */
     double rotation() const;
 
     /**
      * Sets the \a rotation of the resulting map image, in degrees clockwise.
      * \see rotation()
-     * \since QGIS 2.8
      */
     void setRotation( double rotation );
 
@@ -228,14 +228,12 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * \param factor the factor of magnification
      * \param center optional point to re-center the map
      * \see magnificationFactor()
-     * \since QGIS 2.16
      */
     void setMagnificationFactor( double factor, const QgsPointXY *center = nullptr );
 
     /**
      * Returns the magnification factor.
      * \see setMagnificationFactor()
-     * \since QGIS 2.16
      */
     double magnificationFactor() const;
 
@@ -244,20 +242,38 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      *
      * The layers are stored in the reverse order of how they are rendered (layer with index 0 will be on top).
      *
+     * Since QGIS 3.24, if the \a expandGroupLayers option is TRUE then group layers will be converted to
+     * all their child layers.
+     *
      * \see layers()
      * \see setLayers()
      */
-    QStringList layerIds() const;
+    QStringList layerIds( bool expandGroupLayers = false ) const;
 
     /**
      * Returns the list of layers which will be rendered in the map.
      *
      * The layers are stored in the reverse order of how they are rendered (layer with index 0 will be on top)
      *
+     * Since QGIS 3.24, if the \a expandGroupLayers option is TRUE then group layers will be converted to
+     * all their child layers.
+     *
      * \see setLayers()
      * \see layerIds()
      */
-    QList<QgsMapLayer *> layers() const;
+    QList<QgsMapLayer *> layers( bool expandGroupLayers = false ) const;
+
+
+#ifndef SIP_RUN
+    /**
+     * Returns a list of registered map layers with a specified layer type.
+     *
+     * \note not available in Python bindings
+     * \since QGIS 3.40
+     */
+    template <typename T>
+    QVector<T> layers() const;
+#endif
 
     /**
      * Sets the list of \a layers to render in the map.
@@ -275,7 +291,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * Returns the map of map layer style overrides (key: layer ID, value: style name) where a different style should be used instead of the current one.
      *
      * \see setLayerStyleOverrides()
-     * \since QGIS 2.8
      */
     QMap<QString, QString> layerStyleOverrides() const;
 
@@ -283,7 +298,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * Sets the map of map layer style \a overrides (key: layer ID, value: style name) where a different style should be used instead of the current one.
      *
      * \see layerStyleOverrides()
-     * \since QGIS 2.8
      */
     void setLayerStyleOverrides( const QMap<QString, QString> &overrides );
 
@@ -291,8 +305,7 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * Returns custom rendering flags. Layers might honour these to alter their rendering.
      * \returns custom flags strings, separated by ';'
      * \see setCustomRenderFlags()
-     * \since QGIS 2.16
-     * \deprecated use \see customRenderingFlags().
+     * \deprecated QGIS 3.40. Use \see customRenderingFlags().
      */
     Q_DECL_DEPRECATED QString customRenderFlags() const { return mCustomRenderFlags; }
 
@@ -300,8 +313,7 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * Sets the custom rendering flags. Layers might honour these to alter their rendering.
      * \param customRenderFlags custom flags strings, separated by ';'
      * \see customRenderFlags()
-     * \since QGIS 2.16
-     * \deprecated use \see setCustomRenderingFlag() instead.
+     * \deprecated QGIS 3.40. Use \see setCustomRenderingFlag() instead.
      */
     Q_DECL_DEPRECATED void setCustomRenderFlags( const QString &customRenderFlags ) { mCustomRenderFlags = customRenderFlags; }
 
@@ -347,7 +359,7 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
     /**
      * Returns the units of the map's geographical coordinates - used for scale calculation.
      */
-    QgsUnitTypes::DistanceUnit mapUnits() const;
+    Qgis::DistanceUnit mapUnits() const;
 
     /**
      * Sets the \a ellipsoid by its acronym. Known ellipsoid acronyms can be
@@ -355,7 +367,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * Calculations will only use the ellipsoid if a valid ellipsoid has been set.
      * \returns TRUE if ellipsoid was successfully set
      * \see ellipsoid()
-     * \since QGIS 3.0
      */
     bool setEllipsoid( const QString &ellipsoid );
 
@@ -363,7 +374,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * Returns ellipsoid's acronym. Calculations will only use the
      * ellipsoid if a valid ellipsoid has been set.
      * \see setEllipsoid()
-     * \since QGIS 3.0
      */
     QString ellipsoid() const { return mEllipsoid; }
 
@@ -444,7 +454,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
 
     /**
      * Returns the visible area as a polygon (may be rotated)
-     * \since QGIS 2.8
      */
     QPolygonF visiblePolygon() const;
 
@@ -468,7 +477,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * Sets the expression context. This context is used for all expression evaluation
      * associated with this map settings.
      * \see expressionContext()
-     * \since QGIS 2.12
      */
     void setExpressionContext( const QgsExpressionContext &context ) { mExpressionContext = context; }
 
@@ -476,7 +484,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * Gets the expression context. This context should be used for all expression evaluation
      * associated with this map settings.
      * \see setExpressionContext()
-     * \since QGIS 2.12
      */
     const QgsExpressionContext &expressionContext() const { return mExpressionContext; }
 
@@ -486,7 +493,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * from a source to destination coordinate reference system.
      *
      * \see setTransformContext()
-     * \since QGIS 3.0
      */
     QgsCoordinateTransformContext transformContext() const;
 
@@ -496,7 +502,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * from a source to destination coordinate reference system.
      *
      * \see transformContext()
-     * \since QGIS 3.0
      */
     void setTransformContext( const QgsCoordinateTransformContext &context );
 
@@ -505,7 +510,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * during rendering operations, e.g. for resolving relative symbol paths.
      *
      * \see setPathResolver()
-     * \since QGIS 3.0
      */
     const QgsPathResolver &pathResolver() const { return mPathResolver; }
 
@@ -514,17 +518,15 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * during rendering operations, e.g. for resolving relative symbol paths.
      *
      * \see pathResolver()
-     * \since QGIS 3.0
      */
     void setPathResolver( const QgsPathResolver &resolver ) { mPathResolver = resolver; }
 
     const QgsMapToPixel &mapToPixel() const { return mMapToPixel; }
 
     /**
-     * Computes an *estimated* conversion factor between layer and map units: layerUnits * layerToMapUnits = mapUnits
+     * Computes an *estimated* conversion factor between layer and map units, where ``layerUnits × layerToMapUnits = mapUnits``
      * \param layer The layer
      * \param referenceExtent A reference extent based on which to perform the computation. If not specified, the layer extent is used
-     * \since QGIS 2.12
      */
     double layerToMapUnits( const QgsMapLayer *layer, const QgsRectangle &referenceExtent = QgsRectangle() ) const;
 
@@ -613,10 +615,18 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
     //! returns current extent of layer set
     QgsRectangle fullExtent() const;
 
-    /* serialization */
-
+    /**
+     * Restore the map settings from a XML \a node.
+     *
+     * \see writeXml()
+     */
     void readXml( QDomNode &node );
 
+    /**
+     * Writes the map settings to an XML \a node.
+     *
+     * \see readXml()
+     */
     void writeXml( QDomNode &node, QDomDocument &doc );
 
     /**
@@ -643,7 +653,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      *
      * \see labelingEngineSettings()
      *
-     * \since QGIS 3.0
      */
     void setLabelingEngineSettings( const QgsLabelingEngineSettings &settings )
     {
@@ -656,7 +665,6 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      *
      * \see setLabelingEngineSettings()
      *
-     * \since QGIS 3.0
      */
     const QgsLabelingEngineSettings &labelingEngineSettings() const { return mLabelingEngineSettings; }
 
@@ -766,6 +774,33 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
     const QgsVectorSimplifyMethod &simplifyMethod() const { return mSimplifyMethod; }
 
     /**
+     * Returns a reference to the mask render settings, which control how masks
+     * are drawn and behave during the map render.
+     *
+     * \see setMaskSettings()
+     * \since QGIS 3.38
+     */
+    const QgsMaskRenderSettings &maskSettings() const SIP_SKIP { return mMaskRenderSettings; }
+
+    /**
+     * Returns a reference to the mask render settings, which control how masks
+     * are drawn and behave during the map render.
+     *
+     * \see setMaskSettings()
+     * \since QGIS 3.38
+     */
+    QgsMaskRenderSettings &maskSettings() { return mMaskRenderSettings; }
+
+    /**
+     * Sets the mask render \a settings, which control how masks
+     * are drawn and behave during the map render.
+     *
+     * \see maskSettings()
+     * \since QGIS 3.38
+     */
+    void setMaskSettings( const QgsMaskRenderSettings &settings );
+
+    /**
      * Adds a rendered feature \a handler to use while rendering the map settings.
      *
      * Ownership of \a handler is NOT transferred, and it is the caller's responsibility to ensure
@@ -798,6 +833,81 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
      * \since QGIS 3.18
      */
     void setZRange( const QgsDoubleRange &range );
+
+    /**
+     * Returns the rendering usage
+     *
+     * \see setRendererUsage()
+     * \since QGIS 3.24
+     */
+    Qgis::RendererUsage rendererUsage() const;
+
+    /**
+     * Sets the rendering usage
+     *
+     * \note This usage not alter how the map gets rendered but the intention is that data provider
+     * knows the context of rendering and may report that to the backend.
+     *
+     * \see rendererUsage()
+     * \since QGIS 3.24
+     */
+    void setRendererUsage( Qgis::RendererUsage rendererUsage );
+
+    /**
+     * Returns the frame rate of the map (in frames per second), for maps which are part of an animation.
+     *
+     * Returns -1 if the map is not associated with an animation.
+     *
+     * \see setFrameRate()
+     * \since QGIS 3.26
+     */
+    double frameRate() const;
+
+    /**
+     * Sets the frame \a rate of the map (in frames per second), for maps which are part of an animation.
+     *
+     * Defaults to -1 if the map is not associated with an animation.
+     *
+     * \see frameRate()
+     * \since QGIS 3.26
+     */
+    void setFrameRate( double rate );
+
+    /**
+     * Returns the current frame number of the map, for maps which are part of an animation.
+     *
+     * Returns -1 if the map is not associated with an animation.
+     *
+     * \see setCurrentFrame()
+     * \since QGIS 3.26
+     */
+    long long currentFrame() const;
+
+    /**
+     * Sets the current \a frame of the map, for maps which are part of an animation.
+     *
+     * Defaults to -1 if the map is not associated with an animation.
+     *
+     * \see currentFrame()
+     * \since QGIS 3.26
+     */
+    void setCurrentFrame( long long frame );
+
+    /**
+     * Returns the shading renderer used to render shading on the entire map
+     *
+     * \see setElevationShadingRenderer()
+     * \since QGIS 3.30
+     */
+    const QgsElevationShadingRenderer &elevationShadingRenderer() const;
+
+    /**
+     * Sets the shading \a renderer used to render shading on the entire map
+     *
+     * \see elevationShadingRenderer()
+     * \since QGIS 3.30
+     */
+    void setElevationShadingRenderer( const QgsElevationShadingRenderer &renderer );
 
   protected:
 
@@ -857,6 +967,15 @@ class CORE_EXPORT QgsMapSettings : public QgsTemporalRangeObject
     QgsGeometry mLabelBoundaryGeometry;
 
     QgsVectorSimplifyMethod mSimplifyMethod;
+
+    Qgis::RendererUsage mRendererUsage = Qgis::RendererUsage::Unknown;
+
+    QgsElevationShadingRenderer mShadingRenderer;
+
+    double mFrameRate = -1;
+    long long mCurrentFrame = -1;
+
+    QgsMaskRenderSettings mMaskRenderSettings;
 
 #ifdef QGISDEBUG
     bool mHasTransformContext = false;

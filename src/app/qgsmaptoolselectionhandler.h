@@ -18,6 +18,7 @@
 
 #include <QObject>
 #include <QWidget>
+#include <QTimer>
 
 #include "qgsgeometry.h"
 
@@ -45,7 +46,6 @@ class QgsDistanceWidget : public QWidget
     Q_OBJECT
 
   public:
-
     //! Constrructor
     explicit QgsDistanceWidget( const QString &label = QString(), QWidget *parent = nullptr );
 
@@ -83,7 +83,6 @@ class QgsMapToolSelectionHandler : public QObject
     Q_OBJECT
 
   public:
-
     //! Select features to identify by:
     enum SelectionMode
     {
@@ -94,13 +93,18 @@ class QgsMapToolSelectionHandler : public QObject
       //! SelectFreehand - free hand selection
       SelectFreehand,
       //! SelectRadius - a circle selection
-      SelectRadius
+      SelectRadius,
+
+      /**
+       * SelectOnMouseMove - selection on mouse over
+       * \since QGIS 3.30
+       */
+      SelectOnMouseOver
     };
     Q_ENUM( SelectionMode )
 
     //! constructor
-    QgsMapToolSelectionHandler( QgsMapCanvas *canvas,
-                                QgsMapToolSelectionHandler::SelectionMode selectionMode = QgsMapToolSelectionHandler::SelectionMode::SelectSimple );
+    QgsMapToolSelectionHandler( QgsMapCanvas *canvas, QgsMapToolSelectionHandler::SelectionMode selectionMode = QgsMapToolSelectionHandler::SelectionMode::SelectSimple );
 
     //! destructor
     ~QgsMapToolSelectionHandler() override;
@@ -145,7 +149,6 @@ class QgsMapToolSelectionHandler : public QObject
     void cancel();
 
   private:
-
     void selectFeaturesMoveEvent( QgsMapMouseEvent *e );
     void selectFeaturesReleaseEvent( QgsMapMouseEvent *e );
     void selectFeaturesPressEvent( QgsMapMouseEvent *e );
@@ -169,7 +172,6 @@ class QgsMapToolSelectionHandler : public QObject
     void updateRadiusFromEdge( QgsPointXY &radiusEdge );
 
   private:
-
     QgsMapCanvas *mCanvas = nullptr;
 
     //! the rubberband for selection visualization
@@ -200,6 +202,12 @@ class QgsMapToolSelectionHandler : public QObject
 
     //! Shows features to select polygon from existing features
     QgsIdentifyMenu *mIdentifyMenu = nullptr; // owned by canvas
+
+    //! Delay timer for continuous selection mode
+    std::unique_ptr<QTimer> mOnMouseMoveDelayTimer;
+
+    //! Last cursor position after a move event, used by continuous selection mode
+    QPoint mMoveLastCursorPos;
 };
 
 #endif

@@ -31,6 +31,7 @@ class QgsExpression;
 /**
  * \ingroup core
  * \class QgsGraduatedSymbolRenderer
+ * \brief A vector feature renderer which uses numeric attributes to classify features into different ranges.
  */
 class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
 {
@@ -40,6 +41,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
 
     ~QgsGraduatedSymbolRenderer() override;
 
+    Qgis::FeatureRendererFlags flags() const override;
     QgsSymbol *symbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
     QgsSymbol *originalSymbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
     void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
@@ -53,16 +55,29 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     QgsSymbolList symbols( QgsRenderContext &context ) const override;
     bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
 
+    /**
+     * Returns the attribute name (or expression) used for the classification.
+     *
+     * \see setClassAttribute()
+     */
     QString classAttribute() const { return mAttrName; }
+
+    /**
+     * Sets the attribute name (or expression) used for the classification.
+     *
+     * \see classAttribute()
+     */
     void setClassAttribute( const QString &attr ) { mAttrName = attr; }
 
+    /**
+     * Returns a list of all ranges used in the classification.
+     */
     const QgsRangeList &ranges() const { return mRanges; }
 
     bool updateRangeSymbol( int rangeIndex, QgsSymbol *symbol SIP_TRANSFER );
     bool updateRangeLabel( int rangeIndex, const QString &label );
     bool updateRangeUpperValue( int rangeIndex, double value );
     bool updateRangeLowerValue( int rangeIndex, double value );
-    //! \since QGIS 2.5
     bool updateRangeRenderState( int rangeIndex, bool render );
 
     void addClass( QgsSymbol *symbol );
@@ -77,7 +92,6 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
      * \param breakValue position to insert break
      * \param updateSymbols set to TRUE to reapply ramp colors to the new
      * symbol ranges
-     * \since QGIS 2.9
      */
     void addBreak( double breakValue, bool updateSymbols = true );
 
@@ -90,14 +104,12 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     /**
      * Tests whether classes assigned to the renderer have ranges which overlap.
      * \returns TRUE if ranges overlap
-     * \since QGIS 2.10
      */
     bool rangesOverlap() const;
 
     /**
      * Tests whether classes assigned to the renderer have gaps between the ranges.
      * \returns TRUE if ranges have gaps
-     * \since QGIS 2.10
      */
     bool rangesHaveGaps() const;
 
@@ -119,7 +131,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
 
     /**
       * Classification mode
-      * \deprecated since QGIS 3.10 use QgsClassificationMethod::MethodId instead
+      * \deprecated QGIS 3.10. Use QgsClassificationMethod::MethodId instead.
       */
     enum Mode
     {
@@ -135,36 +147,36 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     // might be fixed in newer Doxygen (does not on 1.8.13, might be ok on 1.8.16)
 
 
-    //! \deprecated since QGIS 3.10 use classficationMethod instead
+    //! \deprecated QGIS 3.10. Use classficationMethod() instead.
     Q_DECL_DEPRECATED Mode mode() const SIP_DEPRECATED { return modeFromMethodId( mClassificationMethod->id() ); }
-    //! \deprecated since QGIS 3.10 use classficationMethod instead
+    //! \deprecated QGIS 3.10. Use classficationMethod() instead.
     Q_DECL_DEPRECATED void setMode( Mode mode ) SIP_DEPRECATED;
 
     /**
      * Returns if we want to classify symmetric around a given value
      * \since QGIS 3.4
-     * \deprecated since QGIS 3.10 use classficationMethod instead
+     * \deprecated QGIS 3.10. Use classficationMethod() instead.
      */
     Q_DECL_DEPRECATED bool useSymmetricMode() const SIP_DEPRECATED { return mClassificationMethod->symmetricModeEnabled(); }
 
     /**
      * Set if we want to classify symmetric around a given value
      * \since QGIS 3.4
-     * \deprecated since QGIS 3.10 use classficationMethod instead
+     * \deprecated QGIS 3.10. Use classficationMethod() instead.
      */
     Q_DECL_DEPRECATED  void setUseSymmetricMode( bool useSymmetricMode ) SIP_DEPRECATED;
 
     /**
      * Returns the pivot value for symmetric classification
      * \since QGIS 3.4
-     * \deprecated since QGIS 3.10 use classficationMethod instead
+     * \deprecated QGIS 3.10. Use classficationMethod() instead.
      */
     Q_DECL_DEPRECATED double symmetryPoint() const SIP_DEPRECATED { return mClassificationMethod->symmetryPoint(); }
 
     /**
      * Set the pivot point
      * \since QGIS 3.4
-     * \deprecated since QGIS 3.10 use classficationMethod instead
+     * \deprecated QGIS 3.10. Use classficationMethod() instead.
      */
     Q_DECL_DEPRECATED void setSymmetryPoint( double symmetryPoint ) SIP_DEPRECATED;
 
@@ -172,14 +184,14 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     /**
      * Returns if we want to have a central class astride the pivot value
      * \since QGIS 3.4
-     * \deprecated since QGIS 3.10 use classficationMethod instead
+     * \deprecated QGIS 3.10. Use classficationMethod() instead.
      */
     Q_DECL_DEPRECATED bool astride() const SIP_DEPRECATED { return mClassificationMethod->symmetryAstride(); }
 
     /**
      * Set if we want a central class astride the pivot value
      * \since QGIS 3.4
-     * \deprecated since QGIS 3.10 use classficationMethod instead
+     * \deprecated QGIS 3.10. Use classficationMethod() instead.
      */
     Q_DECL_DEPRECATED void setAstride( bool astride ) SIP_DEPRECATED;
 
@@ -190,7 +202,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
      * \param symmetryPoint The point around which we want a symmetry
      * \param astride A bool indicating if the symmetry is made astride the symmetryPoint or not ( [-1,1] vs. [-1,0][0,1] )
      * \since QGIS 3.4
-     * \deprecated since QGIS 3.10, use QgsClassificationMethod::makeBreaksSymmetric instead
+     * \deprecated QGIS 3.10. Use QgsClassificationMethod::makeBreaksSymmetric instead.
      */
     Q_DECL_DEPRECATED static void makeBreaksSymmetric( QList<double> &breaks SIP_INOUT, double symmetryPoint, bool astride ) SIP_DEPRECATED;
 
@@ -202,7 +214,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
      * \param useSymmetricMode A bool indicating if we want to have classes and hence colors ramp symmetric around a value
      * \param symmetryPoint The point around which we want a symmetry
      * \param astride A bool indicating if the symmetry is made astride the symmetryPoint or not ( [-1,1] vs. [-1,0][0,1] )
-     * \deprecated since QGIS 3.10 use QgsClassificationEqualInterval class instead
+     * \deprecated QGIS 3.10. Use QgsClassificationEqualInterval class instead.
      */
     Q_DECL_DEPRECATED static QList<double> calcEqualIntervalBreaks( double minimum, double maximum, int classes, bool useSymmetricMode, double symmetryPoint, bool astride ) SIP_DEPRECATED;
 
@@ -214,8 +226,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
      * \param useSymmetricMode A bool indicating if we want to have classes and hence colors ramp symmetric around a value
      * \param symmetryPoint The value around which the classes will be symmetric if useSymmetricMode is checked
      * \param astride A bool indicating if the symmetry is made astride the symmetryPoint or not ( [-1,1] vs. [-1,0][0,1] )
-     * \since QGIS 2.6 (three first arguments) and 3.4 (three last arguments)
-     * \deprecated since QGIS 3.10
+     * \deprecated QGIS 3.10
      */
     Q_DECL_DEPRECATED void updateClasses( QgsVectorLayer *vlayer, Mode mode, int nclasses, bool useSymmetricMode = false, double symmetryPoint = 0.0, bool astride = false ) SIP_DEPRECATED;
 
@@ -223,15 +234,15 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
      * Recalculate classes for a layer
      * \param vl  The layer being rendered (from which data values are calculated)
      * \param nclasses the number of classes
+     * \param error Optional parameter for error reporting
      */
-    void updateClasses( const QgsVectorLayer *vl, int nclasses );
+    void updateClasses( const QgsVectorLayer *vl, int nclasses, QString &error SIP_OUT );
 
     Q_NOWARN_DEPRECATED_PUSH;
 
     /**
      * Returns the label format used to generate default classification labels
-     * \since QGIS 2.6
-     * \deprecated since QGIS 3.10 use classificationMethod() and QgsClassificationMethod::setLabelFormat instead
+     * \deprecated QGIS 3.10. Use classificationMethod() and QgsClassificationMethod::setLabelFormat instead.
      */
     Q_DECL_DEPRECATED QgsRendererRangeLabelFormat labelFormat() const SIP_DEPRECATED;
 
@@ -239,8 +250,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
      * Set the label format used to generate default classification labels
      * \param labelFormat The string appended to classification labels
      * \param updateRanges If TRUE then ranges ending with the old unit string are updated to the new.
-     * \since QGIS 2.6
-     * \deprecated since QGIS 3.10 use classificationMethod() and QgsClassificationMethod::setLabelFormat instead
+     * \deprecated QGIS 3.10. Use classificationMethod() and QgsClassificationMethod::setLabelFormat instead.
      */
     Q_DECL_DEPRECATED void setLabelFormat( const QgsRendererRangeLabelFormat &labelFormat, bool updateRanges = false ) SIP_DEPRECATED;
 
@@ -249,7 +259,6 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     /**
      * Reset the label decimal places to a numberbased on the minimum class interval
      * \param updateRanges if TRUE then ranges currently using the default label will be updated
-     * \since QGIS 2.6
      */
     void calculateLabelPrecision( bool updateRanges = true );
 
@@ -269,7 +278,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
      * \param listForCboPrettyBreaks The list of potential pivot values for symmetric mode with prettybreaks mode
      * \param astride A bool indicating if the symmetry is made astride the symmetryPoint or not ( [-1,1] vs. [-1,0][0,1] )
      * \returns new QgsGraduatedSymbolRenderer object
-     * \deprecated since QGIS 3.10
+     * \deprecated QGIS 3.10
      */
     Q_DECL_DEPRECATED static QgsGraduatedSymbolRenderer *createRenderer( QgsVectorLayer *vlayer,
         const QString &attrName,
@@ -290,6 +299,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     QDomElement save( QDomDocument &doc, const QgsReadWriteContext &context ) override;
     QgsLegendSymbolList legendSymbolItems() const override;
     QSet< QString > legendKeysForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    QString legendKeyToExpression( const QString &key, QgsVectorLayer *layer, bool &ok ) const override;
 
     /**
      * Returns the renderer's source symbol, which is the base symbol used for the each classes' symbol before applying
@@ -356,39 +366,32 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     /**
      * set varying symbol size for classes
      * \note the classes must already be set so that symbols exist
-     * \since QGIS 2.10
      */
     void setSymbolSizes( double minSize, double maxSize );
 
     /**
      * Returns the min symbol size when graduated by size
-     * \since QGIS 2.10
      */
     double minSymbolSize() const;
 
     /**
      * Returns the max symbol size when graduated by size
-     * \since QGIS 2.10
      */
     double maxSymbolSize() const;
 
-    enum GraduatedMethod
-    {
-      GraduatedColor = 0,
-      GraduatedSize = 1
-    };
+    /**
+     * Returns the method used for graduation (either size or color).
+     *
+     * \see setGraduatedMethod()
+     */
+    Qgis::GraduatedMethod graduatedMethod() const { return mGraduatedMethod; }
 
     /**
-     * Returns the method used for graduation (either size or color)
-     * \since QGIS 2.10
+     * Set the \a method used for graduation (either size or color).
+     *
+     * \see graduatedMethod()
      */
-    GraduatedMethod graduatedMethod() const { return mGraduatedMethod; }
-
-    /**
-     * set the method used for graduation (either size or color)
-     * \since QGIS 2.10
-     */
-    void setGraduatedMethod( GraduatedMethod method ) { mGraduatedMethod = method; }
+    void setGraduatedMethod( Qgis::GraduatedMethod method ) { mGraduatedMethod = method; }
 
     bool legendSymbolItemsCheckable() const override;
     bool legendSymbolItemChecked( const QString &key ) override;
@@ -399,7 +402,6 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     /**
      * creates a QgsGraduatedSymbolRenderer from an existing renderer.
      * \returns a new renderer if the conversion was possible, otherwise NULLPTR.
-     * \since QGIS 2.6
      */
     static QgsGraduatedSymbolRenderer *convertFromRenderer( const QgsFeatureRenderer *renderer ) SIP_FACTORY;
 
@@ -411,14 +413,12 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
      * When renderer does not use data-defined size or does not use marker symbols, these settings will be ignored.
      * Takes ownership of the passed settings objects. NULLPTR is a valid input that disables data-defined
      * size legend.
-     * \since QGIS 3.0
      */
     void setDataDefinedSizeLegend( QgsDataDefinedSizeLegend *settings SIP_TRANSFER );
 
     /**
      * Returns configuration of appearance of legend when using data-defined size for marker symbols.
      * Will return NULLPTR if the functionality is disabled.
-     * \since QGIS 3.0
      */
     QgsDataDefinedSizeLegend *dataDefinedSizeLegend() const;
 
@@ -443,7 +443,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     std::unique_ptr<QgsColorRamp> mSourceColorRamp;
 
     std::unique_ptr<QgsExpression> mExpression;
-    GraduatedMethod mGraduatedMethod = GraduatedColor;
+    Qgis::GraduatedMethod mGraduatedMethod = Qgis::GraduatedMethod::Color;
     //! attribute index (derived from attribute name in startRender)
 
     int mAttrNum = -1;
@@ -462,7 +462,7 @@ class CORE_EXPORT QgsGraduatedSymbolRenderer : public QgsFeatureRenderer
     QString legendKeyForValue( double value ) const;
 
     //! \note not available in Python bindings
-    static QString graduatedMethodStr( GraduatedMethod method ) SIP_SKIP;
+    static QString graduatedMethodStr( Qgis::GraduatedMethod method ) SIP_SKIP;
 
     std::shared_ptr<QgsClassificationMethod> mClassificationMethod;
 

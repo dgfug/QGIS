@@ -137,7 +137,7 @@ class CORE_EXPORT QgsTopologicalMesh
         QVector<FaceNeighbors> mFacesNeighborhoodToAdd;
         QVector<QgsMeshFace> mFacesToRemove;
         QVector<FaceNeighbors> mFacesNeighborhoodToRemove;
-        QList<std::array<int, 4>> mNeighborhoodChanges; // {index of concerned face, neigbor position, previous value, changed value}
+        QList<std::array<int, 4>> mNeighborhoodChanges; // {index of concerned face, neighbor position, previous value, changed value}
 
         QVector<QgsMeshVertex> mVerticesToAdd;
         QVector<int> mVertexToFaceToAdd;
@@ -213,13 +213,13 @@ class CORE_EXPORT QgsTopologicalMesh
      * Returns whether faces with index in \a faceIndexes can be removed/
      * The method an error object with type QgsMeshEditingError::NoError if the faces can be removed, otherwise returns the corresponding error
      */
-    QgsMeshEditingError facesCanBeRemoved( const QList<int> facesIndexes );
+    QgsMeshEditingError facesCanBeRemoved( const QList<int> &facesIndexes );
 
     /**
      * Removes faces with index in \a faceIndexes.
      * The method returns a instance of the class QgsTopologicalMesh::Change that can be used to reverse or reapply the operation.
      */
-    Changes removeFaces( const QList<int> facesIndexes );
+    Changes removeFaces( const QList<int> &facesIndexes );
 
     /**
      * Returns TRUE if the edge can be flipped (only available for edge shared by two faces with 3 vertices)
@@ -231,6 +231,14 @@ class CORE_EXPORT QgsTopologicalMesh
      * The method returns a instance of the class QgsTopologicalMesh::Change that can be used to reverse or reapply the operation.
      */
     Changes flipEdge( int vertexIndex1, int vertexIndex2 );
+
+    /**
+     * Check if Delaunay condition holds for given edge
+     * returns TRUE if delaunay condition holds FALSE otherwise
+     *
+     * \since QGIS 3.42
+     */
+    bool delaunayConditionForEdge( int vertexIndex1, int vertexIndex2 );
 
     /**
      * Returns TRUE if faces separated by vertices with indexes \a vertexIndex1 and \a vertexIndex2 can be merged
@@ -267,7 +275,7 @@ class CORE_EXPORT QgsTopologicalMesh
     Changes insertVertexInFacesEdge( int faceIndex, int position, const QgsMeshVertex &vertex );
 
     /**
-     * Adds a free \a vertex in the face, that is a vertex tha tis not included or linked with any faces.
+     * Adds a free \a vertex in the face, that is a vertex that is not included or linked with any faces.
      * The method returns a instance of the class QgsTopologicalMesh::Change that can be used to reverse or reapply the operation.
      */
     Changes addFreeVertex( const QgsMeshVertex &vertex );
@@ -307,6 +315,14 @@ class CORE_EXPORT QgsTopologicalMesh
     static QgsMeshEditingError counterClockwiseFaces( QgsMeshFace &face, QgsMesh *mesh );
 
     /**
+     * Checks the topology of the \a vertices as they are contained in a face and returns indication on direction.
+     * If the face is clockwise, \a clockwise is TRUE
+     *
+     * \since QGIS 3.30
+     */
+    static QgsMeshEditingError checkTopologyOfVerticesAsFace( const QVector<QgsMeshVertex> &vertices, bool &clockwise );
+
+    /**
      * Reindexes faces and vertices, after this operation, the topological
      * mesh can't be edited anymore and only the method mesh can be used to access to the raw mesh.
      */
@@ -323,6 +339,15 @@ class CORE_EXPORT QgsTopologicalMesh
     //! Checks the topology of the mesh \a mesh, if error occurs, this mesh can't be edited
     static QgsMeshEditingError checkTopology( const QgsMesh &mesh, int maxVerticesPerFace );
 
+    //! Returns vertex position in face
+    static inline int vertexPositionInFace( int vertexIndex, const QgsMeshFace &face )
+    {
+      return face.indexOf( vertexIndex );
+    }
+
+    //! Returns vertex position in face
+    static int vertexPositionInFace( const QgsMesh &mesh, int vertexIndex, int faceIndex );
+
   private:
 
     //! Creates topological faces from mesh faces
@@ -333,7 +358,7 @@ class CORE_EXPORT QgsTopologicalMesh
       bool allowUniqueSharedVertex );
 
     //! Returns all faces indexes that are concerned by the face with index in \a faceIndex, that is sharing a least one vertex or one edge
-    QSet<int> concernedFacesBy( const QList<int> faceIndexes ) const;
+    QSet<int> concernedFacesBy( const QList<int> &faceIndexes ) const;
 
     //! References the vertex as a free vertex to be able to access to all free vertices
     void referenceAsFreeVertex( int vertexIndex );

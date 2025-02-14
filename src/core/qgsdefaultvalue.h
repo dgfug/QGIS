@@ -34,7 +34,7 @@
  *
  * Usual values for such an expression are
  *
- * - `now()` for a timestamp for a record
+ * - now() for a timestamp for a record
  * - `@some_variable` to insert a project or application level variable like
  *   the username of the one digitizing a feature
  * - `$length` to insert a derived attribute of a geometry
@@ -43,7 +43,6 @@
  * default value should also be applied when a feature is updated. If this is
  * not set, the default value will only be used when a feature is created.
  *
- * \since QGIS 3.0
  */
 class CORE_EXPORT QgsDefaultValue
 {
@@ -108,7 +107,7 @@ class CORE_EXPORT QgsDefaultValue
      * Checks if a default value is set. Alias for isValid().
      * \returns FALSE if the expression is a null string.
      */
-    operator bool() const SIP_PYTHON_SPECIAL_BOOL( isValid );
+    explicit operator bool() const SIP_PYTHON_SPECIAL_BOOL( isValid );
 
   private:
     QString mExpression;

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """QGIS Unit tests for QgsServer WMS GetPrint legend.
 
 From build dir, run: ctest -R PyQgsServerWMSGetPrintLegend -V
@@ -10,23 +9,22 @@ the Free Software Foundation; either version 2 of the License, or
 (at your option) any later version.
 
 """
-__author__ = 'Sebastien Peillet'
-__date__ = '30/06/2021'
-__copyright__ = 'Copyright 2021, The QGIS Project'
+
+__author__ = "Sebastien Peillet"
+__date__ = "30/06/2021"
+__copyright__ = "Copyright 2021, The QGIS Project"
 
 import os
 import shutil
 
 # Needed on Qt 5 so that the serialization of XML is consistent among all executions
-os.environ['QT_HASH_SEED'] = '1'
+os.environ["QT_HASH_SEED"] = "1"
 
-from qgis.testing import unittest
-from qgis.server import QgsBufferServerRequest, QgsBufferServerResponse
 from qgis.core import QgsProject
 from qgis.PyQt.QtCore import QTemporaryDir
 from qgis.PyQt.QtGui import QImage
-
-
+from qgis.server import QgsBufferServerRequest, QgsBufferServerResponse
+from qgis.testing import unittest
 from test_qgsserver import QgsServerTestBase
 from utilities import unitTestDataPath
 
@@ -37,19 +35,27 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
 
     def test_wms_getprint_legend(self):
         """Test project has 2 layer: red and green and five templates:
-            red: follow map theme red
-            green: follow map theme green
-            blank: no map theme
-            full: follow map theme full with both layer
-            falsegreen : follow map theme falsegreen (visible layer : green but with blue style)
+        red: follow map theme red
+        green: follow map theme green
+        blank: no map theme
+        full: follow map theme full with both layer
+        falsegreen : follow map theme falsegreen (visible layer : green but with blue style)
         """
 
         tmp_dir = QTemporaryDir()
-        shutil.copyfile(os.path.join(unitTestDataPath('qgis_server'), 'test_project_legend.qgs'), os.path.join(tmp_dir.path(), 'test_project_legend.qgs'))
-        shutil.copyfile(os.path.join(unitTestDataPath('qgis_server'), 'test_project_legend.gpkg'), os.path.join(tmp_dir.path(), 'test_project_legend.gpkg'))
+        shutil.copyfile(
+            os.path.join(unitTestDataPath("qgis_server"), "test_project_legend.qgs"),
+            os.path.join(tmp_dir.path(), "test_project_legend.qgs"),
+        )
+        shutil.copyfile(
+            os.path.join(unitTestDataPath("qgis_server"), "test_project_legend.gpkg"),
+            os.path.join(tmp_dir.path(), "test_project_legend.gpkg"),
+        )
 
         project = QgsProject()
-        self.assertTrue(project.read(os.path.join(tmp_dir.path(), 'test_project_legend.qgs')))
+        self.assertTrue(
+            project.read(os.path.join(tmp_dir.path(), "test_project_legend.qgs"))
+        )
 
         params = {
             "SERVICE": "WMS",
@@ -62,7 +68,7 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
             "map0:SCALE": "281285",
             "map0:LAYERS": "red",
             "CRS": "EPSG:3857",
-            "DPI": '72'
+            "DPI": "72",
         }
 
         ######################################################
@@ -73,7 +79,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
 
         # blank template, no theme, no LAYERS, specified map0:LAYERS is red
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -84,7 +92,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # blank template, no LAYERS, specified map0:LAYERS is green
         params["map0:LAYERS"] = "green"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -95,7 +105,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # blank template
         params["map0:LAYERS"] = ""
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -107,7 +119,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         params["TEMPLATE"] = "red"
         params["map0:LAYERS"] = "red"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -118,7 +132,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # red template, red theme, specified map0:LAYERS is green
         params["map0:LAYERS"] = "green"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -129,7 +145,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # red template, red theme, no map0:LAYERS
         params["map0:LAYERS"] = ""
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -141,7 +159,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         params["TEMPLATE"] = "green"
         params["map0:LAYERS"] = "red"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -152,7 +172,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # green template, green theme, specified map0:LAYERS is green
         params["map0:LAYERS"] = "green"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -163,7 +185,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # green template, green theme, no map0:LAYERS
         params["map0:LAYERS"] = ""
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -175,7 +199,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         params["TEMPLATE"] = "full"
         params["map0:LAYERS"] = "red"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -186,7 +212,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # full template, full theme, specified map0:LAYERS is green
         params["map0:LAYERS"] = "green"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -197,7 +225,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # full template, full theme, no map0:LAYERS
         params["map0:LAYERS"] = ""
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -209,7 +239,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         params["TEMPLATE"] = "falsegreen"
         params["map0:LAYERS"] = "red"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -220,7 +252,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # full template, full theme, specified map0:LAYERS is green
         params["map0:LAYERS"] = "green"
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -231,7 +265,9 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         # full template, full theme, no map0:LAYERS
         params["map0:LAYERS"] = ""
         response = QgsBufferServerResponse()
-        request = QgsBufferServerRequest('?' + '&'.join(["%s=%s" % i for i in params.items()]))
+        request = QgsBufferServerRequest(
+            "?" + "&".join(["%s=%s" % i for i in params.items()])
+        )
         self.server.handleRequest(request, response, project)
 
         image = QImage.fromData(response.body(), "PNG")
@@ -240,5 +276,5 @@ class PyQgsServerWMSGetPrintLegend(QgsServerTestBase):
         self._assertWhite(image.pixelColor(600, 60))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

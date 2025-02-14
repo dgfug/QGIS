@@ -24,7 +24,7 @@
 #include <QObject>
 
 
-#include "nlohmann/json_fwd.hpp"
+#include <nlohmann/json_fwd.hpp>
 
 #ifndef SIP_RUN
 using namespace nlohmann;
@@ -46,24 +46,22 @@ class QgsServerApiBadRequestException;
  */
 class SERVER_EXPORT QgsServerQueryStringParameter
 {
-
     Q_GADGET
 
 #ifndef SIP_RUN
-    typedef  std::function< bool ( const QgsServerApiContext &, QVariant & ) > customValidator;
+    typedef std::function<bool( const QgsServerApiContext &, QVariant & )> customValidator;
 #endif
   public:
-
     /**
      * The Type enum represents the parameter type
      */
     enum class Type
     {
-      String = QVariant::String,    //! parameter is a string
-      Integer = QVariant::LongLong, //! parameter is an integer
-      Double = QVariant::Double,    //! parameter is a double
-      Boolean = QVariant::Bool,     //! parameter is a boolean
-      List = QVariant::StringList,  //! parameter is a (comma separated) list of strings, the handler will perform any further required conversion of the list values
+      String = QMetaType::Type::QString,   //!< Parameter is a string
+      Integer = QMetaType::Type::LongLong, //!< Parameter is an integer
+      Double = QMetaType::Type::Double,    //!< Parameter is a double
+      Boolean = QMetaType::Type::Bool,     //!< Parameter is a boolean
+      List = QMetaType::Type::QStringList, //!< Parameter is a (comma separated) list of strings, the handler will perform any further required conversion of the list values
     };
     Q_ENUM( Type )
 
@@ -77,11 +75,7 @@ class SERVER_EXPORT QgsServerQueryStringParameter
      * \param description parameter description
      * \param defaultValue default value, it is ignored if the parameter is required
      */
-    QgsServerQueryStringParameter( const QString name,
-                                   bool required = false,
-                                   Type type = QgsServerQueryStringParameter::Type::String,
-                                   const QString &description = QString(),
-                                   const QVariant &defaultValue = QVariant() );
+    QgsServerQueryStringParameter( const QString name, bool required = false, Type type = QgsServerQueryStringParameter::Type::String, const QString &description = QString(), const QVariant &defaultValue = QVariant() );
 
     virtual ~QgsServerQueryStringParameter();
 
@@ -116,7 +110,7 @@ class SERVER_EXPORT QgsServerQueryStringParameter
     /**
      * Returns the handler information as a JSON object.
      */
-    json data( ) const;
+    json data() const;
 
 #endif
 
@@ -140,17 +134,33 @@ class SERVER_EXPORT QgsServerQueryStringParameter
      */
     void setDescription( const QString &description );
 
-  private:
+    /**
+     * Returns TRUE if the parameter is hidden from the schema.
+     *
+     * Hidden params can be useful to implement legacy parameters or
+     * parameters that can be accepted without being advertised.
+     *
+     * \since QGIS 3.28
+     */
+    bool hidden() const;
 
+    /**
+     * Set the parameter's \a hidden status, parameters are not hidden by default.
+     *
+     * \since QGIS 3.28
+     */
+    void setHidden( bool hidden );
+
+  private:
     QString mName;
     bool mRequired = false;
     Type mType = Type::String;
     customValidator mCustomValidator = nullptr;
     QString mDescription;
     QVariant mDefaultValue;
+    bool mHidden = false;
 
     friend class TestQgsServerQueryStringParameter;
-
 };
 
 #endif // QGSSERVERQUERYSTRINGPARAMETER_H

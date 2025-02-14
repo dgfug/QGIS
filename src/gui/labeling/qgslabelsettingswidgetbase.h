@@ -40,7 +40,6 @@ class GUI_EXPORT QgsLabelSettingsWidgetBase : public QgsPanelWidget, protected Q
     Q_OBJECT
 
   public:
-
     /**
      * Constructor for QgsLabelSettingsWidgetBase.
      * \param parent parent widget
@@ -63,7 +62,7 @@ class GUI_EXPORT QgsLabelSettingsWidgetBase : public QgsPanelWidget, protected Q
     /**
      * Sets the geometry \a type of the features to customize the widget accordingly.
      */
-    virtual void setGeometryType( QgsWkbTypes::GeometryType type );
+    virtual void setGeometryType( Qgis::GeometryType type );
 
     /**
      * Returns the current data defined properties state as specified in the widget.
@@ -102,7 +101,6 @@ class GUI_EXPORT QgsLabelSettingsWidgetBase : public QgsPanelWidget, protected Q
     void auxiliaryFieldCreated();
 
   protected:
-
     QgsExpressionContext createExpressionContext() const override;
 
     /**
@@ -123,14 +121,9 @@ class GUI_EXPORT QgsLabelSettingsWidgetBase : public QgsPanelWidget, protected Q
     void updateDataDefinedProperty();
 
   private:
-
     QgsVectorLayer *mVectorLayer = nullptr;
 
-    bool mBlockSignals = false;
-
     QgsSymbolWidgetContext mContext;
-
-
 };
 
 /**
@@ -144,8 +137,6 @@ class GUI_EXPORT QgsLabelSettingsWidgetDialog : public QDialog
     Q_OBJECT
 
   public:
-
-
     /**
      * Constructor for QgsLabelSettingsWidgetDialog.
      * \param widget label settings widget to embed in the dialog. Ownership is transferred to the dialog.
@@ -162,9 +153,7 @@ class GUI_EXPORT QgsLabelSettingsWidgetDialog : public QDialog
     QDialogButtonBox *buttonBox();
 
   private:
-
     QDialogButtonBox *mButtonBox = nullptr;
-
 };
 
 #endif // QGSLABELSETTINGSWIDGETBASE_H

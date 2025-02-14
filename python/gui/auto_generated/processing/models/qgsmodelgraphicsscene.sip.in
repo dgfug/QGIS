@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/processing/models/qgsmodelgraphicsscene.h                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -26,7 +26,6 @@ QGraphicsScene subclass representing the model designer.
 #include "qgsmodelgraphicsscene.h"
 %End
   public:
-
     enum ZValues
     {
       GroupBox,
@@ -124,14 +123,9 @@ not correctly emit signals to allow the scene's model to update.
 Clears any selected items and sets ``item`` as the current selection.
 %End
 
-    void setChildAlgorithmResults( const QVariantMap &results );
+    void setLastRunResult( const QgsProcessingModelResult &result );
 %Docstring
-Sets the results for child algorithms for the last model execution.
-%End
-
-    void setChildAlgorithmInputs( const QVariantMap &inputs );
-%Docstring
-Sets the inputs for child algorithms for the last model execution.
+Sets the ``result`` of the last run of the model through the designer window.
 %End
 
     QgsMessageBar *messageBar() const;
@@ -179,14 +173,41 @@ Emitted whenever the selected item changes.
 If ``None``, no item is selected.
 %End
 
-  protected:
+    void runSelected();
+%Docstring
+Emitted when the user opts to run selected steps from the model.
 
+.. versionadded:: 3.38
+%End
+
+    void runFromChild( const QString &childId );
+%Docstring
+Emitted when the user opts to run the part of the model starting from the specified child algorithm.
+
+.. versionadded:: 3.38
+%End
+
+    void showChildAlgorithmOutputs( const QString &childId );
+%Docstring
+Emitted when the user opts to view previous results from the child algorithm with matching ID.
+
+.. versionadded:: 3.38
+%End
+
+    void showChildAlgorithmLog( const QString &childId );
+%Docstring
+Emitted when the user opts to view the previous log from the child algorithm with matching ID.
+
+.. versionadded:: 3.38
+%End
+
+  protected:
     virtual QgsModelComponentGraphicItem *createParameterGraphicItem( QgsProcessingModelAlgorithm *model, QgsProcessingModelParameter *param ) const /Factory/;
 %Docstring
 Creates a new graphic item for a model parameter.
 %End
 
-    virtual QgsModelChildAlgorithmGraphicItem *createChildAlgGraphicItem( QgsProcessingModelAlgorithm *model, QgsProcessingModelChildAlgorithm *child ) const  /Factory/;
+    virtual QgsModelChildAlgorithmGraphicItem *createChildAlgGraphicItem( QgsProcessingModelAlgorithm *model, QgsProcessingModelChildAlgorithm *child ) const /Factory/;
 %Docstring
 Creates a new graphic item for a model child algorithm.
 %End
@@ -196,8 +217,7 @@ Creates a new graphic item for a model child algorithm.
 Creates a new graphic item for a model output.
 %End
 
-    virtual QgsModelComponentGraphicItem *createCommentGraphicItem( QgsProcessingModelAlgorithm *model, QgsProcessingModelComment *comment,
-        QgsModelComponentGraphicItem *parentItem ) const /Factory/;
+    virtual QgsModelComponentGraphicItem *createCommentGraphicItem( QgsProcessingModelAlgorithm *model, QgsProcessingModelComment *comment, QgsModelComponentGraphicItem *parentItem ) const /Factory/;
 %Docstring
 Creates a new graphic item for a model comment.
 %End
@@ -216,5 +236,5 @@ Creates a new graphic item for a model group box.
  *                                                                      *
  * src/gui/processing/models/qgsmodelgraphicsscene.h                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -13,14 +13,33 @@
  *                                                                         *
  ***************************************************************************/
 #include "qgsmaplayerconfigwidget.h"
+#include "moc_qgsmaplayerconfigwidget.cpp"
 #include "qgspanelwidget.h"
+#include "qgslayertreegroup.h"
+
+//
+// QgsMapLayerConfigWidgetContext
+//
+
+void QgsMapLayerConfigWidgetContext::setLayerTreeGroup( QgsLayerTreeGroup *group )
+{
+  mLayerTreeGroup = group;
+}
+
+QgsLayerTreeGroup *QgsMapLayerConfigWidgetContext::layerTreeGroup() const
+{
+  return mLayerTreeGroup;
+}
+
+//
+//  QgsMapLayerConfigWidget
+//
 
 QgsMapLayerConfigWidget::QgsMapLayerConfigWidget( QgsMapLayer *layer, QgsMapCanvas *canvas, QWidget *parent )
   : QgsPanelWidget( parent )
   , mLayer( layer )
   , mMapCanvas( canvas )
 {
-
 }
 
 void QgsMapLayerConfigWidget::setMapLayerConfigWidgetContext( const QgsMapLayerConfigWidgetContext &context )

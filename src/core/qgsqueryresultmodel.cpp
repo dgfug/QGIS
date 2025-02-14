@@ -14,6 +14,8 @@
  *                                                                         *
  ***************************************************************************/
 #include "qgsqueryresultmodel.h"
+#include "moc_qgsqueryresultmodel.cpp"
+#include "qgsexpression.h"
 
 const int QgsQueryResultModel::FETCH_MORE_ROWS_COUNT = 400;
 
@@ -115,12 +117,23 @@ QVariant QgsQueryResultModel::data( const QModelIndex &index, int role ) const
 
   switch ( role )
   {
-    case  Qt::DisplayRole:
+    case Qt::DisplayRole:
     {
       const QList<QVariant> result = mRows.at( index.row() );
       if ( index.column() < result.count( ) )
       {
         return result.at( index.column() );
+      }
+      break;
+    }
+
+    case Qt::ToolTipRole:
+    {
+      const QList<QVariant> result = mRows.at( index.row() );
+      if ( index.column() < result.count( ) )
+      {
+        const QVariant value = result.at( index.column() );
+        return QgsExpression::formatPreviewString( value, true, 255 );
       }
       break;
     }

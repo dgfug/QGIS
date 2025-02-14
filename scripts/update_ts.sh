@@ -110,10 +110,6 @@ fi
 
 trap cleanup EXIT
 
-if [[ "$(git name-rev --name-only HEAD)" =~ ^release-[0-9]+_[0-9]+$ ]]; then
-	TX_FLAGS=-b
-fi
-
 echo Saving translations
 files="$files $(find python -name "*.ts")"
 [ $action = push ] && files="$files i18n/qgis_*.ts"
@@ -123,7 +119,7 @@ if [ $action = push ]; then
 	echo Pulling source from transifex...
 	fail=1
 	for i in $(seq $retries); do
-		tx pull -s -l none $TX_FLAGS && fail=0 && break
+		tx pull -s && fail=0 && break
 		echo Retry $i/$retries...
 		sleep 10
 	done
@@ -134,7 +130,9 @@ if [ $action = push ]; then
 	cp i18n/qgis_en.ts /tmp/qgis_en.ts-downloaded
 	perl scripts/ts_clear.pl  # reset English translations
 elif [ $action = pull ]; then
+	mv i18n/qgis_en.ts i18n/qgis_en.ts.source
 	rm -f i18n/qgis_*.ts
+	mv i18n/qgis_en.ts.source i18n/qgis_en.ts
 
 	echo Pulling new translations...
 	if [ "$#" -gt 0 ]; then
@@ -146,7 +144,7 @@ elif [ $action = pull ]; then
 
 	fail=1
 	for i in $(seq $retries); do
-		tx pull $o -s --minimum-perc=35 $TX_FLAGS && fail=0 && break
+		tx pull $o --minimum-perc=35 && fail=0 && break
 		echo Retry $i/$retries...
 		sleep 10
 	done
@@ -213,7 +211,7 @@ if [ $action = push ]; then
 	echo Pushing translation...
 	fail=1
 	for i in $(seq $retries); do
-		tx push -s --parallel $TX_FLAGS && fail=0 && break
+		tx push -s && fail=0 && break
 		echo Retry $i/$retries...
 		sleep 10
 	done

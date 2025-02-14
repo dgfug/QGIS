@@ -1,8 +1,5 @@
-# black list
-PyQgsLocalServer
-PyQgsPalLabelingServer
-qgis_composerutils
-PyQgsAppStartup
+# block list
+test_gui_queryresultwidget
 
 # code layout tests are run on separate build
 qgis_spelling
@@ -22,3 +19,5 @@ test_core_layerdefinition
 
 # MSSQL requires the MSSQL docker
 PyQgsProviderConnectionMssql
+PyQgsStyleStorageMssql
+

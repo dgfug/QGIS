@@ -15,6 +15,8 @@
 
 #include "qgscamerapose.h"
 
+#include "qgs3dutils.h"
+
 #include <Qt3DRender/QCamera>
 
 #include <QDomDocument>
@@ -43,15 +45,32 @@ void QgsCameraPose::readXml( const QDomElement &elem )
   mHeadingAngle = elem.attribute( QStringLiteral( "heading" ) ).toFloat();
 }
 
+void QgsCameraPose::setCenterPoint( const QgsVector3D &point )
+{
+  // something went horribly wrong. Prevent further errors
+  if ( std::isnan( point.x() ) || std::isnan( point.y() ) || std::isnan( point.z() ) )
+    qWarning() << "Not updating camera position: it cannot be NaN!";
+  else
+    mCenterPoint = point;
+}
+
+void QgsCameraPose::setDistanceFromCenterPoint( float distance )
+{
+  mDistanceFromCenterPoint = std::max( distance, 10.0f );
+}
+
+void QgsCameraPose::setPitchAngle( float pitch )
+{
+  // prevent going over the head
+  mPitchAngle = std::clamp( pitch, 0.0f, 180.0f );
+}
+
 void QgsCameraPose::updateCamera( Qt3DRender::QCamera *camera )
 {
-  // basic scene setup:
-  // - x grows to the right
-  // - z grows to the bottom
-  // - y grows towards camera
-  // so a point on the plane (x',y') is transformed to (x,-z) in our 3D world
-  camera->setUpVector( QVector3D( 0, 0, -1 ) );
-  camera->setPosition( QVector3D( mCenterPoint.x(), mDistanceFromCenterPoint + mCenterPoint.y(), mCenterPoint.z() ) );
-  camera->setViewCenter( QVector3D( mCenterPoint.x(), mCenterPoint.y(), mCenterPoint.z() ) );
-  camera->rotateAboutViewCenter( QQuaternion::fromEulerAngles( mPitchAngle, mHeadingAngle, 0 ) );
+  // first rotate by pitch angle around X axis, then by heading angle around Z axis
+  QQuaternion q = Qgs3DUtils::rotationFromPitchHeadingAngles( mPitchAngle, mHeadingAngle );
+  QVector3D cameraToCenter = q * QVector3D( 0, 0, -mDistanceFromCenterPoint );
+  camera->setUpVector( q * QVector3D( 0, 1, 0 ) );
+  camera->setPosition( mCenterPoint.toVector3D() - cameraToCenter );
+  camera->setViewCenter( mCenterPoint.toVector3D() );
 }

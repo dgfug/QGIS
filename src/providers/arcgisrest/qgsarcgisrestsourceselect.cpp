@@ -16,8 +16,8 @@
  ***************************************************************************/
 
 #include "qgsarcgisrestsourceselect.h"
+#include "moc_qgsarcgisrestsourceselect.cpp"
 #include "qgsowsconnection.h"
-#include "qgsprojectionselectiondialog.h"
 #include "qgsexpressionbuilderdialog.h"
 #include "qgsproject.h"
 #include "qgscoordinatereferencesystem.h"
@@ -25,13 +25,13 @@
 #include "qgslogger.h"
 #include "qgsmanageconnectionsdialog.h"
 #include "qgsexception.h"
-#include "qgssettings.h"
 #include "qgsmapcanvas.h"
 #include "qgshelp.h"
 #include "qgsgui.h"
 #include "qgsbrowserguimodel.h"
 #include "qgsarcgisrestdataitems.h"
 #include "qgsnewarcgisrestconnection.h"
+#include "qgsafsprovider.h"
 
 #include <QButtonGroup>
 #include <QListWidgetItem>
@@ -47,7 +47,6 @@
 QgsArcGisRestBrowserProxyModel::QgsArcGisRestBrowserProxyModel( QObject *parent )
   : QgsBrowserProxyModel( parent )
 {
-
 }
 
 void QgsArcGisRestBrowserProxyModel::setConnectionName( const QString &name )
@@ -62,7 +61,7 @@ bool QgsArcGisRestBrowserProxyModel::filterAcceptsRow( int sourceRow, const QMod
     return false;
 
   const QModelIndex sourceIndex = mModel->index( sourceRow, 0, sourceParent );
-  if ( QgsArcGisRestConnectionItem *connectionItem = qobject_cast< QgsArcGisRestConnectionItem * >( mModel->dataItem( sourceIndex ) ) )
+  if ( QgsArcGisRestConnectionItem *connectionItem = qobject_cast<QgsArcGisRestConnectionItem *>( mModel->dataItem( sourceIndex ) ) )
   {
     if ( connectionItem->name() != mConnectionName )
       return false;
@@ -79,12 +78,16 @@ QgsArcGisRestSourceSelect::QgsArcGisRestSourceSelect( QWidget *parent, Qt::Windo
   : QgsAbstractDataSourceWidget( parent, fl, widgetMode )
 {
   setupUi( this );
-  QgsGui::instance()->enableAutoGeometryRestore( this );
+  QgsGui::enableAutoGeometryRestore( this );
 
   connect( cmbConnections, static_cast<void ( QComboBox::* )( int )>( &QComboBox::activated ), this, &QgsArcGisRestSourceSelect::cmbConnections_activated );
   setupButtons( buttonBox );
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsArcGisRestSourceSelect::showHelp );
   setWindowTitle( QStringLiteral( "Add ArcGIS REST Layer" ) );
+
+  mBuildQueryButton = buttonBox->addButton( tr( "Add with Filter" ), QDialogButtonBox::ActionRole );
+  mBuildQueryButton->setDisabled( true );
+  connect( mBuildQueryButton, &QAbstractButton::clicked, this, &QgsArcGisRestSourceSelect::buildQueryButtonClicked );
 
   connect( buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject );
   connect( btnNew, &QAbstractButton::clicked, this, &QgsArcGisRestSourceSelect::addEntryToServerList );
@@ -99,8 +102,6 @@ QgsArcGisRestSourceSelect::QgsArcGisRestSourceSelect( QWidget *parent, Qt::Windo
 
   lineFilter->setShowClearButton( true );
   lineFilter->setShowSearchIcon( true );
-
-  const QgsSettings settings;
 
   mImageEncodingGroup = new QButtonGroup( this );
 }
@@ -154,7 +155,7 @@ QString QgsArcGisRestSourceSelect::getSelectedImageEncoding() const
 
 void QgsArcGisRestSourceSelect::showEvent( QShowEvent * )
 {
-  if ( QgsBrowserGuiModel *model = qobject_cast< QgsBrowserGuiModel * >( browserModel() ) )
+  if ( QgsBrowserGuiModel *model = qobject_cast<QgsBrowserGuiModel *>( browserModel() ) )
   {
     mBrowserModel = model;
   }
@@ -180,8 +181,7 @@ void QgsArcGisRestSourceSelect::showEvent( QShowEvent * )
   mBrowserView->expand( mProxyModel->index( 0, 0 ) );
   mBrowserView->setHeaderHidden( true );
 
-  mProxyModel->setShownDataItemProviderKeyFilter( QStringList() << QStringLiteral( "AFS" ) << QStringLiteral( "arcgisfeatureserver" )
-      << QStringLiteral( "AMS" ) << QStringLiteral( "arcgismapserver" ) );
+  mProxyModel->setShownDataItemProviderKeyFilter( QStringList() << QStringLiteral( "AFS" ) << QStringLiteral( "arcgisfeatureserver" ) << QStringLiteral( "AMS" ) << QStringLiteral( "arcgismapserver" ) );
 
   const QModelIndex afsSourceIndex = mBrowserModel->findPath( QStringLiteral( "arcgisfeatureserver:" ) );
   mBrowserView->setRootIndex( mProxyModel->mapFromSource( afsSourceIndex ) );
@@ -192,7 +192,7 @@ void QgsArcGisRestSourceSelect::showEvent( QShowEvent * )
 
 void QgsArcGisRestSourceSelect::populateConnectionList()
 {
-  const QStringList conns = QgsOwsConnection::connectionList( QStringLiteral( "ARCGISFEATURESERVER" ) );
+  const QStringList conns = QgsArcGisConnectionSettings::sTreeConnectionArcgis->items();
   cmbConnections->clear();
   for ( const QString &item : conns )
   {
@@ -204,7 +204,7 @@ void QgsArcGisRestSourceSelect::populateConnectionList()
   btnSave->setEnabled( connectionsAvailable );
 
   //set last used connection
-  const QString selectedConnection = QgsOwsConnection::selectedConnection( QStringLiteral( "ARCGISFEATURESERVER" ) );
+  const QString selectedConnection = QgsArcGisConnectionSettings::sTreeConnectionArcgis->selectedItem();
   const int index = cmbConnections->findText( selectedConnection );
   if ( index != -1 )
   {
@@ -219,7 +219,7 @@ void QgsArcGisRestSourceSelect::refresh()
 
 void QgsArcGisRestSourceSelect::addEntryToServerList()
 {
-  QgsNewArcGisRestConnectionDialog nc( nullptr, QStringLiteral( "qgis/connections-arcgisfeatureserver/" ), QString() );
+  QgsNewArcGisRestConnectionDialog nc( nullptr, QString() );
   nc.setWindowTitle( tr( "Create a New ArcGIS REST Server Connection" ) );
 
   if ( nc.exec() )
@@ -231,7 +231,7 @@ void QgsArcGisRestSourceSelect::addEntryToServerList()
 
 void QgsArcGisRestSourceSelect::modifyEntryOfServerList()
 {
-  QgsNewArcGisRestConnectionDialog nc( nullptr, QStringLiteral( "qgis/connections-arcgisfeatureserver/" ), cmbConnections->currentText() );
+  QgsNewArcGisRestConnectionDialog nc( nullptr, cmbConnections->currentText() );
   nc.setWindowTitle( tr( "Modify ArcGIS REST Server Connection" ) );
 
   if ( nc.exec() )
@@ -245,11 +245,11 @@ void QgsArcGisRestSourceSelect::deleteEntryOfServerList()
 {
   const QString selectedConnection = cmbConnections->currentText();
   const QString msg = tr( "Are you sure you want to remove the %1 connection and all associated settings?" )
-                      .arg( selectedConnection );
+                        .arg( selectedConnection );
   const QMessageBox::StandardButton result = QMessageBox::question( this, tr( "Confirm Delete" ), msg, QMessageBox::Yes | QMessageBox::No );
   if ( result == QMessageBox::Yes )
   {
-    QgsOwsConnection::deleteConnection( QStringLiteral( "ARCGISFEATURESERVER" ), selectedConnection );
+    QgsArcGisConnectionSettings::sTreeConnectionArcgis->deleteItem( selectedConnection );
     cmbConnections->removeItem( cmbConnections->currentIndex() );
     emit connectionsChanged();
     const bool connectionsAvailable = cmbConnections->count() > 0;
@@ -268,7 +268,6 @@ void QgsArcGisRestSourceSelect::connectToServer()
   btnConnect->setEnabled( false );
 
   mConnectedService = cmbConnections->currentText();
-  const QgsOwsConnection connection( QStringLiteral( "ARCGISFEATURESERVER" ), mConnectedService );
 
   // find index of corresponding node
   if ( mBrowserModel && mProxyModel )
@@ -281,6 +280,7 @@ void QgsArcGisRestSourceSelect::connectToServer()
 
   btnConnect->setEnabled( true );
   emit enableButtons( haveLayers );
+  mBuildQueryButton->setEnabled( false );
   updateCrsLabel();
 }
 
@@ -297,109 +297,78 @@ void QgsArcGisRestSourceSelect::addButtonClicked()
     return;
   }
 
-  const QgsOwsConnection connection( QStringLiteral( "ARCGISFEATURESERVER" ), cmbConnections->currentText() );
-
-  const QString pCrsString( labelCoordRefSys->text() );
-  const QgsCoordinateReferenceSystem pCrs( pCrsString );
-  //prepare canvas extent info for layers with "cache features" option not set
-  QgsRectangle extent;
-  QgsCoordinateReferenceSystem canvasCrs;
-  if ( auto *lMapCanvas = mapCanvas() )
-  {
-    extent = lMapCanvas->extent();
-    canvasCrs = lMapCanvas->mapSettings().destinationCrs();
-  }
-  //does canvas have "on the fly" reprojection set?
-  if ( pCrs.isValid() && canvasCrs.isValid() )
-  {
-    try
-    {
-      extent = QgsCoordinateTransform( canvasCrs, pCrs, QgsProject::instance()->transformContext() ).transform( extent );
-      QgsDebugMsgLevel( QStringLiteral( "canvas transform: Canvas CRS=%1, Provider CRS=%2, BBOX=%3" )
-                        .arg( canvasCrs.authid(), pCrs.authid(), extent.asWktCoordinates() ), 3 );
-    }
-    catch ( const QgsCsException & )
-    {
-      // Extent is not in range for specified CRS, leave extent empty.
-    }
-  }
-
-  //create layers that user selected from this feature source
+  // create layers that user selected from this feature source
   const QModelIndexList list = mBrowserView->selectionModel()->selectedRows();
   for ( const QModelIndex &proxyIndex : list )
   {
-    const QModelIndex sourceIndex = mProxyModel->mapToSource( proxyIndex );
-    if ( !sourceIndex.isValid() )
+    const QgsCoordinateReferenceSystem crs = indexToCrs( proxyIndex );
+    // prepare canvas extent info for layers with "cache features" option not set
+    QgsRectangle extent;
+    QgsCoordinateReferenceSystem canvasCrs;
+    if ( auto *lMapCanvas = mapCanvas() )
     {
-      continue;
+      extent = lMapCanvas->extent();
+      canvasCrs = lMapCanvas->mapSettings().destinationCrs();
+    }
+    // does canvas have "on the fly" reprojection set?
+    if ( crs.isValid() && canvasCrs.isValid() )
+    {
+      try
+      {
+        QgsCoordinateTransform extentTransform = QgsCoordinateTransform( canvasCrs, crs, QgsProject::instance()->transformContext() );
+        extentTransform.setBallparkTransformsAreAppropriate( true );
+        extent = extentTransform.transformBoundingBox( extent );
+        QgsDebugMsgLevel( QStringLiteral( "canvas transform: Canvas CRS=%1, Provider CRS=%2, BBOX=%3" ).arg( canvasCrs.authid(), crs.authid(), extent.asWktCoordinates() ), 3 );
+      }
+      catch ( const QgsCsException & )
+      {
+        // Extent is not in range for specified CRS, leave extent empty.
+      }
     }
 
-    QgsDataItem *item = mBrowserModel->dataItem( sourceIndex );
-    if ( !item )
+    QString layerName;
+    Qgis::ArcGisRestServiceType serviceType = Qgis::ArcGisRestServiceType::Unknown;
+    const QString uri = indexToUri( proxyIndex, layerName, serviceType, cbxFeatureCurrentViewExtent->isChecked() ? extent : QgsRectangle() );
+    if ( uri.isEmpty() )
       continue;
 
-    if ( QgsLayerItem *layerItem = qobject_cast< QgsLayerItem * >( item ) )
+    switch ( serviceType )
     {
-      const QString layerName = layerItem->name();
+      case Qgis::ArcGisRestServiceType::FeatureServer:
+        Q_NOWARN_DEPRECATED_PUSH
+        emit addVectorLayer( uri, layerName );
+        Q_NOWARN_DEPRECATED_POP
+        emit addLayer( Qgis::LayerType::Vector, uri, layerName, QStringLiteral( "arcgisfeatureserver" ) );
+        break;
 
-      QgsRectangle layerExtent;
-      if ( cbxFeatureCurrentViewExtent->isChecked() )
-      {
-        layerExtent = extent;
-      }
+      case Qgis::ArcGisRestServiceType::MapServer:
+        Q_NOWARN_DEPRECATED_PUSH
+        emit addRasterLayer( uri, layerName, QStringLiteral( "arcgismapserver" ) );
+        Q_NOWARN_DEPRECATED_POP
+        emit addLayer( Qgis::LayerType::Raster, uri, layerName, QStringLiteral( "arcgismapserver" ) );
+        break;
 
-      QgsDataSourceUri uri( layerItem->uri() );
-      uri.setParam( QStringLiteral( "crs" ), pCrsString );
-      if ( qobject_cast< QgsArcGisFeatureServiceLayerItem *>( layerItem ) )
-      {
-        if ( !layerExtent.isEmpty() )
-        {
-          uri.setParam( QStringLiteral( "bbox" ), QStringLiteral( "%1,%2,%3,%4" ).arg( layerExtent.xMinimum() ).arg( layerExtent.yMinimum() ).arg( layerExtent.xMaximum() ).arg( layerExtent.yMaximum() ) );
-        }
-        emit addVectorLayer( uri.uri( false ), layerName );
-      }
-      else if ( qobject_cast< QgsArcGisMapServiceLayerItem *>( layerItem ) )
-      {
-        uri.removeParam( QStringLiteral( "format" ) );
-        uri.setParam( QStringLiteral( "format" ), getSelectedImageEncoding() );
-        emit addRasterLayer( uri.uri( false ), layerName, QStringLiteral( "arcgismapserver" ) );
-      }
+      case Qgis::ArcGisRestServiceType::ImageServer:
+      case Qgis::ArcGisRestServiceType::GlobeServer:
+      case Qgis::ArcGisRestServiceType::GPServer:
+      case Qgis::ArcGisRestServiceType::GeocodeServer:
+      case Qgis::ArcGisRestServiceType::Unknown:
+        break;
     }
   }
 
   // Clear selection after layers have been added
   mBrowserView->selectionModel()->clearSelection();
-
 }
 
 void QgsArcGisRestSourceSelect::updateCrsLabel()
 {
-  //evaluate currently selected typename and set the CRS filter in mProjectionSelector
-  const QModelIndex currentIndex = mBrowserView->selectionModel()->currentIndex();
-  if ( currentIndex.isValid() )
-  {
-    const QModelIndex sourceIndex = mProxyModel->mapToSource( currentIndex );
-    if ( !sourceIndex.isValid() )
-    {
-      labelCoordRefSys->clear();
-      return;
-    }
-
-    if ( QgsLayerItem *layerItem = qobject_cast< QgsLayerItem * >( mBrowserModel->dataItem( sourceIndex ) ) )
-    {
-      const QgsDataSourceUri uri( layerItem->uri() );
-      labelCoordRefSys->setText( uri.param( QStringLiteral( "crs" ) ) );
-    }
-    else
-    {
-      labelCoordRefSys->clear();
-    }
-  }
+  const QgsCoordinateReferenceSystem crs = indexToCrs( mBrowserView->selectionModel()->currentIndex() );
+  labelCoordRefSys->setText( crs.isValid() ? crs.userFriendlyIdentifier() : QString() );
 }
 
 void QgsArcGisRestSourceSelect::updateImageEncodings()
 {
-  //evaluate currently selected typename and set the CRS filter in mProjectionSelector
   const QModelIndex currentIndex = mBrowserView->selectionModel()->currentIndex();
   if ( currentIndex.isValid() )
   {
@@ -409,7 +378,7 @@ void QgsArcGisRestSourceSelect::updateImageEncodings()
       return;
     }
 
-    if ( QgsArcGisMapServiceLayerItem *layerItem = qobject_cast< QgsArcGisMapServiceLayerItem * >( mBrowserModel->dataItem( sourceIndex ) ) )
+    if ( QgsArcGisMapServiceLayerItem *layerItem = qobject_cast<QgsArcGisMapServiceLayerItem *>( mBrowserModel->dataItem( sourceIndex ) ) )
     {
       populateImageEncodings( layerItem->supportedFormats() );
     }
@@ -419,7 +388,7 @@ void QgsArcGisRestSourceSelect::updateImageEncodings()
 void QgsArcGisRestSourceSelect::cmbConnections_activated( int index )
 {
   Q_UNUSED( index )
-  QgsOwsConnection::setSelectedConnection( QStringLiteral( "ARCGISFEATURESERVER" ), cmbConnections->currentText() );
+  QgsArcGisConnectionSettings::sTreeConnectionArcgis->setSelectedItem( cmbConnections->currentText() );
 }
 
 void QgsArcGisRestSourceSelect::treeWidgetCurrentRowChanged( const QModelIndex &current, const QModelIndex &previous )
@@ -429,7 +398,65 @@ void QgsArcGisRestSourceSelect::treeWidgetCurrentRowChanged( const QModelIndex &
   updateCrsLabel();
   updateImageEncodings();
 
+  bool enableFilter = false;
+  if ( mBrowserView->selectionModel()->selectedRows().size() == 1 )
+  {
+    const QModelIndex currentIndex = mBrowserView->selectionModel()->currentIndex();
+    if ( currentIndex.isValid() )
+    {
+      const QModelIndex sourceIndex = mProxyModel->mapToSource( currentIndex );
+      if ( sourceIndex.isValid() )
+      {
+        if ( qobject_cast<QgsArcGisFeatureServiceLayerItem *>( mBrowserModel->dataItem( sourceIndex ) ) )
+        {
+          enableFilter = true;
+        }
+      }
+    }
+  }
+  mBuildQueryButton->setEnabled( enableFilter );
+
   emit enableButtons( current.isValid() );
+}
+
+void QgsArcGisRestSourceSelect::buildQueryButtonClicked()
+{
+  QString layerName;
+  Qgis::ArcGisRestServiceType serviceType = Qgis::ArcGisRestServiceType::Unknown;
+  const QString uri = indexToUri( mBrowserView->selectionModel()->currentIndex(), layerName, serviceType );
+  if ( uri.isEmpty() || serviceType != Qgis::ArcGisRestServiceType::FeatureServer )
+  {
+    return;
+  }
+
+  // Query available fields
+  QgsDataSourceUri ds( uri );
+  ds.setSql( QStringLiteral( "1=0" ) ); // don't retrieve any records
+
+  QgsTemporaryCursorOverride cursor( Qt::WaitCursor );
+  QgsDataProvider::ProviderOptions providerOptions;
+  QgsAfsProvider provider( ds.uri( false ), providerOptions );
+  if ( !provider.isValid() )
+  {
+    return;
+  }
+  cursor.release();
+
+  QgsExpressionBuilderDialog d( nullptr, QString(), this );
+
+  // Add available attributes to expression builder
+  QgsExpressionBuilderWidget *w = d.expressionBuilder();
+  w->initWithFields( provider.fields() );
+
+  if ( d.exec() == QDialog::Accepted )
+  {
+    const QString sql = w->expressionText();
+    ds.setSql( sql );
+    Q_NOWARN_DEPRECATED_PUSH
+    emit addVectorLayer( ds.uri( false ), layerName );
+    Q_NOWARN_DEPRECATED_POP
+    emit addLayer( Qgis::LayerType::Vector, ds.uri( false ), layerName, QStringLiteral( "arcgisfeatureserver" ) );
+  }
 }
 
 void QgsArcGisRestSourceSelect::filterChanged( const QString &text )
@@ -450,8 +477,7 @@ void QgsArcGisRestSourceSelect::btnSave_clicked()
 
 void QgsArcGisRestSourceSelect::btnLoad_clicked()
 {
-  const QString fileName = QFileDialog::getOpenFileName( this, tr( "Load Connections" ), QDir::homePath(),
-                           tr( "XML files (*.xml *.XML)" ) );
+  const QString fileName = QFileDialog::getOpenFileName( this, tr( "Load Connections" ), QDir::homePath(), tr( "XML files (*.xml *.XML)" ) );
   if ( fileName.isEmpty() )
   {
     return;
@@ -501,3 +527,63 @@ void QgsArcGisRestSourceSelect::refreshModel( const QModelIndex &index )
   }
 }
 
+QgsDataItem *QgsArcGisRestSourceSelect::indexToItem( const QModelIndex &proxyIndex )
+{
+  if ( !proxyIndex.isValid() )
+  {
+    return nullptr;
+  }
+
+  const QModelIndex sourceIndex = mProxyModel->mapToSource( proxyIndex );
+  if ( !sourceIndex.isValid() )
+  {
+    return nullptr;
+  }
+
+  return mBrowserModel->dataItem( sourceIndex );
+}
+
+QgsCoordinateReferenceSystem QgsArcGisRestSourceSelect::indexToCrs( const QModelIndex &proxyIndex )
+{
+  if ( QgsArcGisRestLayerItem *layerItem = qobject_cast<QgsArcGisRestLayerItem *>( indexToItem( proxyIndex ) ) )
+  {
+    return layerItem->crs();
+  }
+  return QgsCoordinateReferenceSystem();
+}
+
+QString QgsArcGisRestSourceSelect::indexToUri( const QModelIndex &proxyIndex, QString &layerName, Qgis::ArcGisRestServiceType &serviceType, const QgsRectangle &extent )
+{
+  layerName.clear();
+  serviceType = Qgis::ArcGisRestServiceType::Unknown;
+
+  QgsDataItem *item = indexToItem( proxyIndex );
+  if ( !item )
+    return QString();
+
+  if ( QgsArcGisRestLayerItem *layerItem = qobject_cast<QgsArcGisRestLayerItem *>( item ) )
+  {
+    layerName = layerItem->name();
+
+    QgsDataSourceUri uri( layerItem->uri() );
+    if ( qobject_cast<QgsArcGisFeatureServiceLayerItem *>( layerItem ) )
+    {
+      if ( !extent.isNull() )
+      {
+        uri.setParam( QStringLiteral( "bbox" ), QStringLiteral( "%1,%2,%3,%4" ).arg( extent.xMinimum() ).arg( extent.yMinimum() ).arg( extent.xMaximum() ).arg( extent.yMaximum() ) );
+      }
+      serviceType = Qgis::ArcGisRestServiceType::FeatureServer;
+    }
+    else if ( qobject_cast<QgsArcGisMapServiceLayerItem *>( layerItem ) )
+    {
+      uri.removeParam( QStringLiteral( "format" ) );
+      uri.setParam( QStringLiteral( "format" ), getSelectedImageEncoding() );
+      serviceType = Qgis::ArcGisRestServiceType::MapServer;
+    }
+    return uri.uri( false );
+  }
+  else
+  {
+    return QString();
+  }
+}

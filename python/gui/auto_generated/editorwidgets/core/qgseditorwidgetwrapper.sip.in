@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/editorwidgets/core/qgseditorwidgetwrapper.h                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -31,7 +31,6 @@ for their corresponding values and emit valuesChanged signal.
 #include "qgseditorwidgetwrapper.h"
 %End
   public:
-
     enum ConstraintResult
     {
       ConstraintResultPass,
@@ -135,8 +134,6 @@ By default this will enable or disable the whole widget
     virtual void showIndeterminateState();
 %Docstring
 Sets the widget to display in an indeterminate "mixed value" state.
-
-.. versionadded:: 2.16
 %End
 
     void updateConstraint( const QgsFeature &featureContext, QgsFieldConstraints::ConstraintOrigin constraintOrigin = QgsFieldConstraints::ConstraintOriginNotSet );
@@ -146,8 +143,6 @@ Update constraint.
 :param featureContext: the feature to use to evaluate the constraint
 :param constraintOrigin: optional origin for constraints to check. This can be used to limit the constraints tested
                          to only provider or layer based constraints.
-
-.. versionadded:: 2.16
 %End
 
     void updateConstraint( const QgsVectorLayer *layer, int index, const QgsFeature &feature, QgsFieldConstraints::ConstraintOrigin constraintOrigin = QgsFieldConstraints::ConstraintOriginNotSet );
@@ -160,8 +155,16 @@ Update constraint on a feature coming from a specific layer.
 :param constraintOrigin: Optional origin for constraints to check. This
                          can be used to limit the constraints tested to only provider or layer
                          based constraints.
+%End
 
-.. versionadded:: 3.0
+    void updateConstraint( QgsEditorWidgetWrapper::ConstraintResult constraintResult, const QString &constraintFailureReason );
+%Docstring
+Update constraint manually by providing the constraint result value and failure reason(s).
+
+:param constraintResult: the constraint result value
+:param constraintFailureReason: the constraint failure reason(s) (blank is the result passes)
+
+.. versionadded:: 3.36
 %End
 
     bool isValidConstraint() const;
@@ -174,8 +177,6 @@ Gets the current constraint status.
 .. seealso:: :py:func:`constraintFailureReason`
 
 .. seealso:: :py:func:`isBlockingCommit`
-
-.. versionadded:: 2.16
 %End
 
     bool isBlockingCommit() const;
@@ -184,8 +185,6 @@ Returns ``True`` if the widget is preventing the feature from being committed. T
 of attribute values failing enforced field constraints.
 
 .. seealso:: :py:func:`isValidConstraint`
-
-.. versionadded:: 3.0
 %End
 
     QString constraintFailureReason() const;
@@ -194,8 +193,6 @@ Returns the reason why a constraint check has failed (or an empty string
 if constraint check was successful).
 
 .. seealso:: :py:func:`isValidConstraint`
-
-.. versionadded:: 3.0
 %End
 
     virtual void setHint( const QString &hintText );
@@ -203,16 +200,12 @@ if constraint check was successful).
 Add a hint text on the widget
 
 :param hintText: The hint text to display
-
-.. versionadded:: 3.0
 %End
 
     ConstraintResult constraintResult() const;
 %Docstring
 Returns the constraint result, which is the current result of the constraint
 on the widget influencing its visualization.
-
-.. versionadded:: 3.0
 %End
 
     bool constraintResultVisible() const;
@@ -221,8 +214,6 @@ Returns whether the constraint result is visible.
 
 Returns ``True`` if the constraint result will be visualized on the widget (with color).
 This will be disabled when the form is not editable.
-
-.. versionadded:: 3.0
 %End
 
     void setConstraintResultVisible( bool constraintResultVisible );
@@ -233,8 +224,6 @@ Controls if the constraint result should be visualized on the widget (with color
 This will be disabled when the form is not editable.
 
 :param constraintResultVisible: if constraintResult should be displayed (mostly editable status)
-
-.. versionadded:: 3.0
 %End
 
   signals:
@@ -245,8 +234,9 @@ Emit this signal, whenever the value changed.
 
 :param value: The new value
 
-.. deprecated:: QGIS 3.10
-   use valuesChanged signal instead
+.. deprecated:: 3.10
+
+   Use valuesChanged signal instead.
 %End
 
     void valuesChanged( const QVariant &value, const QVariantList &additionalFieldValues = QVariantList() );
@@ -289,15 +279,14 @@ Is forwarded to the slot :py:func:`~QgsEditorWidgetWrapper.setValues`
 %End
 
 
-    virtual void setValue( const QVariant &value ) /Deprecated/;
+    virtual void setValue( const QVariant &value ) /Deprecated="Since 3.10. "/;
 %Docstring
 Is called when the value of the widget needs to be changed. Updates the widget representation
 to reflect the new value.
 
 :param value: The new value of the attribute
 
-.. deprecated:: QGIS 3.10
-  
+.. deprecated:: 3.10
 %End
 
     void setValues( const QVariant &value, const QVariantList &additionalValues );
@@ -328,7 +317,6 @@ depend on the parent form scope.
 %End
 
   protected:
-
     virtual void updateConstraintWidgetStatus();
 %Docstring
 This should update the widget with a visual cue if a constraint status
@@ -339,8 +327,6 @@ background color to red.
 
 This can be overwritten in subclasses to allow individual widgets to
 change the visual cue.
-
-.. versionadded:: 2.16
 %End
 
 
@@ -378,5 +364,5 @@ attribute ``attributeName`` to ``attributeValue``
  *                                                                      *
  * src/gui/editorwidgets/core/qgseditorwidgetwrapper.h                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

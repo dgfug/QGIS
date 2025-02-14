@@ -14,11 +14,18 @@
  ***************************************************************************/
 
 #include "qgsdemterraingenerator.h"
+#include "moc_qgsdemterraingenerator.cpp"
 
 #include "qgsdemterraintileloader_p.h"
 
+#include "qgs3dutils.h"
 #include "qgsrasterlayer.h"
 #include "qgscoordinatetransform.h"
+
+QgsTerrainGenerator *QgsDemTerrainGenerator::create()
+{
+  return new QgsDemTerrainGenerator();
+}
 
 QgsDemTerrainGenerator::~QgsDemTerrainGenerator()
 {
@@ -27,13 +34,13 @@ QgsDemTerrainGenerator::~QgsDemTerrainGenerator()
 
 void QgsDemTerrainGenerator::setLayer( QgsRasterLayer *layer )
 {
-  mLayer = QgsMapLayerRef( layer );
+  mLayer = layer;
   updateGenerator();
 }
 
 QgsRasterLayer *QgsDemTerrainGenerator::layer() const
 {
-  return qobject_cast<QgsRasterLayer *>( mLayer.layer.data() );
+  return mLayer;
 }
 
 void QgsDemTerrainGenerator::setCrs( const QgsCoordinateReferenceSystem &crs, const QgsCoordinateTransformContext &context )
@@ -51,6 +58,7 @@ QgsTerrainGenerator *QgsDemTerrainGenerator::clone() const
   cloned->mLayer = mLayer;
   cloned->mResolution = mResolution;
   cloned->mSkirtHeight = mSkirtHeight;
+  cloned->mExtent = mExtent;
   cloned->updateGenerator();
   return cloned;
 }
@@ -60,42 +68,18 @@ QgsTerrainGenerator::Type QgsDemTerrainGenerator::type() const
   return QgsTerrainGenerator::Dem;
 }
 
-QgsRectangle QgsDemTerrainGenerator::extent() const
+QgsRectangle QgsDemTerrainGenerator::rootChunkExtent() const
 {
   return mTerrainTilingScheme.tileToExtent( 0, 0, 0 );
 }
 
-float QgsDemTerrainGenerator::heightAt( double x, double y, const Qgs3DMapSettings &map ) const
+float QgsDemTerrainGenerator::heightAt( double x, double y, const Qgs3DRenderContext &context ) const
 {
-  Q_UNUSED( map )
+  Q_UNUSED( context )
   if ( mHeightMapGenerator )
     return mHeightMapGenerator->heightAt( x, y );
   else
     return 0;
-}
-
-void QgsDemTerrainGenerator::writeXml( QDomElement &elem ) const
-{
-  elem.setAttribute( QStringLiteral( "layer" ), mLayer.layerId );
-  elem.setAttribute( QStringLiteral( "resolution" ), mResolution );
-  elem.setAttribute( QStringLiteral( "skirt-height" ), mSkirtHeight );
-
-  // crs is not read/written - it should be the same as destination crs of the map
-}
-
-void QgsDemTerrainGenerator::readXml( const QDomElement &elem )
-{
-  mLayer = QgsMapLayerRef( elem.attribute( QStringLiteral( "layer" ) ) );
-  mResolution = elem.attribute( QStringLiteral( "resolution" ) ).toInt();
-  mSkirtHeight = elem.attribute( QStringLiteral( "skirt-height" ) ).toFloat();
-
-  // crs is not read/written - it should be the same as destination crs of the map
-}
-
-void QgsDemTerrainGenerator::resolveReferences( const QgsProject &project )
-{
-  mLayer = QgsMapLayerRef( project.mapLayer( mLayer.layerId ) );
-  updateGenerator();
 }
 
 QgsChunkLoader *QgsDemTerrainGenerator::createChunkLoader( QgsChunkNode *node ) const
@@ -104,16 +88,22 @@ QgsChunkLoader *QgsDemTerrainGenerator::createChunkLoader( QgsChunkNode *node ) 
   return new QgsDemTerrainTileLoader( mTerrain, node, const_cast<QgsDemTerrainGenerator *>( this ) );
 }
 
+void QgsDemTerrainGenerator::setExtent( const QgsRectangle &extent )
+{
+  mExtent = extent;
+  updateGenerator();
+}
+
 void QgsDemTerrainGenerator::updateGenerator()
 {
   QgsRasterLayer *dem = layer();
-  if ( dem )
+  if ( dem && mCrs.isValid() )
   {
-    QgsRectangle te = dem->extent();
-    const QgsCoordinateTransform terrainToMapTransform( dem->crs(), mCrs, mTransformContext );
-    te = terrainToMapTransform.transformBoundingBox( te );
+    QgsRectangle layerExtent = Qgs3DUtils::tryReprojectExtent2D( mLayer->extent(), mLayer->crs(), mCrs, mTransformContext );
+    // no need to have an mExtent larger than the actual layer's extent
+    const QgsRectangle intersectExtent = mExtent.intersect( layerExtent );
 
-    mTerrainTilingScheme = QgsTilingScheme( te, mCrs );
+    mTerrainTilingScheme = QgsTilingScheme( intersectExtent, mCrs );
     delete mHeightMapGenerator;
     mHeightMapGenerator = new QgsDemHeightMapGenerator( dem, mTerrainTilingScheme, mResolution, mTransformContext );
     mIsValid = true;

@@ -23,12 +23,15 @@ class QgsPointCloudLayerRenderer;
 #include "qgspointclouddataprovider.h"
 #include "qgsmaplayer.h"
 #include "qgis_core.h"
+#include "qgsabstractprofilesource.h"
+#include "qgspointcloudstatistics.h"
 
 #include <QString>
 #include <memory>
 
 class QgsPointCloudRenderer;
 class QgsPointCloudLayerElevationProperties;
+class QgsAbstractPointCloud3DRenderer;
 
 /**
  * \ingroup core
@@ -39,7 +42,7 @@ class QgsPointCloudLayerElevationProperties;
  *
  * \since QGIS 3.18
  */
-class CORE_EXPORT QgsPointCloudLayer : public QgsMapLayer
+class CORE_EXPORT QgsPointCloudLayer : public QgsMapLayer, public QgsAbstractProfileSource
 {
     Q_OBJECT
   public:
@@ -82,8 +85,26 @@ class CORE_EXPORT QgsPointCloudLayer : public QgsMapLayer
        * Set to TRUE if point cloud index generation should be skipped.
        */
       bool skipIndexGeneration = false;
+
+      /**
+       * Set to true if the statistics calculation for this point cloud is disabled
+       * \since QGIS 3.26
+       */
+      bool skipStatisticsCalculation = false;
     };
 
+
+    /**
+     * Point cloud statistics calculation task
+     * \since QGIS 3.26
+     */
+    enum class PointCloudStatisticsCalculationState : int SIP_ENUM_BASETYPE( IntFlag )
+    {
+      NotStarted = 0, //!< The statistics calculation task has not been started
+      Calculating = 1 << 0, //!< The statistics calculation task is running
+      Calculated = 1 << 1 //!< The statistics calculation task is done and statistics are available
+    };
+    Q_ENUM( PointCloudStatisticsCalculationState )
 
     /**
      * Constructor - creates a point cloud layer
@@ -95,9 +116,7 @@ class CORE_EXPORT QgsPointCloudLayer : public QgsMapLayer
 
     ~QgsPointCloudLayer() override;
 
-    //! QgsPointCloudLayer cannot be copied.
     QgsPointCloudLayer( const QgsPointCloudLayer &rhs ) = delete;
-    //! QgsPointCloudLayer cannot be copied.
     QgsPointCloudLayer &operator=( QgsPointCloudLayer const &rhs ) = delete;
 
 #ifdef SIP_RUN
@@ -111,9 +130,14 @@ class CORE_EXPORT QgsPointCloudLayer : public QgsMapLayer
     QgsPointCloudLayer *clone() const override SIP_FACTORY;
     QgsRectangle extent() const override;
     QgsMapLayerRenderer *createMapRenderer( QgsRenderContext &rendererContext ) override SIP_FACTORY;
+    QgsAbstractProfileGenerator *createProfileGenerator( const QgsProfileRequest &request ) override SIP_FACTORY;
 
     QgsPointCloudDataProvider *dataProvider() override;
     const QgsPointCloudDataProvider *dataProvider() const override SIP_SKIP;
+
+    bool supportsEditing() const override;
+    bool isEditable() const override;
+    bool isModified() const override;
 
     bool readXml( const QDomNode &layerNode, QgsReadWriteContext &context ) override;
 
@@ -169,13 +193,184 @@ class CORE_EXPORT QgsPointCloudLayer : public QgsMapLayer
      */
     void setRenderer( QgsPointCloudRenderer *renderer SIP_TRANSFER );
 
+    /**
+     * Sets the string used to define a subset of the layer
+     * \param subset The subset string to be used in a \a QgsPointCloudExpression
+     * \returns TRUE, when setting the subset string was successful, FALSE otherwise
+     *
+     * \since QGIS 3.26
+     */
+    bool setSubsetString( const QString &subset );
+
+    /**
+     * Returns the string used to define a subset of the layer.
+     * \returns The subset string or null QString if not implemented by the provider
+     *
+     * \since QGIS 3.26
+     */
+    QString subsetString() const;
+
+    /**
+     * Sets whether this layer's 3D renderer should be automatically updated
+     * with changes applied to the layer's 2D renderer
+     *
+     * \since QGIS 3.26
+     */
+    void setSync3DRendererTo2DRenderer( bool sync );
+
+    /**
+     * Returns whether this layer's 3D renderer should be automatically updated
+     * with changes applied to the layer's 2D renderer
+     *
+     * \since QGIS 3.26
+     */
+    bool sync3DRendererTo2DRenderer() const;
+
+    /**
+     * Updates the layer's 3D renderer's symbol to match that of the layer's 2D renderer
+     *
+     * \returns TRUE on success, FALSE otherwise
+     * \since QGIS 3.26
+     */
+    bool convertRenderer3DFromRenderer2D();
+
+    /**
+     * Returns the object containing statistics
+     * \since QGIS 3.26
+     */
+    const QgsPointCloudStatistics statistics() const { return mStatistics; }
+
+    /**
+     * Returns the status of point cloud statistics calculation
+     *
+     * \since QGIS 3.26
+     */
+    PointCloudStatisticsCalculationState statisticsCalculationState() const { return mStatisticsCalculationState; }
+
+    /**
+     * Makes the layer editable.
+     *
+     * This starts an edit session on this layer. Changes made in this edit session will not
+     * be made persistent until commitChanges() is called, and can be reverted by calling
+     * rollBack().
+     *
+     * \returns TRUE if the layer was successfully made editable, or FALSE if the operation
+     * failed (e.g. due to an underlying read-only data source, or lack of edit support
+     * by the backend data provider).
+     *
+     * \see commitChanges()
+     * \see rollBack()
+     * \since QGIS 3.42
+     */
+    bool startEditing();
+
+    /**
+     * Attempts to commit to the underlying data provider any buffered changes made since the
+     * last to call to startEditing().
+     *
+     * Returns the result of the attempt. If a commit fails (i.e. FALSE is returned), the
+     * in-memory changes are left untouched and are not discarded. This allows editing to
+     * continue if the commit failed on e.g. a disallowed value for an attribute - the user
+     * can re-edit and try again.
+     *
+     * If the commit failed, an error message may returned by commitError().
+     *
+     * By setting \a stopEditing to FALSE, the layer will stay in editing mode.
+     * Otherwise the layer editing mode will be disabled if the commit is successful.
+     *
+     * \see startEditing()
+     * \see commitError()
+     * \see rollBack()
+     * \since QGIS 3.42
+     */
+    bool commitChanges( bool stopEditing = true );
+
+    /**
+     * Returns the last error message generated when attempting
+     * to commit changes to the layer.
+     * \see commitChanges()
+     * \since QGIS 3.42
+     */
+    QString commitError() const;
+
+    /**
+     * Stops a current editing operation and discards any uncommitted edits.
+     *
+     * \see startEditing()
+     * \see commitChanges()
+     * \since QGIS 3.42
+     */
+    bool rollBack();
+
+    /**
+     * Attempts to modify attribute values for specific points in the editing buffer.
+     *
+     * \param n The point cloud node containing the points
+     * \param points The point ids of the points to be modified
+     * \param attribute The attribute whose value will be updated
+     * \param value The new value to set to the attribute
+     * \return TRUE if the editing buffer was updated successfully, FALSE otherwise
+     * \note Calls to changeAttributeValue() are only valid for layers in which edits have been enabled
+     * by a call to startEditing(). Changes made to features using this method are not committed
+     * to the underlying data provider until a commitChanges() call is made. Any uncommitted
+     * changes can be discarded by calling rollBack().
+     * \since QGIS 3.42
+     */
+    bool changeAttributeValue( const QgsPointCloudNodeId &n, const QVector<int> &points, const QgsPointCloudAttribute &attribute, double value ) SIP_SKIP;
+
+    /**
+     * Returns the point cloud index associated with the layer.
+     * If the layer is editable, its QgsPointCloudEditingIndex is returned,
+     * otherwise the index is fetched from the data provider.
+     *
+     * \since QGIS 3.42
+     */
+    QgsPointCloudIndex index() const;
+
+
+  signals:
+
+    /**
+     * Emitted when the layer's subset string has changed.
+     *
+     * \since QGIS 3.26
+     */
+    void subsetStringChanged();
+
+    /**
+     * Signals an error related to this point cloud layer.
+     *
+     * \since QGIS 3.26
+     */
+    void raiseError( const QString &msg );
+
+    /**
+     * Emitted when statistics calculation state has changed
+     *
+     * \since QGIS 3.26
+     */
+    void statisticsCalculationStateChanged( QgsPointCloudLayer::PointCloudStatisticsCalculationState state );
+
+    /**
+     * Emitted when a node gets some attribute values of some points changed
+     *
+     * \since QGIS 3.42
+     */
+    void chunkAttributeValuesChanged( const QgsPointCloudNodeId &n );
+
   private slots:
     void onPointCloudIndexGenerationStateChanged( QgsPointCloudDataProvider::PointCloudIndexGenerationState state );
-    void setDataSourcePrivate( const QString &dataSource, const QString &baseName, const QString &provider, const QgsDataProvider::ProviderOptions &options, QgsDataProvider::ReadFlags flags ) override;
+    void setDataSourcePrivate( const QString &dataSource, const QString &baseName, const QString &provider, const QgsDataProvider::ProviderOptions &options, Qgis::DataProviderReadFlags flags ) override;
 
   private:
 
     bool isReadOnly() const override {return true;}
+
+    void calculateStatistics();
+
+    void resetRenderer();
+
+    void loadIndexesForRenderContext( QgsRenderContext &rendererContext ) const;
 
 #ifdef SIP_RUN
     QgsPointCloudLayer( const QgsPointCloudLayer &rhs );
@@ -186,7 +381,19 @@ class CORE_EXPORT QgsPointCloudLayer : public QgsMapLayer
     std::unique_ptr<QgsPointCloudRenderer> mRenderer;
 
     QgsPointCloudLayerElevationProperties *mElevationProperties = nullptr;
+
+    LayerOptions mLayerOptions;
+
+    bool mSync3DRendererTo2DRenderer = true;
+    QgsPointCloudStatistics mStatistics;
+    PointCloudStatisticsCalculationState mStatisticsCalculationState = PointCloudStatisticsCalculationState::NotStarted;
+    long mStatsCalculationTask = 0;
+
+    QgsPointCloudIndex mEditIndex;
+    QString mCommitError;
+
+    friend class TestQgsVirtualPointCloudProvider;
 };
 
 
-#endif // QGSPOINTCLOUDPLAYER_H
+#endif // QGSPOINTCLOUDLAYER_H

@@ -158,7 +158,7 @@
                </property>
                <property name="icon">
                 <iconset resource="oauth2_resources.qrc">
-                 <normaloff>:/oauth2method/oauth2_resources/export.svg</normaloff>:/oauth2method/oauth2_resources/export.svg</iconset>
+                 <normaloff>:/oauth2method/svg/export.svg</normaloff>:/oauth2method/svg/export.svg</iconset>
                </property>
                <property name="iconSize">
                 <size>
@@ -178,7 +178,7 @@
                </property>
                <property name="icon">
                 <iconset resource="oauth2_resources.qrc">
-                 <normaloff>:/oauth2method/oauth2_resources/import.svg</normaloff>:/oauth2method/oauth2_resources/import.svg</iconset>
+                 <normaloff>:/oauth2method/svg/import.svg</normaloff>:/oauth2method/svg/import.svg</iconset>
                </property>
               </widget>
              </item>
@@ -188,7 +188,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QScrollArea" name="scrollAreaConfigure">
+         <widget class="QgsScrollArea" name="scrollAreaConfigure">
           <property name="frameShape">
            <enum>QFrame::NoFrame</enum>
           </property>
@@ -432,7 +432,7 @@
             </item>
             <item row="4" column="1" colspan="3">
              <widget class="QFrame" name="frameRedirectUrl">
-              <layout class="QHBoxLayout" name="horizontalLayout_4">
+              <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="1,0,0,0,0">
                <property name="spacing">
                 <number>2</number>
                </property>
@@ -449,9 +449,12 @@
                 <number>0</number>
                </property>
                <item>
+                <widget class="QComboBox" name="comboRedirectHost"/>
+               </item>
+               <item>
                 <widget class="QLabel" name="lblRedirectIP">
                  <property name="text">
-                  <string>http://127.0.0.1:</string>
+                  <string>:</string>
                  </property>
                 </widget>
                </item>
@@ -473,7 +476,7 @@
                   <number>0</number>
                  </property>
                  <property name="maximum">
-                  <number>9999</number>
+                  <number>65535</number>
                  </property>
                  <property name="value">
                   <number>0</number>
@@ -735,7 +738,7 @@
             </property>
             <property name="icon">
              <iconset resource="oauth2_resources.qrc">
-              <normaloff>:/oauth2method/oauth2_resources/fileopen.svg</normaloff>:/oauth2method/oauth2_resources/fileopen.svg</iconset>
+              <normaloff>:/oauth2method/svg/fileopen.svg</normaloff>:/oauth2method/svg/fileopen.svg</iconset>
             </property>
             <property name="iconSize">
              <size>
@@ -783,7 +786,7 @@
             </property>
             <property name="icon">
              <iconset resource="oauth2_resources.qrc">
-              <normaloff>:/oauth2method/oauth2_resources/fileopen.svg</normaloff>:/oauth2method/oauth2_resources/fileopen.svg</iconset>
+              <normaloff>:/oauth2method/svg/fileopen.svg</normaloff>:/oauth2method/svg/fileopen.svg</iconset>
             </property>
            </widget>
           </item>
@@ -856,7 +859,7 @@
         <number>0</number>
        </property>
        <item>
-        <widget class="QScrollArea" name="scrollAreaAdvanced">
+        <widget class="QgsScrollArea" name="scrollAreaAdvanced">
          <property name="frameShape">
           <enum>QFrame::NoFrame</enum>
          </property>
@@ -1009,15 +1012,21 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>QgsPasswordLineEdit</class>
-   <extends>QLineEdit</extends>
-   <header>qgspasswordlineedit.h</header>
+   <class>QgsScrollArea</class>
+   <extends>QScrollArea</extends>
+   <header>qgsscrollarea.h</header>
+   <container>1</container>
   </customwidget>
   <customwidget>
    <class>QgsCollapsibleGroupBoxBasic</class>
    <extends>QGroupBox</extends>
-   <header>qgscollapsiblegroupbox.h</header>
+   <header location="global">qgscollapsiblegroupbox.h</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>QgsPasswordLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>qgspasswordlineedit.h</header>
   </customwidget>
  </customwidgets>
  <tabstops>
@@ -1026,6 +1035,7 @@
   <tabstop>leRequestUrl</tabstop>
   <tabstop>leTokenUrl</tabstop>
   <tabstop>leRefreshTokenUrl</tabstop>
+  <tabstop>comboRedirectHost</tabstop>
   <tabstop>spnbxRedirectPort</tabstop>
   <tabstop>leRedirectUrl</tabstop>
   <tabstop>leClientId</tabstop>

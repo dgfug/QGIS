@@ -14,6 +14,9 @@
  *                                                                         *
  ***************************************************************************/
 
+#ifndef QGSMAPTOOLFILLRING_H
+#define QGSMAPTOOLFILLRING_H
+
 #include "qgsmaptoolcapture.h"
 #include "qgis_app.h"
 
@@ -21,19 +24,24 @@
  * A tool to cut holes into polygon and multipolygon features and fill them
  *  with new feature. Attributes are copied from parent feature.
  */
-class APP_EXPORT QgsMapToolFillRing: public QgsMapToolCapture
+class APP_EXPORT QgsMapToolFillRing : public QgsMapToolCapture
 {
     Q_OBJECT
   public:
     QgsMapToolFillRing( QgsMapCanvas *canvas );
-    bool supportsTechnique( CaptureTechnique technique ) const override;
+    bool supportsTechnique( Qgis::CaptureTechnique technique ) const override;
     void cadCanvasReleaseEvent( QgsMapMouseEvent *e ) override;
 
   private:
+    void polygonCaptured( const QgsCurvePolygon *polygon ) override;
+    void createFeature( const QgsGeometry &geometry, QgsFeatureId fid );
 
     /**
      * Returns the geometry of the ring under the point p and sets fid to the feature id
      */
-    QgsGeometry ringUnderPoint( const QgsPointXY &p, QgsFeatureId &fid );
+    void fillRingUnderPoint( const QgsPointXY &p );
 
+    QgsVectorLayer *getCheckLayer();
 };
+
+#endif // QGSMAPTOOLFILLRING_H

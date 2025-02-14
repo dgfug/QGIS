@@ -144,7 +144,11 @@ class QUICK_EXPORT QgsQuickMapCanvasMap : public QQuickItem
     void incrementalRenderingChanged();
 
   protected:
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
     void geometryChanged( const QRectF &newGeometry, const QRectF &oldGeometry ) override;
+#else
+    void geometryChange( const QRectF &newGeometry, const QRectF &oldGeometry ) override;
+#endif
 
   public slots:
     //! Stop map rendering
@@ -166,16 +170,29 @@ class QUICK_EXPORT QgsQuickMapCanvasMap : public QQuickItem
      */
     void refresh();
 
+    /**
+     * Clears rendering cache
+     */
+    void clearCache();
+
   private slots:
     void refreshMap();
     void renderJobUpdated();
     void renderJobFinished();
+    void layerRepaintRequested( bool deferred );
     void onWindowChanged( QQuickWindow *window );
     void onScreenChanged( QScreen *screen );
     void onExtentChanged();
     void onLayersChanged();
+    void onTemporalStateChanged();
+    void onzRangeChanged();
 
   private:
+    enum class CacheInvalidationType
+    {
+      Temporal = 1 << 0,
+      Elevation = 1 << 1,
+    };
 
     /**
      * Should only be called by stopRendering()!
@@ -184,6 +201,10 @@ class QUICK_EXPORT QgsQuickMapCanvasMap : public QQuickItem
     QgsMapSettings prepareMapSettings() const;
     void updateTransform();
     void zoomToFullExtent();
+
+    void clearTemporalCache();
+    void clearElevationCache();
+    QFlags<CacheInvalidationType> mCacheInvalidations;
 
     std::unique_ptr<QgsQuickMapSettings> mMapSettings;
     bool mPinching = false;
@@ -199,6 +220,8 @@ class QUICK_EXPORT QgsQuickMapCanvasMap : public QQuickItem
     QList<QMetaObject::Connection> mLayerConnections;
     QTimer mMapUpdateTimer;
     bool mIncrementalRendering = false;
+    bool mSilentRefresh = false;
+    bool mDeferredRefreshPending = false;
 
     QQuickWindow *mWindow = nullptr;
 };

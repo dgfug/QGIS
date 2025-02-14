@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgspointcloudlayer3drendererwidget.h"
+#include "moc_qgspointcloudlayer3drendererwidget.cpp"
 
 #include "qgspointcloud3dsymbolwidget.h"
 #include "qgspointcloudlayer3drenderer.h"
@@ -28,6 +29,7 @@ QgsPointCloudLayer3DRendererWidget::QgsPointCloudLayer3DRendererWidget( QgsPoint
   : QgsMapLayerConfigWidget( layer, canvas, parent )
 {
   setPanelTitle( tr( "3D View" ) );
+  setObjectName( QStringLiteral( "mOptsPage_3DView" ) );
 
   QVBoxLayout *layout = new QVBoxLayout( this );
   layout->setContentsMargins( 0, 0, 0, 0 );
@@ -38,19 +40,19 @@ QgsPointCloudLayer3DRendererWidget::QgsPointCloudLayer3DRendererWidget( QgsPoint
   mWidgetPointCloudSymbol->connectChildPanels( this );
 
   connect( mWidgetPointCloudSymbol, &QgsPointCloud3DSymbolWidget::changed, this, &QgsPointCloudLayer3DRendererWidget::widgetChanged );
+  setProperty( "helpPage", QStringLiteral( "working_with_point_clouds/point_clouds.html#d-view-properties" ) );
 }
 
-void QgsPointCloudLayer3DRendererWidget::setRenderer( const QgsPointCloudLayer3DRenderer *renderer, QgsPointCloudLayer *layer )
+void QgsPointCloudLayer3DRendererWidget::setRenderer( const QgsPointCloudLayer3DRenderer *renderer )
 {
-  if ( renderer != nullptr )
+  if ( renderer )
   {
     mWidgetPointCloudSymbol->setSymbol( const_cast<QgsPointCloud3DSymbol *>( renderer->symbol() ) );
     mWidgetPointCloudSymbol->setPointBudget( renderer->pointRenderingBudget() );
     mWidgetPointCloudSymbol->setMaximumScreenError( renderer->maximumScreenError() );
     mWidgetPointCloudSymbol->setShowBoundingBoxes( renderer->showBoundingBoxes() );
+    mWidgetPointCloudSymbol->setZoomOutBehavior( renderer->zoomOutBehavior() );
   }
-  if ( layer )
-    mWidgetPointCloudSymbol->setPointCloudSize( layer->pointCount() );
 }
 
 QgsPointCloudLayer3DRenderer *QgsPointCloudLayer3DRendererWidget::renderer()
@@ -62,11 +64,15 @@ QgsPointCloudLayer3DRenderer *QgsPointCloudLayer3DRendererWidget::renderer()
   renderer->setPointRenderingBudget( mWidgetPointCloudSymbol->pointBudget() );
   renderer->setMaximumScreenError( mWidgetPointCloudSymbol->maximumScreenError() );
   renderer->setShowBoundingBoxes( mWidgetPointCloudSymbol->showBoundingBoxes() );
+  renderer->setZoomOutBehavior( mWidgetPointCloudSymbol->zoomOutBehavior() );
   return renderer;
 }
 
 void QgsPointCloudLayer3DRendererWidget::apply()
 {
+  QgsPointCloudLayer *pcLayer = qobject_cast<QgsPointCloudLayer *>( mLayer );
+  bool syncWith2DRenderer = pcLayer->sync3DRendererTo2DRenderer();
+
   QgsPointCloudLayer3DRenderer *r = nullptr;
   r = renderer();
   if ( r )
@@ -74,6 +80,11 @@ void QgsPointCloudLayer3DRendererWidget::apply()
     r->setSymbol( mWidgetPointCloudSymbol->symbol() );
   }
   mLayer->setRenderer3D( r );
+
+  if ( syncWith2DRenderer )
+  {
+    pcLayer->setSync3DRendererTo2DRenderer( true );
+  }
 }
 
 void QgsPointCloudLayer3DRendererWidget::syncToLayer( QgsMapLayer *layer )
@@ -83,9 +94,8 @@ void QgsPointCloudLayer3DRendererWidget::syncToLayer( QgsMapLayer *layer )
   if ( r && r->type() == QLatin1String( "pointcloud" ) )
   {
     pointCloudRenderer = static_cast<QgsPointCloudLayer3DRenderer *>( r );
-    pointCloudRenderer->setSymbol( mWidgetPointCloudSymbol->symbol() );
   }
-  setRenderer( pointCloudRenderer, qobject_cast< QgsPointCloudLayer * >( layer ) );
+  setRenderer( pointCloudRenderer );
   mWidgetPointCloudSymbol->setEnabled( true );
 }
 
@@ -97,8 +107,8 @@ void QgsPointCloudLayer3DRendererWidget::setDockMode( bool dockMode )
     mWidgetPointCloudSymbol->setDockMode( dockMode );
 }
 
-QgsPointCloudLayer3DRendererWidgetFactory::QgsPointCloudLayer3DRendererWidgetFactory( QObject *parent ):
-  QObject( parent )
+QgsPointCloudLayer3DRendererWidgetFactory::QgsPointCloudLayer3DRendererWidgetFactory( QObject *parent )
+  : QObject( parent )
 {
   setIcon( QIcon( ":/images/themes/default/3d.svg" ) );
   setTitle( tr( "3D View" ) );
@@ -112,7 +122,7 @@ QgsMapLayerConfigWidget *QgsPointCloudLayer3DRendererWidgetFactory::createWidget
     return nullptr;
   QgsPointCloudLayer3DRendererWidget *widget = new QgsPointCloudLayer3DRendererWidget( pointCloudLayer, canvas, parent );
   if ( pointCloudLayer )
-    widget->setRenderer( dynamic_cast<QgsPointCloudLayer3DRenderer *>( pointCloudLayer->renderer3D() ), pointCloudLayer );
+    widget->setRenderer( dynamic_cast<QgsPointCloudLayer3DRenderer *>( pointCloudLayer->renderer3D() ) );
   return widget;
 }
 
@@ -123,12 +133,12 @@ bool QgsPointCloudLayer3DRendererWidgetFactory::supportLayerPropertiesDialog() c
 
 bool QgsPointCloudLayer3DRendererWidgetFactory::supportsLayer( QgsMapLayer *layer ) const
 {
-  return layer->type() == QgsMapLayerType::PointCloudLayer;
+  return layer->type() == Qgis::LayerType::PointCloud;
 }
 
 QString QgsPointCloudLayer3DRendererWidgetFactory::layerPropertiesPagePositionHint() const
 {
-  return QStringLiteral( "mOptsPage_Metadata" );
+  return QStringLiteral( "mOptsPage_Rendering" );
 }
 
 bool QgsPointCloudLayer3DRendererWidgetFactory::supportsStyleDock() const

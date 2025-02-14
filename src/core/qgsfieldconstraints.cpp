@@ -13,6 +13,7 @@
  *                                                                         *
  ***************************************************************************/
 #include "qgsfieldconstraints.h"
+#include "moc_qgsfieldconstraints.cpp"
 
 QgsFieldConstraints::QgsFieldConstraints() = default;
 
@@ -29,8 +30,8 @@ QgsFieldConstraints::ConstraintStrength QgsFieldConstraints::constraintStrength(
   if ( !( mConstraints & constraint ) )
     return ConstraintStrengthNotSet;
 
-  // defaults to hard strength unless explicitly set
-  return mConstraintStrengths.value( constraint, ConstraintStrengthHard );
+  // defaults to not set for all but expressions (which does not use strength)
+  return mConstraintStrengths.value( constraint, constraint == ConstraintExpression ? ConstraintStrengthHard : ConstraintStrengthNotSet );
 }
 
 void QgsFieldConstraints::setConstraintStrength( QgsFieldConstraints::Constraint constraint, QgsFieldConstraints::ConstraintStrength strength )
@@ -87,5 +88,6 @@ bool QgsFieldConstraints::operator==( const QgsFieldConstraints &other ) const
 {
   return mConstraints == other.mConstraints && mConstraintOrigins == other.mConstraintOrigins
          && mExpressionConstraint == other.mExpressionConstraint && mExpressionConstraintDescription == other.mExpressionConstraintDescription
-         && mConstraintStrengths == other.mConstraintStrengths;
+         && mConstraintStrengths == other.mConstraintStrengths
+         && mDomainName == other.mDomainName;
 }

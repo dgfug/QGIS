@@ -21,7 +21,7 @@
 
 #include "qgis_core.h"
 #include "qgis_sip.h"
-#include "qgsunittypes.h"
+#include "qgis.h"
 
 class QString;
 class QgsRectangle;
@@ -41,7 +41,7 @@ class CORE_EXPORT QgsScaleCalculator
      * \param mapUnits Units of the data on the map
      */
     QgsScaleCalculator( double dpi = 0,
-                        QgsUnitTypes::DistanceUnit mapUnits = QgsUnitTypes::DistanceMeters );
+                        Qgis::DistanceUnit mapUnits = Qgis::DistanceUnit::Meters );
 
     /**
      * Sets the \a dpi (dots per inch) for the output resolution, to be used in scale calculations.
@@ -53,24 +53,42 @@ class CORE_EXPORT QgsScaleCalculator
      * Returns the DPI (dots per inch) used in scale calculations.
      * \see setDpi()
      */
-    double dpi();
+    double dpi() const;
 
     /**
-     * Set the map units
-     * \param mapUnits Units of the data on the map. Must match a value from the
+     * Set the map units.
+     *
+     * \see mapUnits()
      */
-    void setMapUnits( QgsUnitTypes::DistanceUnit mapUnits );
-
-    //! Returns current map units
-    QgsUnitTypes::DistanceUnit mapUnits() const;
+    void setMapUnits( Qgis::DistanceUnit mapUnits );
 
     /**
-     * Calculate the scale denominator
-     * \param mapExtent QgsRectangle containing the current map extent
+     * Returns current map units.
+     *
+     * \see setMapUnits()
+     */
+    Qgis::DistanceUnit mapUnits() const;
+
+    /**
+     * Calculate the scale denominator.
+     *
+     * \param mapExtent QgsRectangle containing the current map extent. Units are specified by mapUnits().
      * \param canvasWidth Width of the map canvas in pixel (physical) units
+     *
      * \returns scale denominator of current map view, e.g. 1000.0 for a 1:1000 map.
      */
     double calculate( const QgsRectangle &mapExtent, double canvasWidth ) const;
+
+    /**
+     * Calculate the image size in pixel (physical) units.
+     *
+     * \param mapExtent QgsRectangle containing the current map extent. Units are specified by mapUnits()
+     * \param scale Scale denominator, e.g. 1000.0 for a 1:1000 map
+     *
+     * \returns image size
+     * \since QGIS 3.24
+     */
+    QSizeF calculateImageSize( const QgsRectangle &mapExtent, double scale ) const;
 
     /**
      * Calculate the distance between two points in geographic coordinates.
@@ -82,11 +100,14 @@ class CORE_EXPORT QgsScaleCalculator
 
   private:
 
+    //! Calculate the \a delta and \a conversionFactor values based on the provided \a mapExtent.
+    void calculateMetrics( const QgsRectangle &mapExtent, double &delta, double &conversionFactor ) const;
+
     //! dpi member
-    double mDpi;
+    double mDpi = 96;
 
     //! map unit member
-    QgsUnitTypes::DistanceUnit mMapUnits;
+    Qgis::DistanceUnit mMapUnits = Qgis::DistanceUnit::Unknown;
 };
 
 #endif // #ifndef QGSSCALECALCULATOR_H

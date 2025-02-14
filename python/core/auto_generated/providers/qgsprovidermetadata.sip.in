@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/providers/qgsprovidermetadata.h                             *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -49,7 +49,7 @@ Constructs default metadata without any capabilities
  QgsMeshDriverMetadata( const QString &name,
         const QString &description,
         const MeshDriverCapabilities &capabilities,
-        const QString &writeDatasetOnFileSuffix ) /Deprecated/;
+        const QString &writeDatasetOnFileSuffix ) /Deprecated="Since 3.22. "/;
 %Docstring
 Constructs driver metadata with selected capabilities
 
@@ -58,8 +58,7 @@ Constructs driver metadata with selected capabilities
 :param capabilities: driver's capabilities
 :param writeDatasetOnFileSuffix: suffix used to write datasets on file
 
-.. deprecated::
-   QGIS 3.22
+.. deprecated:: 3.22
 %End
 
     QgsMeshDriverMetadata( const QString &name,
@@ -148,6 +147,7 @@ library object.
       PriorityForUri,
       LayerTypesForUri,
       QuerySublayers,
+      CreateDatabase,
     };
     typedef QFlags<QgsProviderMetadata::ProviderMetadataCapability> ProviderMetadataCapabilities;
 
@@ -156,6 +156,7 @@ library object.
     {
       FileBasedUris,
       SaveLayerMetadata,
+      ParallelCreateProvider,
     };
     typedef QFlags<QgsProviderMetadata::ProviderCapability> ProviderCapabilities;
 
@@ -187,6 +188,13 @@ This returns descriptive text for the provider
 This is used to provide a descriptive list of available data providers.
 %End
 
+    virtual QIcon icon() const;
+%Docstring
+Returns an icon representing the provider.
+
+.. versionadded:: 3.26
+%End
+
     virtual QgsProviderMetadata::ProviderMetadataCapabilities capabilities() const;
 %Docstring
 Returns the provider metadata capabilities.
@@ -201,14 +209,56 @@ Returns the provider's capabilities.
 .. versionadded:: 3.18.1
 %End
 
- QString library() const /Deprecated/;
+    SIP_PYOBJECT supportedLayerTypes() const /TypeHint="List[Qgis.LayerType]"/;
+%Docstring
+Returns a list of the map layer types supported by the provider.
+
+.. versionadded:: 3.26
+%End
+%MethodCode
+    // adapted from the qpymultimedia_qlist.sip file from the PyQt6 sources
+
+    const QList< Qgis::LayerType > cppRes = sipCpp->supportedLayerTypes();
+
+    PyObject *l = PyList_New( cppRes.size() );
+
+    if ( !l )
+      sipIsErr = 1;
+    else
+    {
+      for ( int i = 0; i < cppRes.size(); ++i )
+      {
+        PyObject *eobj = sipConvertFromEnum( static_cast<int>( cppRes.at( i ) ),
+                                             sipType_Qgis_LayerType );
+
+        if ( !eobj )
+        {
+          sipIsErr = 1;
+        }
+
+        PyList_SetItem( l, i, eobj );
+      }
+
+      if ( !sipIsErr )
+      {
+        sipRes = l;
+      }
+      else
+      {
+        Py_DECREF( l );
+      }
+    }
+%End
+
+ QString library() const /Deprecated="Since 3.10. Providers may not need to be loaded from a library (empty string returned)."/;
 %Docstring
 This returns the library file name
 
 This is used to QLibrary calls to load the data provider (only for dynamically loaded libraries)
 
-.. deprecated::
-   QGIS 3.10 - providers may not need to be loaded from a library (empty string returned)
+.. deprecated:: 3.10
+
+   Providers may not need to be loaded from a library (empty string returned).
 %End
 
 
@@ -226,16 +276,7 @@ Cleanup the provider
 .. versionadded:: 3.10
 %End
 
-    enum class FilterType
-    {
-      FilterVector,
-      FilterRaster,
-      FilterMesh,
-      FilterMeshDataset,
-      FilterPointCloud,
-    };
-
-    virtual QString filters( FilterType type );
+    virtual QString filters( Qgis::FileFilterType type );
 %Docstring
 Builds the list of file filter strings (supported formats)
 
@@ -270,7 +311,7 @@ The default implementation returns 0 for all URIs.
 .. versionadded:: 3.18
 %End
 
-    virtual QList< QgsMapLayerType > validLayerTypesForUri( const QString &uri ) const;
+    virtual QList< Qgis::LayerType > validLayerTypesForUri( const QString &uri ) const;
 %Docstring
 Returns a list of valid layer types which the provider can be used with when
 opening the specified ``uri``.
@@ -347,9 +388,19 @@ The optional ``feedback`` argument can be used to provide cancellation support f
 .. versionadded:: 3.22
 %End
 
+    virtual QString suggestGroupNameForUri( const QString &uri ) const;
+%Docstring
+Returns a name that can be used as a group name for sublayers retrieved from
+the specified ``uri``.
+
+The default implementation returns an empty string.
+
+.. versionadded:: 3.30
+%End
+
     virtual QgsDataProvider *createProvider( const QString &uri,
         const QgsDataProvider::ProviderOptions &options,
-        QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() ) /Factory/;
+        Qgis::DataProviderReadFlags flags = Qgis::DataProviderReadFlags() ) /Factory/;
 %Docstring
 Class factory to return a pointer to a newly created :py:class:`QgsDataProvider` object
 
@@ -378,6 +429,25 @@ eg. "yes" value will be returned as ``True``, 0 will be returned as ``False``
 
 
 
+    virtual bool createDatabase( const QString &uri, QString &errorMessage /Out/ );
+%Docstring
+Creates a new empty database at the specified ``uri``.
+
+This method can be used for supported providers to construct a new empty database. For instance, the OGR provider
+metadata :py:func:`~QgsProviderMetadata.createDatabase` method can be used to create new empty GeoPackage or FileGeodatabase databases.
+
+:param uri: destination URI for newly created database.
+
+:return: - ``True`` if the database was successfully created
+         - errorMessage: a descriptive error message if the database could not be successfully created.
+
+.. note::
+
+   This method is only supported by providers which return the QgsProviderMetadata.ProviderMetadataCapability.CreateDatabase capability.
+
+.. versionadded:: 3.28
+%End
+
     virtual QgsRasterDataProvider *createRasterDataProvider(
       const QString &uri,
       const QString &format,
@@ -398,9 +468,11 @@ Creates a new instance of the raster data provider.
       const QgsMesh &mesh,
       const QString &fileName,
       const QString &driverName,
-      const QgsCoordinateReferenceSystem &crs ) const;
+      const QgsCoordinateReferenceSystem &crs,
+      const QMap<QString, QString> &metadata = QMap<QString, QString>() ) const;
 %Docstring
 Creates mesh data source from a file name ``fileName`` and a driver ``driverName``, that is the mesh frame stored in file, memory or with other way (depending of the provider)
+Since QGIS 3.38 the optional ``metadata`` argument can be used to pass metadata to the provider.
 
 .. versionadded:: 3.16
 %End
@@ -408,9 +480,11 @@ Creates mesh data source from a file name ``fileName`` and a driver ``driverName
     virtual bool createMeshData(
       const QgsMesh &mesh,
       const QString &uri,
-      const QgsCoordinateReferenceSystem &crs ) const;
+      const QgsCoordinateReferenceSystem &crs,
+      const QMap<QString, QString> &metadata = QMap<QString, QString>() ) const;
 %Docstring
 Creates mesh data source from an ``uri``, that is the mesh frame stored in file, memory or with other way (depending of the provider)
+Since QGIS 3.38 the optional ``metadata`` argument can be used to pass metadata to the provider.
 
 .. versionadded:: 3.22
 %End
@@ -463,6 +537,51 @@ Reassembles a provider data source URI from its component paths (e.g. file path,
 .. versionadded:: 3.12
 %End
 
+    virtual QString absoluteToRelativeUri( const QString &uri, const QgsReadWriteContext &context ) const;
+%Docstring
+Converts absolute path(s) to relative path(s) in the given provider-specific URI. and
+returns modified URI according to the context object's configuration.
+This is commonly used when writing project files.
+If a provider does not work with paths, unmodified URI will be returned.
+
+:return: modified URI with relative path(s)
+
+.. note::
+
+   this function may not be supported by all providers. The default
+   implementation uses :py:func:`QgsPathResolver.writePath()` on the whole URI.
+
+.. seealso:: :py:func:`relativeToAbsoluteUri`
+
+.. versionadded:: 3.30
+%End
+
+    virtual QString relativeToAbsoluteUri( const QString &uri, const QgsReadWriteContext &context ) const;
+%Docstring
+Converts relative path(s) to absolute path(s) in the given provider-specific URI. and
+returns modified URI according to the context object's configuration.
+This is commonly used when reading project files.
+If a provider does not work with paths, unmodified URI will be returned.
+
+:return: modified URI with absolute path(s)
+
+.. note::
+
+   this function may not be supported by all providers. The default
+   implementation uses :py:func:`QgsPathResolver.readPath()` on the whole URI.
+
+.. seealso:: :py:func:`absoluteToRelativeUri`
+
+.. versionadded:: 3.30
+%End
+
+    virtual QString cleanUri( const QString &uri, Qgis::UriCleaningFlags flags = Qgis::UriCleaningFlag::RemoveCredentials ) const;
+%Docstring
+Cleans a layer ``uri``, e.g. to remove or hide sensitive information from the URI.
+
+.. versionadded:: 3.42
+%End
+
     virtual QList< QgsDataItemProvider * > dataItemProviders() const /Factory/;
 %Docstring
 Returns data item providers. Caller is responsible for ownership of the item providers
@@ -486,14 +605,31 @@ Lists stored layer styles in the provider defined by ``uri``
 .. versionadded:: 3.10
 %End
 
-    virtual QString getStyleById( const QString &uri, QString styleId, QString &errCause );
+    virtual bool styleExists( const QString &uri, const QString &styleId, QString &errorCause /Out/ );
+%Docstring
+Returns ``True`` if a layer style with the specified ``styleId`` exists in the provider defined by ``uri``.
+
+:param uri: provider URI
+:param styleId: style ID to test for
+
+:return: - ``True`` if the layer style already exists
+         - errorCause: a descriptive error message, if an error occurs while checking if the style exists
+
+.. seealso:: :py:func:`getStyleById`
+
+.. versionadded:: 3.24
+%End
+
+    virtual QString getStyleById( const QString &uri, const QString &styleId, QString &errCause );
 %Docstring
 Gets a layer style defined by ``uri``
+
+.. seealso:: :py:func:`styleExists`
 
 .. versionadded:: 3.10
 %End
 
-    virtual bool deleteStyleById( const QString &uri, QString styleId, QString &errCause );
+    virtual bool deleteStyleById( const QString &uri, const QString &styleId, QString &errCause );
 %Docstring
 Deletes a layer style defined by ``styleId``
 
@@ -504,7 +640,15 @@ Deletes a layer style defined by ``styleId``
                             const QString &styleName, const QString &styleDescription,
                             const QString &uiFileContent, bool useAsDefault, QString &errCause );
 %Docstring
-Saves a layer style to provider
+Saves a layer style to provider.
+
+.. note::
+
+   Prior to QGIS 3.24, this method would show a message box warning when a
+   style with the same ``styleName`` already existed to confirm replacing the style with the user.
+   Since 3.24, calling this method will ALWAYS overwrite any existing style with the same name.
+   Use :py:func:`~QgsProviderMetadata.styleExists` to test in advance if a style already exists and handle this appropriately
+   in your client code.
 
 .. versionadded:: 3.10
 %End
@@ -514,6 +658,19 @@ Saves a layer style to provider
 Loads a layer style defined by ``uri``
 
 .. versionadded:: 3.10
+%End
+
+    virtual QString loadStoredStyle( const QString &uri, QString &styleName, QString &errCause );
+%Docstring
+Loads a layer style from the provider storage, reporting its name.
+
+:param uri: data source uri
+:param styleName: the name of the style if available, empty otherwise
+:param errCause: report errors
+
+:return: the style QML (XML)
+
+.. versionadded:: 3.30
 %End
 
     virtual bool saveLayerMetadata( const QString &uri, const QgsLayerMetadata &metadata, QString &errorMessage /Out/ ) throw( QgsNotSupportedException );
@@ -526,10 +683,8 @@ Saves ``metadata`` to the layer corresponding to the specified ``uri``.
 :return: - ``True`` if the metadata was successfully saved.
          - errorMessage: descriptive string of error if encountered
 
-
 :raises QgsNotSupportedException: if the provider does not support saving layer metadata for the
    specified ``uri``.
-
 
 .. versionadded:: 3.20
 %End
@@ -578,7 +733,7 @@ Raises a :py:class:`QgsProviderConnectionException` if any errors are encountere
 
     QgsAbstractProviderConnection *findConnection( const QString &name, bool cached = true ) throw( QgsProviderConnectionException );
 %Docstring
-Searches and returns a (possibly NULL) connection from the stored provider connections.
+Searches and returns a (possibly ``None``) connection from the stored provider connections.
 Ownership is not transferred.
 Raises a :py:class:`QgsProviderConnectionException` if any errors are encountered.
 
@@ -694,5 +849,5 @@ QFlags<QgsProviderMetadata::ProviderCapability> operator|(QgsProviderMetadata::P
  *                                                                      *
  * src/core/providers/qgsprovidermetadata.h                             *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

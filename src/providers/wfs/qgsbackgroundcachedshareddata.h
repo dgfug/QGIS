@@ -124,6 +124,9 @@ class QgsBackgroundCachedSharedData
     //! Return current BBOX used by the downloader
     const QgsRectangle &currentRect() const { return mRect; }
 
+    //! Set current BBOX used by the downloader.
+    void setCurrentRect( const QgsRectangle &rect ) { mRect = rect; }
+
     //! Returns a unique identifier made from feature content
     static QString getMD5( const QgsFeature &f );
 
@@ -136,7 +139,7 @@ class QgsBackgroundCachedSharedData
      * Used by a QgsBackgroundCachedFeatureIterator to start a downloader and get the
      * generation counter.
     */
-    int registerToCache( QgsBackgroundCachedFeatureIterator *iterator, int limit, const QgsRectangle &rect = QgsRectangle() );
+    int registerToCache( QgsBackgroundCachedFeatureIterator *iterator, int limit, const QgsRectangle &rect = QgsRectangle(), const QString &serverExpression = QString() );
 
     /**
      * Used by the rewind() method of an iterator so as to get the up-to-date
@@ -167,6 +170,9 @@ class QgsBackgroundCachedSharedData
 
     //////// Pure virtual methods
 
+    //! Returns computed server expression
+    virtual QString computedExpression( const QgsExpression &expression ) const = 0;
+
     //! Instantiate a new feature downloader implementation.
     virtual std::unique_ptr<QgsFeatureDownloaderImpl> newFeatureDownloaderImpl( QgsFeatureDownloader *, bool requestMadeFromMainThread ) = 0;
 
@@ -183,7 +189,6 @@ class QgsBackgroundCachedSharedData
     virtual void pushError( const QString &errorMsg ) const = 0;
 
   protected:
-
     //////////// Input members. Implementations should define them to meaningful values
 
     //! Attribute fields of the layer
@@ -216,7 +221,13 @@ class QgsBackgroundCachedSharedData
     //! Whether progress dialog should be hidden
     bool mHideProgressDialog = false;
 
+    //! Server filter expression
+    QString mServerExpression;
+
     //////////// Methods
+
+    //! To be used by the clone() method of derived classes
+    void copyStateToClone( QgsBackgroundCachedSharedData *clone ) const;
 
     //! Should be called in the destructor of the implementation of this class !
     void cleanup();
@@ -225,7 +236,6 @@ class QgsBackgroundCachedSharedData
     virtual bool detectPotentialServerAxisOrderIssueFromSingleFeatureExtent() const { return false; }
 
   private:
-
     //! Cache directory manager
     QgsCacheDirectoryManager &mCacheDirectoryManager;
 
@@ -257,7 +267,7 @@ class QgsBackgroundCachedSharedData
     QgsSpatialIndex mCachedRegions;
 
     //! Requested cached regions
-    QVector< QgsFeature > mRegions;
+    QVector<QgsFeature> mRegions;
 
     //! Limit of retrieved number of features for the current request
     int mRequestLimit = 0;

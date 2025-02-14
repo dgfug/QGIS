@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/layertree/qgscolorramplegendnodesettings.h                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -34,9 +34,6 @@ Settings for a color ramp legend node.
     ~QgsColorRampLegendNodeSettings();
 
     QgsColorRampLegendNodeSettings( const QgsColorRampLegendNodeSettings &other );
-%Docstring
-Copy constructor
-%End
 
 
     QgsColorRampLegendNodeSettings::Direction direction() const;
@@ -208,7 +205,7 @@ Returns ``True`` if a continuous gradient legend will be used.
 
     void setUseContinuousLegend( bool useContinuousLegend );
 %Docstring
-Sets the flag to use a continuos gradient legend to ``useContinuousLegend``.
+Sets the flag to use a continuous gradient legend to ``useContinuousLegend``.
 
 When this flag is set the legend will be rendered using a continuous color ramp with
 min and max values, when it is not set the legend will be rendered using separate
@@ -226,5 +223,5 @@ items for each entry.
  *                                                                      *
  * src/core/layertree/qgscolorramplegendnodesettings.h                  *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

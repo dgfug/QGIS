@@ -24,7 +24,7 @@
 #include "qgsdiagramrenderer.h"
 #include "qgsvectorlayerjoininfo.h"
 #include "qgsproperty.h"
-#include "qgsspatialiteutils.h"
+#include "qgssqliteutils.h"
 #include "qgsvectorlayer.h"
 #include "qgscallout.h"
 #include <QString>
@@ -56,7 +56,6 @@ class QgsProject;
  * Cascade". Thus, auxiliary fields are editable even if the
  * source layer is not and edition of a joined field is also possible.
  *
- * \since QGIS 3.0
  */
 class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
 {
@@ -74,9 +73,6 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
      */
     QgsAuxiliaryLayer( const QString &pkField, const QString &filename, const QString &table, QgsVectorLayer *vlayer );
 
-    /**
-     * Copy constructor deactivated
-     */
     QgsAuxiliaryLayer( const QgsAuxiliaryLayer &rhs ) = delete;
 
     QgsAuxiliaryLayer &operator=( QgsAuxiliaryLayer const &rhs ) = delete;
@@ -89,9 +85,8 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
     % End
 #endif
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Woverloaded-virtual"
+#ifndef SIP_RUN
+    using QgsVectorLayer::clone;
 #endif
 
     /**
@@ -102,9 +97,6 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
      * \param layer The layer for which the clone is made
      */
     QgsAuxiliaryLayer *clone( QgsVectorLayer *layer ) const SIP_FACTORY;
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
 
     /**
      * An auxiliary layer is not spatial. This method returns a spatial
@@ -286,7 +278,6 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
  *
  * \brief Class providing some utility methods to manage auxiliary storage.
  *
- * \since QGIS 3.0
  */
 class CORE_EXPORT QgsAuxiliaryStorage
 {
@@ -328,9 +319,6 @@ class CORE_EXPORT QgsAuxiliaryStorage
      */
     QgsAuxiliaryStorage( const QString &filename = QString(), bool copy = true );
 
-    /**
-     * Destructor.
-     */
     virtual ~QgsAuxiliaryStorage();
 
     /**
@@ -428,14 +416,14 @@ class CORE_EXPORT QgsAuxiliaryStorage
     static bool exists( const QgsProject &project );
 
   private:
-    spatialite_database_unique_ptr open( const QString &filename = QString() );
-    spatialite_database_unique_ptr open( const QgsProject &project );
+    sqlite3_database_unique_ptr open( const QString &filename = QString() );
+    sqlite3_database_unique_ptr open( const QgsProject &project );
 
     void initTmpFileName();
 
     static QString filenameForProject( const QgsProject &project );
-    static spatialite_database_unique_ptr createDB( const QString &filename );
-    static spatialite_database_unique_ptr openDB( const QString &filename );
+    static sqlite3_database_unique_ptr createDB( const QString &filename );
+    static sqlite3_database_unique_ptr openDB( const QString &filename );
     static bool tableExists( const QString &table, sqlite3 *handler );
     static bool createTable( const QString &type, const QString &table, sqlite3 *handler, QString &errorMsg );
 

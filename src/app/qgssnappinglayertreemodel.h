@@ -17,7 +17,6 @@
 #define QGSSNAPPINGLAYERTREEVIEW_H
 
 
-
 #include <QSortFilterProxyModel>
 #include <QItemDelegate>
 
@@ -77,7 +76,11 @@ class APP_EXPORT QgsSnappingLayerTreeModel : public QSortFilterProxyModel
 
     QgsLayerTreeModel *layerTreeModel() const;
     void setLayerTreeModel( QgsLayerTreeModel *layerTreeModel );
-    void resetLayerTreeModel() {  beginResetModel(); endResetModel(); }
+    void resetLayerTreeModel()
+    {
+      beginResetModel();
+      endResetModel();
+    }
 
     QgsVectorLayer *vectorLayer( const QModelIndex &idx ) const;
 
@@ -91,6 +94,8 @@ class APP_EXPORT QgsSnappingLayerTreeModel : public QSortFilterProxyModel
     void onSnappingSettingsChanged();
 
   private:
+    void onNodesInserted( const QModelIndex &parent, int first, int last );
+    void onNodesRemoved( const QModelIndex &parent, int first, int last );
     bool nodeShown( QgsLayerTreeNode *node ) const;
 
     QgsProject *mProject = nullptr;
@@ -100,6 +105,31 @@ class APP_EXPORT QgsSnappingLayerTreeModel : public QSortFilterProxyModel
     QgsLayerTreeModel *mLayerTreeModel = nullptr;
 
     void hasRowchanged( QgsLayerTreeNode *node, const QHash<QgsVectorLayer *, QgsSnappingConfig::IndividualLayerSettings> &oldSettings );
+};
+
+class SnappingLayerDelegateTypeMenu : public QMenu
+{
+    Q_OBJECT
+
+  public:
+    SnappingLayerDelegateTypeMenu( const QString &title, QWidget *parent = nullptr )
+      : QMenu( title, parent ) {}
+
+    void mouseReleaseEvent( QMouseEvent *e )
+    {
+      QAction *action = activeAction();
+      if ( action )
+        action->trigger();
+      else
+        QMenu::mouseReleaseEvent( e );
+    }
+
+    // set focus to parent so that mTypeButton is not displayed
+    void hideEvent( QHideEvent *e )
+    {
+      qobject_cast<QWidget *>( parent() )->setFocus();
+      QMenu::hideEvent( e );
+    }
 };
 
 #endif // QGSSNAPPINGLAYERTREEVIEW_H

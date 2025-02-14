@@ -27,7 +27,7 @@
 // version without notice, or even be removed.
 //
 
-#include <QVector3D>
+#include "qgsraycastingutils.h"
 
 #define SIP_NO_FILE
 
@@ -36,7 +36,8 @@ class QgsAABB;
 namespace Qt3DRender
 {
   class QCamera;
-}
+  class QGeometryRenderer;
+} // namespace Qt3DRender
 
 
 namespace QgsRayCastingUtils
@@ -93,49 +94,22 @@ namespace QgsRayCastingUtils
    */
   bool rayBoxIntersection( const Ray3D &r, const QgsAABB &aabb );
 
-  //! Represents a plane in 3D space
-  struct Plane3D
-  {
-    QVector3D center;  //!< A point that lies on the plane
-    QVector3D normal;  //!< Normal vector of the plane
-  };
-
-  /**
-   * Tests whether a plane is intersected by a ray.
-   * \note With switch to Qt 5.11 we may remove it and use QRayCaster/QScreenRayCaster instead.
-   * \since QGIS 3.4
-   */
-  bool rayPlaneIntersection( const Ray3D &r, const Plane3D &plane, QVector3D &pt );
-
   /**
    * Tests whether a triangle is intersected by a ray.
    * \note With switch to Qt 5.11 we may remove it and use QRayCaster/QScreenRayCaster instead.
    * \since QGIS 3.4
    */
-  bool rayTriangleIntersection( const Ray3D &ray,
-                                QVector3D a,
-                                QVector3D b,
-                                QVector3D c,
-                                QVector3D &uvw,
-                                float &t );
+  bool rayTriangleIntersection( const Ray3D &ray, QVector3D a, QVector3D b, QVector3D c, QVector3D &uvw, float &t );
 
   /**
-   * Returns a ray coming out of camera
-   * \note With switch to Qt 5.11 we may remove it and use QRayCaster/QScreenRayCaster instead.
-   * \since QGIS 3.4
+   * Tests whether a triangular mesh is intersected by a ray. Returns whether an intersection
+   * was found. If found, it outputs the point at which the intersection happened and index
+   * of the intersecting triangle.
+   * \since QGIS 3.34
    */
-  Ray3D rayForViewportAndCamera( const QSize &area,
-                                 const QPointF &pos,
-                                 const QRectF &relativeViewport,
-                                 const Qt3DRender::QCamera *camera );
+  bool rayMeshIntersection( Qt3DRender::QGeometryRenderer *geometryRenderer, const QgsRayCastingUtils::Ray3D &r, const QMatrix4x4 &worldTransform, QVector3D &intPt, int &triangleIndex );
 
-  /**
-   * Returns a ray coming out of center of camera
-   * \note With switch to Qt 5.11 we may remove it and use QRayCaster/QScreenRayCaster instead.
-   * \since QGIS 3.4
-   */
-  Ray3D rayForCameraCenter( const Qt3DRender::QCamera *camera );
-}
+} // namespace QgsRayCastingUtils
 
 /// @endcond
 

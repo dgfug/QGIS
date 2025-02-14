@@ -18,6 +18,8 @@
 #include <limits>
 #include <QTime>
 #include <QDateTime>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
 
 #include "qgsmeshlayerutils.h"
 #include "qgsmeshtimesettings.h"
@@ -84,11 +86,11 @@ QgsMeshDataBlock QgsMeshLayerUtils::datasetValues(
   }
   else
   {
-    const QgsMesh3dAveragingMethod *averagingMethod = meshLayer->rendererSettings().averagingMethod();
+    const QgsMesh3DAveragingMethod *averagingMethod = meshLayer->rendererSettings().averagingMethod();
     if ( !averagingMethod )
       return block;
 
-    const QgsMesh3dDataBlock block3d = meshLayer->dataset3dValues( index, valueIndex, count );
+    const QgsMesh3DDataBlock block3d = meshLayer->dataset3dValues( index, valueIndex, count );
     if ( !block3d.isValid() )
       return block;
 
@@ -199,13 +201,14 @@ QVector<double> QgsMeshLayerUtils::calculateMagnitudes( const QgsMeshDataBlock &
 
 QgsRectangle QgsMeshLayerUtils::boundingBoxToScreenRectangle(
   const QgsMapToPixel &mtp,
-  const QgsRectangle &bbox
+  const QgsRectangle &bbox,
+  double devicePixelRatio
 )
 {
-  const QgsPointXY topLeft = mtp.transform( bbox.xMinimum(), bbox.yMaximum() );
-  const QgsPointXY topRight = mtp.transform( bbox.xMaximum(), bbox.yMaximum() );
-  const QgsPointXY bottomLeft = mtp.transform( bbox.xMinimum(), bbox.yMinimum() );
-  const QgsPointXY bottomRight = mtp.transform( bbox.xMaximum(), bbox.yMinimum() );
+  const QgsPointXY topLeft = mtp.transform( bbox.xMinimum(), bbox.yMaximum() ) * devicePixelRatio;
+  const QgsPointXY topRight = mtp.transform( bbox.xMaximum(), bbox.yMaximum() ) * devicePixelRatio;
+  const QgsPointXY bottomLeft = mtp.transform( bbox.xMinimum(), bbox.yMinimum() ) * devicePixelRatio;
+  const QgsPointXY bottomRight = mtp.transform( bbox.xMaximum(), bbox.yMinimum() ) * devicePixelRatio;
 
   const double xMin = std::min( {topLeft.x(), topRight.x(), bottomLeft.x(), bottomRight.x()} );
   const double xMax = std::max( {topLeft.x(), topRight.x(), bottomLeft.x(), bottomRight.x()} );
@@ -223,9 +226,10 @@ void QgsMeshLayerUtils::boundingBoxToScreenRectangle(
   int &leftLim,
   int &rightLim,
   int &bottomLim,
-  int &topLim )
+  int &topLim,
+  double devicePixelRatio )
 {
-  const QgsRectangle screenBBox = boundingBoxToScreenRectangle( mtp, bbox );
+  const QgsRectangle screenBBox = boundingBoxToScreenRectangle( mtp, bbox, devicePixelRatio );
 
   bottomLim = std::max( int( screenBBox.yMinimum() ), 0 );
   topLim = std::min( int( screenBBox.yMaximum() ), outputSize.height() - 1 );
@@ -285,6 +289,13 @@ static bool E3T_physicalToBarycentric( const QgsPointXY &pA, const QgsPointXY &p
   return true;
 }
 
+bool QgsMeshLayerUtils::calculateBarycentricCoordinates(
+  const QgsPointXY &pA, const QgsPointXY &pB, const QgsPointXY &pC, const QgsPointXY &pP,
+  double &lam1, double &lam2, double &lam3 )
+{
+  return E3T_physicalToBarycentric( pA, pB, pC, pP, lam1, lam2, lam3 );
+}
+
 double QgsMeshLayerUtils::interpolateFromVerticesData( const QgsPointXY &p1, const QgsPointXY &p2, const QgsPointXY &p3,
     double val1, double val2, double val3, const QgsPointXY &pt )
 {
@@ -293,6 +304,22 @@ double QgsMeshLayerUtils::interpolateFromVerticesData( const QgsPointXY &p1, con
     return std::numeric_limits<double>::quiet_NaN();
 
   return lam1 * val3 + lam2 * val2 + lam3 * val1;
+}
+
+double QgsMeshLayerUtils::interpolateZForPoint( const QgsTriangularMesh &mesh, double x, double y )
+{
+  const QgsPointXY point( x, y );
+  const int faceIndex = mesh.faceIndexForPoint_v2( point );
+  if ( faceIndex < 0 || faceIndex >= mesh.triangles().count() )
+    return std::numeric_limits<float>::quiet_NaN();
+
+  const QgsMeshFace &face = mesh.triangles().at( faceIndex );
+
+  const QgsPoint p1 = mesh.vertices().at( face.at( 0 ) );
+  const QgsPoint p2 = mesh.vertices().at( face.at( 1 ) );
+  const QgsPoint p3 = mesh.vertices().at( face.at( 2 ) );
+
+  return QgsMeshLayerUtils::interpolateFromVerticesData( p1, p2, p3, p1.z(), p2.z(), p3.z(), point );
 }
 
 double QgsMeshLayerUtils::interpolateFromVerticesData( double fraction, double val1, double val2 )
@@ -643,6 +670,11 @@ QVector<QVector3D> QgsMeshLayerUtils::calculateNormals( const QgsTriangularMesh 
       const int index1( face.at( ( i + 1 ) % 3 ) );
       const int index2( face.at( ( i + 2 ) % 3 ) );
 
+      if ( std::isnan( verticalMagnitude[index] ) ||
+           std::isnan( verticalMagnitude[index1] ) ||
+           std::isnan( verticalMagnitude[index2] ) )
+        continue;
+
       const QgsMeshVertex &vert( triangularMesh.vertices().at( index ) );
       const QgsMeshVertex &otherVert1( triangularMesh.vertices().at( index1 ) );
       const QgsMeshVertex &otherVert2( triangularMesh.vertices().at( index2 ) );
@@ -670,6 +702,19 @@ QVector<QVector3D> QgsMeshLayerUtils::calculateNormals( const QgsTriangularMesh 
   }
 
   return normals;
+}
+
+bool QgsMeshLayerUtils::haveSameParentQuantity( const QgsMeshLayer *layer, const QgsMeshDatasetIndex &index1, const QgsMeshDatasetIndex &index2 )
+{
+  const QgsMeshDatasetGroupMetadata metadata1 = layer->datasetGroupMetadata( index1 );
+  if ( metadata1.parentQuantityName().isEmpty() )
+    return false;
+
+  const QgsMeshDatasetGroupMetadata metadata2 = layer->datasetGroupMetadata( index2 );
+  if ( metadata2.parentQuantityName().isEmpty() )
+    return false;
+
+  return metadata1.parentQuantityName().compare( metadata2.parentQuantityName(), Qt::CaseInsensitive ) == 0;
 }
 
 ///@endcond

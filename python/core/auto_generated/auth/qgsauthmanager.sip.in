@@ -3,9 +3,8 @@
  *                                                                      *
  * src/core/auth/qgsauthmanager.h                                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
-
 
 
 
@@ -28,6 +27,7 @@ and to utilize configurations through various authentication method plugins
 %End
   public:
 
+
     enum MessageLevel
     {
       INFO,
@@ -35,7 +35,7 @@ and to utilize configurations through various authentication method plugins
       CRITICAL
     };
 
-    bool init( const QString &pluginPath = QString(),  const QString &authDatabasePath = QString() );
+ bool init( const QString &pluginPath = QString(),  const QString &authDatabasePath = QString() ) /Deprecated="Since 3.36. Use setup() or ensureInitialized() instead."/;
 %Docstring
 init initialize QCA, prioritize qca-ossl plugin and optionally set up the authentication database
 
@@ -47,23 +47,77 @@ init initialize QCA, prioritize qca-ossl plugin and optionally set up the authen
 .. seealso:: :py:func:`QgsApplication.pluginPath`
 
 .. seealso:: :py:func:`QgsApplication.qgisAuthDatabaseFilePath`
+
+.. deprecated:: 3.36
+
+   Use :py:func:`~QgsAuthManager.setup` or :py:func:`~QgsAuthManager.ensureInitialized` instead.
+%End
+
+    void setup( const QString &pluginPath = QString(),  const QString &authDatabasePath = QString() );
+%Docstring
+Sets up the authentication manager configuration.
+
+This method does not initialize the authentication framework, instead that is deferred
+to lazy-initialize when required.
+
+:param pluginPath: the plugin path
+:param authDatabasePath: the authentication DB URI (or just the file path for SQLite)
+
+.. seealso:: :py:func:`ensureInitialized`
+%End
+
+    bool ensureInitialized() const;
+%Docstring
+Performs lazy initialization of the authentication framework, if it has
+not already been done.
+
+.. seealso:: :py:func:`setup`
+
+.. versionadded:: 3.40
 %End
 
     ~QgsAuthManager();
 
-    QSqlDatabase authDatabaseConnection() const;
+    QgsAuthConfigurationStorageRegistry *authConfigurationStorageRegistry() const;
+%Docstring
+Returns the authentication configuration storage registry.
+
+.. versionadded:: 3.40
+%End
+
+ QSqlDatabase authDatabaseConnection() const /Deprecated="Since 3.40. Direct access to the DB is not allowed, use QgsAuthConfigurationStorage API instead."/;
 %Docstring
 Sets up the application instance of the authentication database connection
+
+.. deprecated:: 3.40
+
+   Direct access to the DB is not allowed, use :py:class:`QgsAuthConfigurationStorage` API instead.
 %End
 
-    const QString authDatabaseConfigTable() const;
+ const QString authDatabaseConfigTable() const /Deprecated="Since 3.40. Direct access to the DB is not allowed, use methodConfigTableName() instead."/;
 %Docstring
 Name of the authentication database table that stores configs
+
+.. deprecated:: 3.40
+
+   Direct access to the DB is not allowed, use :py:func:`~QgsAuthManager.methodConfigTableName` instead.
 %End
 
-    const QString authDatabaseServersTable() const;
+    const QString methodConfigTableName() const;
+%Docstring
+Returns the database table from the first ready storage that stores authentication configs,
+or an empty string if none available. The table is prefixed with schema and escaped if necessary.
+
+.. versionadded:: 3.40
+%End
+
+ const QString authDatabaseServersTable() const /Deprecated="Since 3.40. Direct access to the DB is not allowed, use QgsAuthConfigurationStorage API instead."/;
 %Docstring
 Name of the authentication database table that stores server exceptions/configs
+
+.. deprecated:: 3.40
+
+   Direct access to the DB is not allowed, use :py:class:`QgsAuthConfigurationStorage` API instead.
 %End
 
 
@@ -77,12 +131,37 @@ Whether QCA has the qca-ossl plugin, which a base run-time requirement
 Standard message for when QCA's qca-ossl plugin is missing and system is disabled
 %End
 
-    const QString authenticationDatabasePath() const;
+ const QString authenticationDatabasePath() const;
 %Docstring
 The standard authentication database file in ~/.qgis3/ or defined location
 
 .. seealso:: :py:func:`QgsApplication.qgisAuthDatabaseFilePath`
+
+.. deprecated:: 3.40
+
+   Use :py:func:`~QgsAuthManager.authenticationDatabaseUri` instead.
 %End
+
+    static bool isFilesystemBasedDatabase( const QString &uri );
+%Docstring
+Returns the ``True`` if the ``uri`` is a filesystem-based database (SQLite).
+%End
+
+
+    const QString authenticationDatabaseUri() const;
+%Docstring
+Returns the authentication database connection URI.
+
+.. versionadded:: 3.40
+%End
+
+    const QString authenticationDatabaseUriStripped() const;
+%Docstring
+Returns the authentication database connection URI with the password stripped.
+
+.. versionadded:: 3.40
+%End
+
 
     bool setMasterPassword( bool verify = false );
 %Docstring
@@ -95,7 +174,7 @@ Main call to initially set or continually check master password is set
 :param verify: Whether password's hash was saved in authentication database
 %End
 
-    bool setMasterPassword( const QString &pass, bool verify = false );
+    bool setMasterPassword( const QString &password, bool verify = false );
 %Docstring
 Overloaded call to reset master password or set it initially without user interaction
 
@@ -103,7 +182,7 @@ Overloaded call to reset master password or set it initially without user intera
 
    Only use this in trusted reset functions, unit tests or user/app setup scripts!
 
-:param pass: Password to use
+:param password: Password to use
 :param verify: Whether password's hash was saved in authentication database
 %End
 
@@ -137,23 +216,24 @@ Clear supplied master password
    This will not necessarily clear authenticated connections cached in network connection managers
 %End
 
-    bool masterPasswordSame( const QString &pass ) const;
+    bool masterPasswordSame( const QString &password ) const;
 %Docstring
 Check whether supplied password is the same as the one already set
 
-:param pass: Password to verify
+:param password: Password to verify
 %End
 
     bool resetMasterPassword( const QString &newpass, const QString &oldpass, bool keepbackup, QString *backuppath /In,Out/ = 0 );
 %Docstring
-Reset the master password to a new one, then re-encrypt all previous
-configs in a new database file, optionally backup curren database
+Reset the master password to a new one, then re-encrypts all previous
+configs with the new password.
 
 :param newpass: New master password to replace existing
 :param oldpass: Current master password to replace existing
-:param keepbackup: Whether to keep the generated backup of current database
+:param keepbackup: Whether to keep the generated backup of current database (if using file-based storage)
 :param backuppath: Where the backup is located, if kept
 %End
+
 
 
 
@@ -249,7 +329,7 @@ Verify if provided authentication id is unique
 :param id: Id to check
 %End
 
-    bool hasConfigId( const QString &txt ) const;
+    static bool hasConfigId( const QString &txt );
 %Docstring
 Returns whether a string includes an authcfg ID token
 
@@ -416,8 +496,6 @@ authSetting get an authentication setting (retrieved as string and returned as Q
 :param decrypt: if the value needs decrypted
 
 :return: QVariant( QString ) authentication setting
-
-.. versionadded:: 3.0
 %End
 
     bool existsAuthSetting( const QString &key );
@@ -448,8 +526,6 @@ certIdentity get a certificate identity by ``id`` (sha hash)
 :param id: sha hash of the cert
 
 :return: the certificate
-
-.. versionadded:: 3.0
 %End
 
 
@@ -460,8 +536,6 @@ certIdentityBundleToPem get a certificate identity bundle by ``id`` (sha hash) r
 :param id: sha hash
 
 :return: a list of strings
-
-.. versionadded:: 3.0
 %End
 
     const QList<QSslCertificate> certIdentities();
@@ -469,8 +543,6 @@ certIdentityBundleToPem get a certificate identity bundle by ``id`` (sha hash) r
 certIdentities get certificate identities
 
 :return: list of certificates
-
-.. versionadded:: 3.0
 %End
 
 
@@ -479,8 +551,6 @@ certIdentities get certificate identities
 certIdentityIds get list of certificate identity ids from database
 
 :return: list of certificate ids
-
-.. versionadded:: 3.0
 %End
 
     bool existsCertIdentity( const QString &id );
@@ -507,8 +577,6 @@ sslCertCustomConfig get an SSL certificate custom config by ``id`` (sha hash) an
 :param hostport: string host:port
 
 :return: a SSL certificate custom config
-
-.. versionadded:: 3.0
 %End
 
     const QgsAuthConfigSslServer sslCertCustomConfigByHost( const QString &hostport );
@@ -518,8 +586,6 @@ sslCertCustomConfigByHost get an SSL certificate custom config by ``hostport`` (
 :param hostport: host:port
 
 :return: a SSL certificate custom config
-
-.. versionadded:: 3.0
 %End
 
     const QList<QgsAuthConfigSslServer> sslCertCustomConfigs();
@@ -527,8 +593,6 @@ sslCertCustomConfigByHost get an SSL certificate custom config by ``hostport`` (
 sslCertCustomConfigs get SSL certificate custom configs
 
 :return: list of SSL certificate custom config
-
-.. versionadded:: 3.0
 %End
 
     bool existsSslCertCustomConfig( const QString &id, const QString &hostport );
@@ -581,8 +645,6 @@ certAuthority get a certificate authority by ``id`` (sha hash)
 :param id: sha hash
 
 :return: a certificate
-
-.. versionadded:: 3.0
 %End
 
     bool existsCertAuthority( const QSslCertificate &cert );
@@ -595,13 +657,11 @@ Check if a certificate authority exists
 Remove a certificate authority
 %End
 
-    const QList<QSslCertificate> systemRootCAs();
+    static const QList<QSslCertificate> systemRootCAs();
 %Docstring
 systemRootCAs get root system certificate authorities
 
 :return: list of certificate authorities
-
-.. versionadded:: 3.0
 %End
 
     const QList<QSslCertificate> extraFileCAs();
@@ -609,8 +669,6 @@ systemRootCAs get root system certificate authorities
 extraFileCAs extra file-based certificate authorities
 
 :return: list of certificate authorities
-
-.. versionadded:: 3.0
 %End
 
     const QList<QSslCertificate> databaseCAs();
@@ -618,8 +676,6 @@ extraFileCAs extra file-based certificate authorities
 databaseCAs get database-stored certificate authorities
 
 :return: list of certificate authorities
-
-.. versionadded:: 3.0
 %End
 
     const QMap<QString, QSslCertificate> mappedDatabaseCAs();
@@ -627,8 +683,6 @@ databaseCAs get database-stored certificate authorities
 mappedDatabaseCAs get sha1-mapped database-stored certificate authorities
 
 :return: sha1-mapped certificate authorities
-
-.. versionadded:: 3.0
 %End
 
 
@@ -649,8 +703,6 @@ certTrustPolicy get whether certificate ``cert`` is trusted by user
 :param cert:
 
 :return: DefaultTrust if certificate sha not in trust table, i.e. follows default trust policy
-
-.. versionadded:: 3.0
 %End
 
     bool removeCertTrustPolicies( const QList<QSslCertificate> &certs );
@@ -670,8 +722,6 @@ certificateTrustPolicy get trust policy for a particular certificate ``cert``
 :param cert:
 
 :return: DefaultTrust if certificate sha not in trust table, i.e. follows default trust policy
-
-.. versionadded:: 3.0
 %End
 
     bool setDefaultCertTrustPolicy( QgsAuthCertUtils::CertTrustPolicy policy );
@@ -689,8 +739,6 @@ Gets the default certificate trust policy preferred by user
 certTrustCache get cache of certificate sha1s, per trust policy
 
 :return: trust-policy-mapped certificate sha1s
-
-.. versionadded:: 3.0
 %End
 
     bool rebuildCertTrustCache();
@@ -705,8 +753,6 @@ trustedCaCerts get list of all trusted CA certificates
 :param includeinvalid: whether invalid certs needs to be returned
 
 :return: list of certificates
-
-.. versionadded:: 3.0
 %End
 
     const QList<QSslCertificate> untrustedCaCerts( QList<QSslCertificate> trustedCAs = QList<QSslCertificate>() );
@@ -714,8 +760,6 @@ trustedCaCerts get list of all trusted CA certificates
 untrustedCaCerts get list of untrusted certificate authorities
 
 :return: list of certificates
-
-.. versionadded:: 3.0
 %End
 
     bool rebuildTrustedCaCertsCache();
@@ -728,8 +772,6 @@ Rebuild trusted certificate authorities cache
 trustedCaCertsCache cache of trusted certificate authorities, ready for network connections
 
 :return: list of certificates
-
-.. versionadded:: 3.0
 %End
 
     const QByteArray trustedCaCertsPemText();
@@ -737,14 +779,12 @@ trustedCaCertsCache cache of trusted certificate authorities, ready for network 
 trustedCaCertsPemText get concatenated string of all trusted CA certificates
 
 :return: bye array with all PEM encoded trusted CAs
-
-.. versionadded:: 3.0
 %End
 
 
 
 
-    bool passwordHelperEnabled() const;
+    static bool passwordHelperEnabled();
 %Docstring
 Password helper enabled getter
 
@@ -773,9 +813,22 @@ Store the password manager into the wallet
    Available in Python bindings since QGIS 3.8.0
 %End
 
+
+
     static const QString AUTH_PASSWORD_HELPER_DISPLAY_NAME;
 
+    static QString passwordHelperDisplayName( bool titleCase = false );
+%Docstring
+Returns a translated display name of the password helper (platform dependent).
+
+If ``titleCase`` is ``True`` then a title case version of the string will be returned. Otherwise
+a mid-sentence case version will be returned.
+
+.. versionadded:: 3.42
+%End
+
     static const QString AUTH_MAN_TAG;
+
 
   signals:
 
@@ -791,7 +844,7 @@ Signals emitted on password helper success,
 mainly used in the tests to exit main application loop
 %End
 
-    void messageOut( const QString &message, const QString &tag = QgsAuthManager::AUTH_MAN_TAG, QgsAuthManager::MessageLevel level = QgsAuthManager::INFO ) const;
+ void messageOut( const QString &message, const QString &tag = QgsAuthManager::AUTH_MAN_TAG, QgsAuthManager::MessageLevel level = QgsAuthManager::INFO ) const /Deprecated="Since 3.40. Use messageLog() instead."/;
 %Docstring
 Custom logging signal to relay to console output and :py:class:`QgsMessageLog`
 
@@ -800,9 +853,26 @@ Custom logging signal to relay to console output and :py:class:`QgsMessageLog`
 :param level: Message log level
 
 .. seealso:: :py:class:`QgsMessageLog`
+
+.. deprecated:: 3.40
+
+   Use :py:func:`~QgsAuthManager.messageLog` instead.
 %End
 
-    void passwordHelperMessageOut( const QString &message, const QString &tag = QgsAuthManager::AUTH_MAN_TAG, QgsAuthManager::MessageLevel level = QgsAuthManager::INFO );
+    void messageLog( const QString &message, const QString &tag = QgsAuthManager::AUTH_MAN_TAG, Qgis::MessageLevel level = Qgis::MessageLevel::Info ) const;
+%Docstring
+Custom logging signal to relay to console output and :py:class:`QgsMessageLog`
+
+:param message: Message to send
+:param tag: Associated tag (title)
+:param level: Message log level
+
+.. seealso:: :py:class:`QgsMessageLog`
+
+.. versionadded:: 3.40
+%End
+
+ void passwordHelperMessageOut( const QString &message, const QString &tag = QgsAuthManager::AUTH_MAN_TAG, QgsAuthManager::MessageLevel level = QgsAuthManager::INFO ) /Deprecated="Since 3.40. Use passwordHelperMessageLog() instead."/;
 %Docstring
 Custom logging signal to inform the user about master password <-> password manager interactions
 
@@ -811,8 +881,24 @@ Custom logging signal to inform the user about master password <-> password mana
 :param level: Message log level
 
 .. seealso:: :py:class:`QgsMessageLog`
+
+.. deprecated:: 3.40
+
+   Use :py:func:`~QgsAuthManager.passwordHelperMessageLog` instead.
 %End
 
+    void passwordHelperMessageLog( const QString &message, const QString &tag = QgsAuthManager::AUTH_MAN_TAG, Qgis::MessageLevel level = Qgis::MessageLevel::Info );
+%Docstring
+Custom logging signal to inform the user about master password <-> password manager interactions
+
+:param message: Message to send
+:param tag: Associated tag (title)
+:param level: Message log level
+
+.. seealso:: :py:class:`QgsMessageLog`
+
+.. versionadded:: 3.40
+%End
 
     void masterPasswordVerified( bool verified );
 %Docstring
@@ -856,5 +942,5 @@ Clear an authentication config from its associated authentication method cache
  *                                                                      *
  * src/core/auth/qgsauthmanager.h                                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -17,6 +17,7 @@
 
 #include "qgsapplication.h"
 #include "qgsmessagebaritem.h"
+#include "moc_qgsmessagebaritem.cpp"
 #include "qgsmessagebar.h"
 #include "qgsgui.h"
 #include "qgsnative.h"
@@ -165,7 +166,7 @@ void QgsMessageBarItem::writeContent()
       connect( mTextBrowser, &QTextBrowser::anchorClicked, this, &QgsMessageBarItem::urlClicked );
 
       mTextBrowser->setFrameShape( QFrame::NoFrame );
-      // stylesheet set here so Qt-style substitued scrollbar arrows can show within limited height
+      // stylesheet set here so Qt-style substituted scrollbar arrows can show within limited height
       // adjusts to height of font set in app options
       mTextBrowser->setStyleSheet( "QTextEdit { background-color: rgba(0,0,0,0); margin-top: 0.25em; max-height: 1.75em; min-height: 1.75em; } "
                                    "QScrollBar { background-color: rgba(0,0,0,0); } "
@@ -289,7 +290,7 @@ void QgsMessageBarItem::urlClicked( const QUrl &url )
 {
   const QFileInfo file( url.toLocalFile() );
   if ( file.exists() && !file.isDir() )
-    QgsGui::instance()->nativePlatformInterface()->openFileExplorerAndSelectFile( url.toLocalFile() );
+    QgsGui::nativePlatformInterface()->openFileExplorerAndSelectFile( url.toLocalFile() );
   else
     QDesktopServices::openUrl( url );
   dismiss();

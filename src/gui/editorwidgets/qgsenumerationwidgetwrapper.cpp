@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsenumerationwidgetwrapper.h"
+#include "moc_qgsenumerationwidgetwrapper.cpp"
 
 #include "qgsvectorlayer.h"
 #include "qgsvectordataprovider.h"
@@ -45,7 +46,10 @@ void QgsEnumerationWidgetWrapper::showIndeterminateState()
 
 QWidget *QgsEnumerationWidgetWrapper::createWidget( QWidget *parent )
 {
-  return new QComboBox( parent );
+  QComboBox *combo = new QComboBox( parent );
+  combo->setMinimumContentsLength( 1 );
+  combo->setSizeAdjustPolicy( QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon );
+  return combo;
 }
 
 void QgsEnumerationWidgetWrapper::initWidget( QWidget *editor )
@@ -62,8 +66,7 @@ void QgsEnumerationWidgetWrapper::initWidget( QWidget *editor )
     {
       mComboBox->addItem( s, s );
     }
-    connect( mComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ),
-             this, static_cast<void ( QgsEditorWidgetWrapper::* )()>( &QgsEditorWidgetWrapper::emitValueChanged ) );
+    connect( mComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, static_cast<void ( QgsEditorWidgetWrapper::* )()>( &QgsEditorWidgetWrapper::emitValueChanged ) );
   }
 }
 
@@ -79,4 +82,3 @@ void QgsEnumerationWidgetWrapper::updateValues( const QVariant &value, const QVa
     mComboBox->setCurrentIndex( mComboBox->findData( value ) );
   }
 }
-

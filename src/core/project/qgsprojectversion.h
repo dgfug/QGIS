@@ -74,25 +74,12 @@ class CORE_EXPORT QgsProjectVersion
      */
     bool isNull() const;
 
-    /**
-     * Boolean equal operator
-     */
     bool operator==( const QgsProjectVersion &other ) const;
-
-    /**
-     * Boolean not equal operator
-     */
     bool operator!=( const QgsProjectVersion &other ) const;
-
-    /**
-     * Boolean >= operator
-     */
     bool operator>=( const QgsProjectVersion &other ) const;
-
-    /**
-     * Boolean > operator
-     */
     bool operator>( const QgsProjectVersion &other ) const;
+    bool operator<( const QgsProjectVersion &other ) const;
+    bool operator<=( const QgsProjectVersion &other ) const;
 
   private:
     int mMajor = 0;

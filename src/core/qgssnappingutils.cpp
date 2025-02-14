@@ -14,16 +14,16 @@
  ***************************************************************************/
 
 #include "qgssnappingutils.h"
+#include "moc_qgssnappingutils.cpp"
 #include "qgsgeometry.h"
 #include "qgsproject.h"
 #include "qgsvectorlayer.h"
 #include "qgslogger.h"
-#include "qgsrenderer.h"
 #include "qgsrendercontext.h"
 
 QgsSnappingUtils::QgsSnappingUtils( QObject *parent, bool enableSnappingForInvisibleFeature )
   : QObject( parent )
-  , mSnappingConfig( QgsProject::instance() )
+  , mSnappingConfig( QgsProject::instance() ) // skip-keyword-check
   , mEnableSnappingForInvisibleFeature( enableSnappingForInvisibleFeature )
 {
 }
@@ -43,6 +43,11 @@ QgsPointLocator *QgsSnappingUtils::locatorForLayer( QgsVectorLayer *vl )
   {
     QgsPointLocator *vlpl = new QgsPointLocator( vl, destinationCrs(), mMapSettings.transformContext(), nullptr );
     connect( vlpl, &QgsPointLocator::initFinished, this, &QgsSnappingUtils::onInitFinished );
+    connect( vl, &QObject::destroyed, this, [this, vl]()
+    {
+      delete mLocators.take( vl );
+    } );
+
     mLocators.insert( vl, vlpl );
   }
   return mLocators.value( vl );
@@ -60,7 +65,7 @@ void QgsSnappingUtils::clearAllLocators()
 
 QgsPointLocator *QgsSnappingUtils::locatorForLayerUsingStrategy( QgsVectorLayer *vl, const QgsPointXY &pointMap, double tolerance )
 {
-  if ( vl->geometryType() == QgsWkbTypes::NullGeometry || mStrategy == IndexNeverFull )
+  if ( vl->geometryType() == Qgis::GeometryType::Null || mStrategy == IndexNeverFull )
     return nullptr;
 
   QgsRectangle aoi( pointMap.x() - tolerance, pointMap.y() - tolerance,
@@ -127,7 +132,7 @@ static QgsPointLocator::Match _findClosestSegmentIntersection( const QgsPointXY 
 
   // get intersection points
   QList<QgsPointXY> newPoints;
-  if ( g.wkbType() == QgsWkbTypes::LineString )
+  if ( g.wkbType() == Qgis::WkbType::LineString )
   {
     const auto constAsPolyline = g.asPolyline();
     for ( const QgsPointXY &p : constAsPolyline )
@@ -136,7 +141,7 @@ static QgsPointLocator::Match _findClosestSegmentIntersection( const QgsPointXY 
         newPoints << p;
     }
   }
-  if ( g.wkbType() == QgsWkbTypes::MultiLineString )
+  if ( g.wkbType() == Qgis::WkbType::MultiLineString )
   {
     const auto constAsMultiPolyline = g.asMultiPolyline();
     for ( const QgsPolylineXY &pl : constAsMultiPolyline )
@@ -236,20 +241,20 @@ static void _updateBestMatch( QgsPointLocator::Match &bestMatch, const QgsPointX
   }
   if ( type & QgsPointLocator::Centroid )
   {
-    _replaceIfBetter( bestMatch, loc->nearestCentroid( pointMap, tolerance, filter ), tolerance );
+    _replaceIfBetter( bestMatch, loc->nearestCentroid( pointMap, tolerance, filter, relaxed ), tolerance );
   }
   if ( type & QgsPointLocator::MiddleOfSegment )
   {
-    _replaceIfBetter( bestMatch, loc->nearestMiddleOfSegment( pointMap, tolerance, filter ), tolerance );
+    _replaceIfBetter( bestMatch, loc->nearestMiddleOfSegment( pointMap, tolerance, filter, relaxed ), tolerance );
   }
   if ( type & QgsPointLocator::LineEndpoint )
   {
-    _replaceIfBetter( bestMatch, loc->nearestLineEndpoints( pointMap, tolerance, filter ), tolerance );
+    _replaceIfBetter( bestMatch, loc->nearestLineEndpoints( pointMap, tolerance, filter, relaxed ), tolerance );
   }
 }
 
 
-static QgsPointLocator::Types _snappingTypeToPointLocatorType( QgsSnappingConfig::SnappingTypeFlag type )
+static QgsPointLocator::Types _snappingTypeToPointLocatorType( Qgis::SnappingTypes type )
 {
   return QgsPointLocator::Types( static_cast<int>( type ) );
 }
@@ -272,9 +277,9 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
     return QgsPointLocator::Match();
   }
 
-  if ( mSnappingConfig.mode() == QgsSnappingConfig::ActiveLayer )
+  if ( mSnappingConfig.mode() == Qgis::SnappingMode::ActiveLayer )
   {
-    if ( !mCurrentLayer || mSnappingConfig.typeFlag() == QgsSnappingConfig::NoSnapFlag )
+    if ( !mCurrentLayer || mSnappingConfig.typeFlag().testFlag( Qgis::SnappingType::NoSnap ) )
       return QgsPointLocator::Match();
 
     // data from project
@@ -291,21 +296,15 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
     QgsPointLocator::Match bestMatch;
     QgsPointLocator::MatchList edges; // for snap on intersection
     _updateBestMatch( bestMatch, pointMap, loc, type, tolerance, filter, relaxed );
-
     if ( mSnappingConfig.intersectionSnapping() )
-    {
-      QgsPointLocator *locEdges = locatorForLayerUsingStrategy( mCurrentLayer, pointMap, tolerance );
-      if ( !locEdges )
-        return QgsPointLocator::Match();
-      edges = locEdges->edgesInRect( pointMap, tolerance );
-    }
+      edges = loc->edgesInRect( pointMap, tolerance, filter, relaxed );
 
     for ( QgsVectorLayer *vl : mExtraSnapLayers )
     {
       QgsPointLocator *loc = locatorForLayerUsingStrategy( vl, pointMap, tolerance );
       _updateBestMatch( bestMatch, pointMap, loc, type, tolerance, filter, false );
       if ( mSnappingConfig.intersectionSnapping() )
-        edges << loc->edgesInRect( pointMap, tolerance );
+        edges << loc->edgesInRect( pointMap, tolerance, filter, false );
     }
 
     if ( mSnappingConfig.intersectionSnapping() )
@@ -315,7 +314,7 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
 
     return bestMatch;
   }
-  else if ( mSnappingConfig.mode() == QgsSnappingConfig::AdvancedConfiguration )
+  else if ( mSnappingConfig.mode() == Qgis::SnappingMode::AdvancedConfiguration )
   {
     QList<LayerAndAreaOfInterest> layers;
     QList<LayerConfig> filteredConfigs;
@@ -357,11 +356,9 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
       if ( QgsPointLocator *loc = locatorForLayerUsingStrategy( layerConfig.layer, pointMap, tolerance ) )
       {
         _updateBestMatch( bestMatch, pointMap, loc, layerConfig.type, tolerance, filter, relaxed );
-
         if ( mSnappingConfig.intersectionSnapping() )
-        {
-          edges << loc->edgesInRect( pointMap, tolerance );
-        }
+          edges << loc->edgesInRect( pointMap, tolerance, filter, relaxed );
+
         // We keep the maximum tolerance for intersection snapping and extra snapping
         maxTolerance = std::max( maxTolerance, tolerance );
         // To avoid yet an additional setting, on extra snappings, we use the combination of all enabled snap types
@@ -374,7 +371,7 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
       QgsPointLocator *loc = locatorForLayerUsingStrategy( vl, pointMap, maxTolerance );
       _updateBestMatch( bestMatch, pointMap, loc, maxTypes, maxTolerance, filter, false );
       if ( mSnappingConfig.intersectionSnapping() )
-        edges << loc->edgesInRect( pointMap, maxTolerance );
+        edges << loc->edgesInRect( pointMap, maxTolerance, filter, false );
     }
 
     if ( mSnappingConfig.intersectionSnapping() )
@@ -382,7 +379,7 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
 
     return bestMatch;
   }
-  else if ( mSnappingConfig.mode() == QgsSnappingConfig::AllLayers )
+  else if ( mSnappingConfig.mode() == Qgis::SnappingMode::AllLayers )
   {
     // data from project
     double tolerance = QgsTolerance::toleranceInProjectUnits( mSnappingConfig.tolerance(), nullptr, mMapSettings, mSnappingConfig.units() );
@@ -390,7 +387,7 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
     QgsRectangle aoi = _areaOfInterest( pointMap, tolerance );
 
     QList<LayerAndAreaOfInterest> layers;
-    const auto constLayers = mMapSettings.layers();
+    const auto constLayers = mMapSettings.layers( true );
     for ( QgsMapLayer *layer : constLayers )
       if ( QgsVectorLayer *vl = qobject_cast<QgsVectorLayer *>( layer ) )
         layers << qMakePair( vl, aoi );
@@ -405,9 +402,8 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
       if ( QgsPointLocator *loc = locatorForLayerUsingStrategy( vl, pointMap, tolerance ) )
       {
         _updateBestMatch( bestMatch, pointMap, loc, type, tolerance, filter, relaxed );
-
         if ( mSnappingConfig.intersectionSnapping() )
-          edges << loc->edgesInRect( pointMap, tolerance );
+          edges << loc->edgesInRect( pointMap, tolerance, filter, relaxed );
       }
     }
 
@@ -416,7 +412,7 @@ QgsPointLocator::Match QgsSnappingUtils::snapToMap( const QgsPointXY &pointMap, 
       QgsPointLocator *loc = locatorForLayerUsingStrategy( vl, pointMap, tolerance );
       _updateBestMatch( bestMatch, pointMap, loc, type, tolerance, filter, false );
       if ( mSnappingConfig.intersectionSnapping() )
-        edges << loc->edgesInRect( pointMap, tolerance );
+        edges << loc->edgesInRect( pointMap, tolerance, filter, false );
     }
 
     if ( mSnappingConfig.intersectionSnapping() )
@@ -449,7 +445,7 @@ void QgsSnappingUtils::prepareIndex( const QList<LayerAndAreaOfInterest> &layers
   {
     QgsVectorLayer *vl = entry.first;
 
-    if ( vl->geometryType() == QgsWkbTypes::NullGeometry || mStrategy == IndexNeverFull )
+    if ( vl->geometryType() == Qgis::GeometryType::Null || mStrategy == IndexNeverFull )
       continue;
 
     QgsPointLocator *loc = locatorForLayer( vl );
@@ -542,7 +538,7 @@ void QgsSnappingUtils::prepareIndex( const QList<LayerAndAreaOfInterest> &layers
 
     if ( !relaxed )
     {
-      QgsDebugMsg( QStringLiteral( "Prepare index total: %1 ms" ).arg( t.elapsed() ) );
+      QgsDebugMsgLevel( QStringLiteral( "Prepare index total: %1 ms" ).arg( t.elapsed() ), 2 );
     }
   }
 }
@@ -620,9 +616,9 @@ QString QgsSnappingUtils::dump()
 
   QList<LayerConfig> layers;
 
-  if ( mSnappingConfig.mode() == QgsSnappingConfig::ActiveLayer )
+  if ( mSnappingConfig.mode() == Qgis::SnappingMode::ActiveLayer )
   {
-    if ( mSnappingConfig.mode() == QgsSnappingConfig::ActiveLayer && !mCurrentLayer )
+    if ( mSnappingConfig.mode() == Qgis::SnappingMode::ActiveLayer && !mCurrentLayer )
     {
       msg += QLatin1String( "no current layer!" );
       return msg;
@@ -630,16 +626,16 @@ QString QgsSnappingUtils::dump()
 
     layers << LayerConfig( mCurrentLayer, _snappingTypeToPointLocatorType( mSnappingConfig.typeFlag() ), mSnappingConfig.tolerance(), mSnappingConfig.units() );
   }
-  else if ( mSnappingConfig.mode() == QgsSnappingConfig::AllLayers )
+  else if ( mSnappingConfig.mode() == Qgis::SnappingMode::AllLayers )
   {
-    const auto constLayers = mMapSettings.layers();
+    const auto constLayers = mMapSettings.layers( true );
     for ( QgsMapLayer *layer : constLayers )
     {
       if ( QgsVectorLayer *vl = qobject_cast<QgsVectorLayer *>( layer ) )
         layers << LayerConfig( vl, _snappingTypeToPointLocatorType( mSnappingConfig.typeFlag() ), mSnappingConfig.tolerance(), mSnappingConfig.units() );
     }
   }
-  else if ( mSnappingConfig.mode() == QgsSnappingConfig::AdvancedConfiguration )
+  else if ( mSnappingConfig.mode() == Qgis::SnappingMode::AdvancedConfiguration )
   {
     layers = mLayers;
   }
@@ -650,7 +646,7 @@ QString QgsSnappingUtils::dump()
     msg += QString( "layer : %1\n"
                     "config: %2   tolerance %3 %4\n" )
            .arg( layer.layer->name() )
-           .arg( layer.type ).arg( layer.tolerance ).arg( layer.unit );
+           .arg( layer.type ).arg( layer.tolerance ).arg( static_cast<int>( layer.unit ) );
 
     if ( mStrategy == IndexAlwaysFull || mStrategy == IndexHybrid || mStrategy == IndexExtent )
     {
@@ -706,7 +702,7 @@ void QgsSnappingUtils::onIndividualLayerSettingsChanged( const QHash<QgsVectorLa
   {
     if ( i->enabled() )
     {
-      mLayers.append( LayerConfig( i.key(), _snappingTypeToPointLocatorType( static_cast<QgsSnappingConfig::SnappingTypeFlag>( i->typeFlag() ) ), i->tolerance(), i->units() ) );
+      mLayers.append( LayerConfig( i.key(), _snappingTypeToPointLocatorType( static_cast<Qgis::SnappingTypes>( i->typeFlag() ) ), i->tolerance(), i->units() ) );
     }
   }
 }

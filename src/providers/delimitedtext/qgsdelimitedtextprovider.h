@@ -34,6 +34,7 @@ class QgsGeometry;
 class QgsPointXY;
 class QFile;
 class QTextStream;
+class QgsFeedback;
 
 class QgsDelimitedTextFeatureIterator;
 class QgsExpression;
@@ -58,12 +59,11 @@ class QgsSpatialIndex;
  * between QgsDelimitedTextFile and QgsDelimitedTextProvider.
  *
  */
-class QgsDelimitedTextProvider final: public QgsVectorDataProvider
+class QgsDelimitedTextProvider final : public QgsVectorDataProvider
 {
     Q_OBJECT
 
   public:
-
     static const QString TEXT_PROVIDER_KEY;
     static const QString TEXT_PROVIDER_DESCRIPTION;
 
@@ -81,7 +81,7 @@ class QgsDelimitedTextProvider final: public QgsVectorDataProvider
       GeomAsWkt
     };
 
-    explicit QgsDelimitedTextProvider( const QString &uri, const QgsDataProvider::ProviderOptions &providerOptions, QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() );
+    explicit QgsDelimitedTextProvider( const QString &uri, const QgsDataProvider::ProviderOptions &providerOptions, Qgis::DataProviderReadFlags flags = Qgis::DataProviderReadFlags() );
     ~QgsDelimitedTextProvider() override;
 
     /* Implementation of functions from QgsVectorDataProvider */
@@ -89,19 +89,22 @@ class QgsDelimitedTextProvider final: public QgsVectorDataProvider
     QgsAbstractFeatureSource *featureSource() const override;
     QString storageType() const override;
     QgsFeatureIterator getFeatures( const QgsFeatureRequest &request ) const override;
-    QgsWkbTypes::Type wkbType() const override;
+    Qgis::WkbType wkbType() const override;
     long long featureCount() const override;
     QgsFields fields() const override;
-    QgsVectorDataProvider::Capabilities capabilities() const override;
+    Qgis::VectorProviderCapabilities capabilities() const override;
     bool createSpatialIndex() override;
-    QgsFeatureSource::SpatialIndexPresence hasSpatialIndex() const override;
+    Qgis::SpatialIndexPresence hasSpatialIndex() const override;
     QString name() const override;
     QString description() const override;
     QgsRectangle extent() const override;
+    QgsBox3D extent3D() const override;
     bool isValid() const override;
     QgsCoordinateReferenceSystem crs() const override;
     bool setSubsetString( const QString &subset, bool updateFeatureCount = true ) override;
-    bool supportsSubsetString() const override { return true; }
+    bool supportsSubsetString() const override;
+    QString subsetStringDialect() const override;
+    QString subsetStringHelpUrl() const override;
     QString subsetString() const override
     {
       return mSubsetString;
@@ -133,18 +136,23 @@ class QgsDelimitedTextProvider final: public QgsVectorDataProvider
      * \param message  Pointer to a string to receive a status message
      * \returns A list of field type strings, empty if not found or not valid
      */
-    QStringList readCsvtFieldTypes( const QString &filename, QString *message = nullptr );
+    static QStringList readCsvtFieldTypes( const QString &filename, QString *message = nullptr );
 
     static QString providerKey();
+
+    /**
+     * \brief scanFile scans the file to determine field types and other information about the data
+     * \param buildIndexes build spatial indexes
+     * \param forceFullScan force a full scan even if the  read flag SkipFullScan is set (when this flag is set the scan will exit after the third record to avoid false boolean detection).
+     * \param feedback optional feedback to report scan progress and cancel.
+     */
+    void scanFile( bool buildIndexes, bool forceFullScan = false, QgsFeedback *feedback = nullptr );
 
   private slots:
 
     void onFileUpdated();
 
   private:
-
-    void scanFile( bool buildIndexes );
-
     //some of these methods const, as they need to be called from const methods such as extent()
     void rescanFile() const;
     void resetCachedSubset() const;
@@ -160,6 +168,8 @@ class QgsDelimitedTextProvider final: public QgsVectorDataProvider
     static bool pointFromXY( QString &sX, QString &sY, QgsPoint &point, const QString &decimalPoint, bool xyDms );
     static void appendZM( QString &sZ, QString &sM, QgsPoint &point, const QString &decimalPoint );
 
+    QList<QPair<QString, QString>> booleanLiterals() const;
+
     // mLayerValid defines whether the layer has been loaded as a valid layer
     bool mLayerValid = false;
     // mValid defines whether the layer is currently valid (may differ from
@@ -167,14 +177,14 @@ class QgsDelimitedTextProvider final: public QgsVectorDataProvider
     mutable bool mValid = false;
 
     //! Text file
-    std::unique_ptr< QgsDelimitedTextFile > mFile;
+    std::unique_ptr<QgsDelimitedTextFile> mFile;
 
     // Fields
     GeomRepresentationType mGeomRep = GeomNone;
     mutable QList<int> attributeColumns;
     QgsFields attributeFields;
 
-    int mFieldCount = 0;  // Note: this includes field count for wkt field
+    int mFieldCount = 0; // Note: this includes field count for wkt field
     QString mWktFieldName;
     QString mXFieldName;
     QString mYFieldName;
@@ -193,7 +203,7 @@ class QgsDelimitedTextProvider final: public QgsVectorDataProvider
     bool mWktHasPrefix = false;
 
     //! Layer extent
-    mutable QgsRectangle mExtent;
+    mutable QgsBox3D mExtent;
 
     int mGeomType;
 
@@ -204,7 +214,7 @@ class QgsDelimitedTextProvider final: public QgsVectorDataProvider
 
     QString mSubsetString;
     mutable QString mCachedSubsetString;
-    std::unique_ptr< QgsExpression > mSubsetExpression;
+    std::unique_ptr<QgsExpression> mSubsetExpression;
     bool mBuildSubsetIndex = true;
     mutable QList<quintptr> mSubsetIndex;
     mutable bool mUseSubsetIndex = false;
@@ -223,27 +233,38 @@ class QgsDelimitedTextProvider final: public QgsVectorDataProvider
     // Coordinate reference system
     QgsCoordinateReferenceSystem mCrs;
 
-    QgsWkbTypes::Type mWkbType = QgsWkbTypes::NoGeometry;
-    QgsWkbTypes::GeometryType mGeometryType = QgsWkbTypes::UnknownGeometry;
+    Qgis::WkbType mWkbType = Qgis::WkbType::NoGeometry;
+    Qgis::GeometryType mGeometryType = Qgis::GeometryType::Unknown;
 
     // Spatial index
     bool mBuildSpatialIndex = false;
     mutable bool mUseSpatialIndex;
     mutable bool mCachedUseSpatialIndex;
-    mutable std::unique_ptr< QgsSpatialIndex > mSpatialIndex;
+    mutable std::unique_ptr<QgsSpatialIndex> mSpatialIndex;
+
+    // Store user-defined column types (i.e. types that are not automatically determined)
+    QgsStringMap mUserDefinedFieldTypes;
+
+    QPair<QString, QString> mUserDefinedBooleanLiterals;
+    QMap<int, QPair<QString, QString>> mFieldBooleanLiterals;
 
     friend class QgsDelimitedTextFeatureIterator;
     friend class QgsDelimitedTextFeatureSource;
 };
 
-class QgsDelimitedTextProviderMetadata final: public QgsProviderMetadata
+class QgsDelimitedTextProviderMetadata final : public QgsProviderMetadata
 {
+    Q_OBJECT
   public:
     QgsDelimitedTextProviderMetadata();
-    QgsDataProvider *createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options, QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() ) override;
+    QIcon icon() const override;
+    QgsDataProvider *createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options, Qgis::DataProviderReadFlags flags = Qgis::DataProviderReadFlags() ) override;
     QVariantMap decodeUri( const QString &uri ) const override;
     QString encodeUri( const QVariantMap &parts ) const override;
+    QString absoluteToRelativeUri( const QString &uri, const QgsReadWriteContext &context ) const override;
+    QString relativeToAbsoluteUri( const QString &uri, const QgsReadWriteContext &context ) const override;
     ProviderCapabilities providerCapabilities() const override;
+    QList<Qgis::LayerType> supportedLayerTypes() const override;
 };
 
 #endif

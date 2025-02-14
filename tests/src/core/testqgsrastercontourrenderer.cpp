@@ -20,7 +20,6 @@
 //qgis includes...
 #include "qgsapplication.h"
 #include "qgsproject.h"
-#include "qgsrenderchecker.h"
 #include "qgsrasterlayer.h"
 #include "qgsrastercontourrenderer.h"
 #include "qgslinesymbollayer.h"
@@ -30,28 +29,27 @@
  * \ingroup UnitTests
  * This is a unit test for contour renderer
  */
-class TestQgsRasterContourRenderer : public QObject
+class TestQgsRasterContourRenderer : public QgsTest
 {
     Q_OBJECT
 
   public:
-    TestQgsRasterContourRenderer() = default;
+    TestQgsRasterContourRenderer()
+      : QgsTest( QStringLiteral( "Raster Contour Renderer Tests" ) ) {}
 
   private:
     QString mDataDir;
     QgsRasterLayer *mLayer = nullptr;
-    QString mReport;
     QgsMapSettings *mMapSettings = nullptr;
 
-    bool imageCheck( const QString &testType, QgsRasterLayer *layer, QgsRectangle extent );
-
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init() {} // will be called before each testfunction is executed.
-    void cleanup() {} // will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
+    void init() {}          // will be called before each testfunction is executed.
+    void cleanup() {}       // will be called after every testfunction.
 
     void test_render();
+    void testRenderOpacity();
 };
 
 
@@ -70,26 +68,14 @@ void TestQgsRasterContourRenderer::initTestCase()
 
   mMapSettings = new QgsMapSettings();
   mMapSettings->setLayers( QList<QgsMapLayer *>() << mLayer );
+  mMapSettings->setExtent( mLayer->extent().scaled( 0.5 ) );
+  mMapSettings->setDestinationCrs( mLayer->crs() );
+  mMapSettings->setOutputDpi( 96 );
 }
 
 void TestQgsRasterContourRenderer::cleanupTestCase()
 {
   QgsApplication::exitQgis();
-}
-
-bool TestQgsRasterContourRenderer::imageCheck( const QString &testType, QgsRasterLayer *layer, QgsRectangle extent )
-{
-  mReport += "<h2>" + testType + "</h2>\n";
-  mMapSettings->setExtent( extent );
-  mMapSettings->setDestinationCrs( layer->crs() );
-  mMapSettings->setOutputDpi( 96 );
-  QgsRenderChecker myChecker;
-  myChecker.setControlName( "expected_" + testType );
-  myChecker.setMapSettings( *mMapSettings );
-  myChecker.setColorTolerance( 15 );
-  const bool myResultFlag = myChecker.runTest( testType, 0 );
-  mReport += myChecker.report();
-  return myResultFlag;
 }
 
 void TestQgsRasterContourRenderer::test_render()
@@ -108,7 +94,28 @@ void TestQgsRasterContourRenderer::test_render()
 
   mLayer->setRenderer( renderer );
 
-  QVERIFY( imageCheck( "raster_contours", mLayer, mLayer->extent().scaled( 0.5 ) ) );
+  QGSVERIFYRENDERMAPSETTINGSCHECK( QStringLiteral( "raster_contours" ), QStringLiteral( "raster_contours" ), *mMapSettings );
+}
+
+void TestQgsRasterContourRenderer::testRenderOpacity()
+{
+  // make sure renderer respects layer opacity
+  QgsSimpleLineSymbolLayer *slsl1 = new QgsSimpleLineSymbolLayer( Qt::black, 0.5 );
+  QgsLineSymbol *contourSymbol = new QgsLineSymbol( QgsSymbolLayerList() << slsl1 );
+  QgsSimpleLineSymbolLayer *slsl2 = new QgsSimpleLineSymbolLayer( Qt::black, 1 );
+  QgsLineSymbol *contourIndexSymbol = new QgsLineSymbol( QgsSymbolLayerList() << slsl2 );
+
+  QgsRasterContourRenderer *renderer = new QgsRasterContourRenderer( mLayer->dataProvider() );
+  renderer->setContourSymbol( contourSymbol );
+  renderer->setContourInterval( 100 );
+  renderer->setContourIndexSymbol( contourIndexSymbol );
+  renderer->setContourIndexInterval( 500 );
+  renderer->setDownscale( 10 );
+
+  mLayer->setRenderer( renderer );
+  mLayer->setOpacity( 0.5 );
+
+  QGSVERIFYRENDERMAPSETTINGSCHECK( QStringLiteral( "raster_contours_opacity" ), QStringLiteral( "raster_contours_opacity" ), *mMapSettings );
 }
 
 

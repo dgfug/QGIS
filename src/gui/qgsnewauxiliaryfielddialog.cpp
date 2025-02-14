@@ -16,9 +16,11 @@
  ***************************************************************************/
 
 #include "qgsnewauxiliaryfielddialog.h"
+#include "moc_qgsnewauxiliaryfielddialog.cpp"
 #include "qgsauxiliarystorage.h"
 #include "qgsgui.h"
 #include "qgsapplication.h"
+#include "qgsvariantutils.h"
 
 #include <QMessageBox>
 
@@ -29,11 +31,11 @@ QgsNewAuxiliaryFieldDialog::QgsNewAuxiliaryFieldDialog( const QgsPropertyDefinit
   , mPropertyDefinition( def )
 {
   setupUi( this );
-  QgsGui::instance()->enableAutoGeometryRestore( this );
+  QgsGui::enableAutoGeometryRestore( this );
 
-  mType->addItem( QgsApplication::getThemeIcon( "/mIconFieldText.svg" ), tr( "String" ), QgsPropertyDefinition::DataTypeString );
-  mType->addItem( QgsApplication::getThemeIcon( "/mIconFieldFloat.svg" ), tr( "Real" ), QgsPropertyDefinition::DataTypeNumeric );
-  mType->addItem( QgsApplication::getThemeIcon( "/mIconFieldInteger.svg" ), tr( "Integer" ), QgsPropertyDefinition::DataTypeBoolean );
+  mType->addItem( QgsFields::iconForFieldType( QMetaType::Type::QString ), QgsVariantUtils::typeToDisplayString( QMetaType::Type::QString ), QgsPropertyDefinition::DataTypeString );
+  mType->addItem( QgsFields::iconForFieldType( QMetaType::Type::Double ), QgsVariantUtils::typeToDisplayString( QMetaType::Type::Double ), QgsPropertyDefinition::DataTypeNumeric );
+  mType->addItem( QgsFields::iconForFieldType( QMetaType::Type::Int ), tr( "Integer" ), QgsPropertyDefinition::DataTypeBoolean );
 
   mType->setCurrentIndex( mType->findData( def.dataType() ) );
 
@@ -50,7 +52,7 @@ void QgsNewAuxiliaryFieldDialog::accept()
 
   if ( !mNameOnly )
   {
-    def.setDataType( static_cast< QgsPropertyDefinition::DataType >( mType->currentData().toInt() ) );
+    def.setDataType( static_cast<QgsPropertyDefinition::DataType>( mType->currentData().toInt() ) );
 
     def.setOrigin( "user" );
     def.setName( "custom" );

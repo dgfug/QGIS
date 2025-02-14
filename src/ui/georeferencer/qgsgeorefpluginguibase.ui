@@ -20,7 +20,7 @@
      <x>0</x>
      <y>0</y>
      <width>872</width>
-     <height>25</height>
+     <height>24</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -29,6 +29,7 @@
     </property>
     <addaction name="mActionReset"/>
     <addaction name="mActionOpenRaster"/>
+    <addaction name="mActionOpenVector"/>
     <addaction name="separator"/>
     <addaction name="mActionStartGeoref"/>
     <addaction name="mActionGDALScript"/>
@@ -65,7 +66,7 @@
      <string>Settings</string>
     </property>
     <addaction name="mActionTransformSettings"/>
-    <addaction name="mActionRasterProperties"/>
+    <addaction name="mActionSourceProperties"/>
     <addaction name="mActionGeorefConfig"/>
    </widget>
    <addaction name="menuFile"/>
@@ -91,6 +92,7 @@
     <bool>false</bool>
    </attribute>
    <addaction name="mActionOpenRaster"/>
+   <addaction name="mActionOpenVector"/>
    <addaction name="separator"/>
    <addaction name="mActionStartGeoref"/>
    <addaction name="mActionGDALScript"/>
@@ -119,6 +121,7 @@
    <addaction name="mActionAddPoint"/>
    <addaction name="mActionDeletePoint"/>
    <addaction name="mActionMoveGCPPoint"/>
+   <addaction name="mActionAdvancedDigitizingDock"/>
   </widget>
   <widget class="QToolBar" name="toolBarView">
    <property name="windowTitle">
@@ -148,7 +151,7 @@
   </widget>
   <widget class="QgsDockWidget" name="dockWidgetGCPpoints">
    <property name="allowedAreas">
-    <set>Qt::AllDockWidgetAreas</set>
+    <set>Qt::DockWidgetArea::AllDockWidgetAreas</set>
    </property>
    <property name="windowTitle">
     <string>GCP table</string>
@@ -235,10 +238,10 @@
   </action>
   <action name="mActionAddPoint">
    <property name="text">
-    <string>Add Point</string>
+    <string>Add GCP Point</string>
    </property>
    <property name="statusTip">
-    <string>Add point</string>
+    <string>Add GCP point</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+A</string>
@@ -246,10 +249,10 @@
   </action>
   <action name="mActionDeletePoint">
    <property name="text">
-    <string>Delete Point</string>
+    <string>Delete GCP Point</string>
    </property>
    <property name="statusTip">
-    <string>Delete point</string>
+    <string>Delete GCP point</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+D</string>
@@ -340,9 +343,12 @@
     <string>Ctrl+P</string>
    </property>
   </action>
-  <action name="mActionRasterProperties">
+  <action name="mActionSourceProperties">
    <property name="text">
-    <string>Raster Properties…</string>
+    <string>Source Properties…</string>
+   </property>
+   <property name="toolTip">
+    <string>Source Properties…</string>
    </property>
   </action>
   <action name="mActionMoveGCPPoint">
@@ -380,6 +386,33 @@
    </property>
    <property name="text">
     <string>Reset Georeferencer</string>
+   </property>
+  </action>
+  <action name="mActionOpenVector">
+   <property name="icon">
+    <iconset resource="../../../images/images.qrc">
+     <normaloff>:/images/themes/default/mActionAddOgrLayer.svg</normaloff>:/images/themes/default/mActionAddOgrLayer.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Open Vector…</string>
+   </property>
+  </action>
+  <action name="mActionAdvancedDigitizingDock">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="../../../images/images.qrc">
+     <normaloff>:/images/themes/default/cadtools/cad.svg</normaloff>:/images/themes/default/cadtools/cad.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Advanced Digitizing Dock</string>
+   </property>
+   <property name="toolTip">
+    <string>Show Advanced Digitizing Dock</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
  </widget>

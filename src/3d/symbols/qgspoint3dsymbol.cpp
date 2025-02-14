@@ -24,6 +24,8 @@
 #include "qgs3dexportobject.h"
 #include "qgs3dsceneexporter.h"
 #include "qgsmarkersymbol.h"
+#include "qgsvectorlayer.h"
+#include "qgsvectorlayerelevationproperties.h"
 
 QgsAbstract3DSymbol *QgsPoint3DSymbol::clone() const
 {
@@ -36,14 +38,18 @@ QgsAbstract3DSymbol *QgsPoint3DSymbol::create()
 }
 
 QgsPoint3DSymbol::QgsPoint3DSymbol()
-  : mMaterial( std::make_unique< QgsPhongMaterialSettings >() )
+  : mMaterialSettings( std::make_unique<QgsPhongMaterialSettings>() )
 {
-  setBillboardSymbol( static_cast<QgsMarkerSymbol *>( QgsSymbol::defaultSymbol( QgsWkbTypes::PointGeometry ) ) );
+  setBillboardSymbol( static_cast<QgsMarkerSymbol *>( QgsSymbol::defaultSymbol( Qgis::GeometryType::Point ) ) );
+
+  // our built-in 3D geometries (e.g. cylinder, plane, ...) assume Y axis going "up",
+  // let's rotate them by default so that their Z axis goes "up" (like the rest of the scene)
+  mTransform.rotate( QQuaternion::fromAxisAndAngle( QVector3D( 1, 0, 0 ), 90 ) );
 }
 
 QgsPoint3DSymbol::QgsPoint3DSymbol( const QgsPoint3DSymbol &other )
   : mAltClamping( other.altitudeClamping() )
-  , mMaterial( other.material() ? other.material()->clone() : nullptr )
+  , mMaterialSettings( other.materialSettings() ? other.materialSettings()->clone() : nullptr )
   , mShape( other.shape() )
   , mShapeProperties( other.shapeProperties() )
   , mTransform( other.transform() )
@@ -62,9 +68,9 @@ void QgsPoint3DSymbol::writeXml( QDomElement &elem, const QgsReadWriteContext &c
   elemDataProperties.setAttribute( QStringLiteral( "alt-clamping" ), Qgs3DUtils::altClampingToString( mAltClamping ) );
   elem.appendChild( elemDataProperties );
 
-  elem.setAttribute( QStringLiteral( "material_type" ), mMaterial->type() );
+  elem.setAttribute( QStringLiteral( "material_type" ), mMaterialSettings->type() );
   QDomElement elemMaterial = doc.createElement( QStringLiteral( "material" ) );
-  mMaterial->writeXml( elemMaterial, context );
+  mMaterialSettings->writeXml( elemMaterial, context );
   elem.appendChild( elemMaterial );
 
   elem.setAttribute( QStringLiteral( "shape" ), shapeToString( mShape ) );
@@ -95,10 +101,10 @@ void QgsPoint3DSymbol::readXml( const QDomElement &elem, const QgsReadWriteConte
 
   const QDomElement elemMaterial = elem.firstChildElement( QStringLiteral( "material" ) );
   const QString materialType = elem.attribute( QStringLiteral( "material_type" ), QStringLiteral( "phong" ) );
-  mMaterial.reset( Qgs3D::materialRegistry()->createMaterialSettings( materialType ) );
-  if ( !mMaterial )
-    mMaterial.reset( Qgs3D::materialRegistry()->createMaterialSettings( QStringLiteral( "phong" ) ) );
-  mMaterial->readXml( elemMaterial, context );
+  mMaterialSettings.reset( Qgs3D::materialRegistry()->createMaterialSettings( materialType ) );
+  if ( !mMaterialSettings )
+    mMaterialSettings.reset( Qgs3D::materialRegistry()->createMaterialSettings( QStringLiteral( "phong" ) ) );
+  mMaterialSettings->readXml( elemMaterial, context );
 
   mShape = shapeFromString( elem.attribute( QStringLiteral( "shape" ) ) );
 
@@ -111,86 +117,206 @@ void QgsPoint3DSymbol::readXml( const QDomElement &elem, const QgsReadWriteConte
 
   const QDomElement symbolElem = elem.firstChildElement( QStringLiteral( "symbol" ) );
 
-  setBillboardSymbol( QgsSymbolLayerUtils::loadSymbol< QgsMarkerSymbol >( symbolElem, context ) );
+  setBillboardSymbol( QgsSymbolLayerUtils::loadSymbol<QgsMarkerSymbol>( symbolElem, context ) );
 }
 
-QList<QgsWkbTypes::GeometryType> QgsPoint3DSymbol::compatibleGeometryTypes() const
+QList<Qgis::GeometryType> QgsPoint3DSymbol::compatibleGeometryTypes() const
 {
-  return QList< QgsWkbTypes::GeometryType >() << QgsWkbTypes::PointGeometry;
+  return QList<Qgis::GeometryType>() << Qgis::GeometryType::Point;
 }
 
-QgsPoint3DSymbol::Shape QgsPoint3DSymbol::shapeFromString( const QString &shape )
+void QgsPoint3DSymbol::setDefaultPropertiesFromLayer( const QgsVectorLayer *layer )
 {
-  if ( shape ==  QStringLiteral( "sphere" ) )
-    return Sphere;
+  const QgsVectorLayerElevationProperties *props = qgis::down_cast<const QgsVectorLayerElevationProperties *>( const_cast<QgsVectorLayer *>( layer )->elevationProperties() );
+
+  mAltClamping = props->clamping();
+  mTransform.data()[13] = static_cast<float>( props->zOffset() );
+  mShapeProperties[QStringLiteral( "length" )] = props->extrusionEnabled() ? static_cast<float>( props->extrusionHeight() ) : 0.0f;
+}
+
+Qgis::Point3DShape QgsPoint3DSymbol::shapeFromString( const QString &shape )
+{
+  if ( shape == QLatin1String( "sphere" ) )
+    return Qgis::Point3DShape::Sphere;
   else if ( shape == QLatin1String( "cone" ) )
-    return Cone;
+    return Qgis::Point3DShape::Cone;
   else if ( shape == QLatin1String( "cube" ) )
-    return Cube;
+    return Qgis::Point3DShape::Cube;
   else if ( shape == QLatin1String( "torus" ) )
-    return Torus;
+    return Qgis::Point3DShape::Torus;
   else if ( shape == QLatin1String( "plane" ) )
-    return Plane;
+    return Qgis::Point3DShape::Plane;
   else if ( shape == QLatin1String( "extruded-text" ) )
-    return ExtrudedText;
+    return Qgis::Point3DShape::ExtrudedText;
   else if ( shape == QLatin1String( "model" ) )
-    return Model;
+    return Qgis::Point3DShape::Model;
   else if ( shape == QLatin1String( "billboard" ) )
-    return Billboard;
-  else   // "cylinder" (default)
-    return Cylinder;
+    return Qgis::Point3DShape::Billboard;
+  else // "cylinder" (default)
+    return Qgis::Point3DShape::Cylinder;
 }
 
-QString QgsPoint3DSymbol::shapeToString( QgsPoint3DSymbol::Shape shape )
+QString QgsPoint3DSymbol::shapeToString( Qgis::Point3DShape shape )
 {
   switch ( shape )
   {
-    case Cylinder: return QStringLiteral( "cylinder" );
-    case Sphere: return QStringLiteral( "sphere" );
-    case Cone: return QStringLiteral( "cone" );
-    case Cube: return QStringLiteral( "cube" );
-    case Torus: return QStringLiteral( "torus" );
-    case Plane: return QStringLiteral( "plane" );
-    case ExtrudedText: return QStringLiteral( "extruded-text" );
-    case Model: return QStringLiteral( "model" );
-    case Billboard: return QStringLiteral( "billboard" );
-    default: Q_ASSERT( false ); return QString();
+    case Qgis::Point3DShape::Cylinder:
+      return QStringLiteral( "cylinder" );
+    case Qgis::Point3DShape::Sphere:
+      return QStringLiteral( "sphere" );
+    case Qgis::Point3DShape::Cone:
+      return QStringLiteral( "cone" );
+    case Qgis::Point3DShape::Cube:
+      return QStringLiteral( "cube" );
+    case Qgis::Point3DShape::Torus:
+      return QStringLiteral( "torus" );
+    case Qgis::Point3DShape::Plane:
+      return QStringLiteral( "plane" );
+    case Qgis::Point3DShape::ExtrudedText:
+      return QStringLiteral( "extruded-text" );
+    case Qgis::Point3DShape::Model:
+      return QStringLiteral( "model" );
+    case Qgis::Point3DShape::Billboard:
+      return QStringLiteral( "billboard" );
+    default:
+      Q_ASSERT( false );
+      return QString();
   }
 }
 
-QMatrix4x4 QgsPoint3DSymbol::billboardTransform() const
+QVariant QgsPoint3DSymbol::shapeProperty( const QString &property ) const
 {
-  QMatrix4x4 billboardTransformMatrix;
-  billboardTransformMatrix.translate( QVector3D( 0, mTransform.data()[13], 0 ) );
+  switch ( mShape )
+  {
+    case Qgis::Point3DShape::Cylinder:
+    {
+      if ( property == QLatin1String( "length" ) )
+      {
+        const float length = mShapeProperties.value( property ).toFloat();
+        if ( length == 0 )
+          return 10;
+        return length;
+      }
+      else if ( property == QLatin1String( "radius" ) )
+      {
+        const float radius = mShapeProperties.value( property ).toFloat();
+        if ( radius == 0 )
+          return 10;
+        return radius;
+      }
+      break;
+    }
+    case Qgis::Point3DShape::Sphere:
+    {
+      if ( property == QLatin1String( "radius" ) )
+      {
+        const float radius = mShapeProperties.value( property ).toFloat();
+        if ( radius == 0 )
+          return 10;
+        return radius;
+      }
+      break;
+    }
+    case Qgis::Point3DShape::Cone:
+    {
+      if ( property == QLatin1String( "length" ) )
+      {
+        const float length = mShapeProperties.value( property ).toFloat();
+        if ( length == 0 )
+          return 10;
+        return length;
+      }
+      break;
+    }
+    case Qgis::Point3DShape::Cube:
+    {
+      if ( property == QLatin1String( "size" ) )
+      {
+        const float size = mShapeProperties.value( property ).toFloat();
+        if ( size == 0 )
+          return 10;
+        return size;
+      }
+      break;
+    }
+    case Qgis::Point3DShape::Torus:
+    {
+      if ( property == QLatin1String( "radius" ) )
+      {
+        const float radius = mShapeProperties.value( property ).toFloat();
+        if ( radius == 0 )
+          return 10;
+        return radius;
+      }
+      else if ( property == QLatin1String( "minorRadius" ) )
+      {
+        const float minorRadius = mShapeProperties.value( property ).toFloat();
+        if ( minorRadius == 0 )
+          return 5;
+        return minorRadius;
+      }
+      break;
+    }
+    case Qgis::Point3DShape::Plane:
+    {
+      if ( property == QLatin1String( "size" ) )
+      {
+        const float size = mShapeProperties.value( property ).toFloat();
+        if ( size == 0 )
+          return 10;
+        return size;
+      }
+      break;
+    }
+    case Qgis::Point3DShape::ExtrudedText:
+    {
+      if ( property == QLatin1String( "depth" ) )
+      {
+        const float depth = mShapeProperties.value( property ).toFloat();
+        if ( depth == 0 )
+          return 1;
+        return depth;
+      }
+      break;
+    }
 
-  return billboardTransformMatrix;
+    case Qgis::Point3DShape::Model:
+    case Qgis::Point3DShape::Billboard:
+      break;
+  }
+  return mShapeProperties.value( property );
 }
 
-QgsAbstractMaterialSettings *QgsPoint3DSymbol::material() const
+float QgsPoint3DSymbol::billboardHeight() const
 {
-  return mMaterial.get();
+  return mTransform.data()[14];
 }
 
-void QgsPoint3DSymbol::setMaterial( QgsAbstractMaterialSettings *material )
+QgsAbstractMaterialSettings *QgsPoint3DSymbol::materialSettings() const
 {
-  if ( material == mMaterial.get() )
+  return mMaterialSettings.get();
+}
+
+void QgsPoint3DSymbol::setMaterialSettings( QgsAbstractMaterialSettings *materialSettings )
+{
+  if ( materialSettings == mMaterialSettings.get() )
     return;
 
-  mMaterial.reset( material );
+  mMaterialSettings.reset( materialSettings );
 }
 
 bool QgsPoint3DSymbol::exportGeometries( Qgs3DSceneExporter *exporter, Qt3DCore::QEntity *entity, const QString &objectNamePrefix ) const
 {
-  if ( shape() == QgsPoint3DSymbol::Model )
+  if ( shape() == Qgis::Point3DShape::Model )
   {
     Qt3DRender::QSceneLoader *sceneLoader = entity->findChild<Qt3DRender::QSceneLoader *>();
-    if ( sceneLoader != nullptr )
+    if ( sceneLoader )
     {
       const QVector<Qgs3DExportObject *> objects = exporter->processSceneLoaderGeometries( sceneLoader, objectNamePrefix );
       for ( Qgs3DExportObject *obj : objects )
       {
         obj->setSmoothEdges( exporter->smoothEdges() );
-        obj->setupMaterial( material() );
+        obj->setupMaterial( materialSettings() );
       }
       exporter->mObjects << objects;
     }
@@ -200,26 +326,30 @@ bool QgsPoint3DSymbol::exportGeometries( Qgs3DSceneExporter *exporter, Qt3DCore:
       for ( Qt3DRender::QMesh *mesh : meshes )
       {
         Qgs3DExportObject *object = exporter->processGeometryRenderer( mesh, objectNamePrefix );
-        if ( object == nullptr ) continue;
+        if ( !object )
+          continue;
         object->setSmoothEdges( exporter->smoothEdges() );
-        object->setupMaterial( material() );
+        object->setupMaterial( materialSettings() );
         exporter->mObjects << object;
       }
     }
     return true;
   }
-  else if ( shape() == QgsPoint3DSymbol::Billboard )
+  else if ( shape() == Qgis::Point3DShape::Billboard )
   {
     Qgs3DExportObject *obj = exporter->processPoints( entity, objectNamePrefix );
-    if ( obj != nullptr ) exporter->mObjects << obj;
-    if ( obj != nullptr ) return true;
+    if ( obj )
+    {
+      exporter->mObjects << obj;
+      return true;
+    }
   }
   else
   {
     const QVector<Qgs3DExportObject *> objects = exporter->processInstancedPointGeometry( entity, objectNamePrefix );
     for ( Qgs3DExportObject *obj : objects )
     {
-      obj->setupMaterial( material() );
+      obj->setupMaterial( materialSettings() );
       exporter->mObjects << obj;
     }
     return true;

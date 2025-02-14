@@ -20,14 +20,15 @@
 #include "qgis_sip.h"
 #include "qgslabelposition.h"
 #include "qgscalloutposition.h"
+
 #include <memory>
 
+class QgsMapSettings;
 class QgsLabelSearchTree;
 
 /**
  * \ingroup core
  * \brief Class that stores computed placement from labeling engine.
- * \since QGIS 2.4
  */
 class CORE_EXPORT QgsLabelingResults
 {
@@ -35,9 +36,7 @@ class CORE_EXPORT QgsLabelingResults
     QgsLabelingResults();
     ~QgsLabelingResults();
 
-    //! QgsLabelingResults cannot be copied.
     QgsLabelingResults( const QgsLabelingResults & ) = delete;
-    //! QgsLabelingResults cannot be copied.
     QgsLabelingResults &operator=( const QgsLabelingResults &rh ) = delete;
 
     /**
@@ -56,6 +55,13 @@ class CORE_EXPORT QgsLabelingResults
      * Returns the details of any labels placed within the specified rectangle (in map coordinates).
      */
     QList<QgsLabelPosition> labelsWithinRect( const QgsRectangle &r ) const;
+
+    /**
+     * Returns a list of all label positions sharing the same group ID (i.e. positions for individual characters in a curved label).
+     *
+     * \since QGIS 3.26
+     */
+    QList<QgsLabelPosition> groupedLabelPositions( long long groupId ) const;
 
     /**
      * Returns a list of callouts with origins or destinations inside the given \a rectangle.

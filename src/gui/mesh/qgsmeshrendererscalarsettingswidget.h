@@ -27,17 +27,19 @@ SIP_NO_FILE
 
 class QgsMeshLayer;
 
-/*!
- * A widget for setup of the scalar dataset renderer settings of
+/**
+ * \ingroup gui
+ * \class QgsMeshRendererScalarSettingsWidget
+ *
+ * \brief A widget for setup of the scalar dataset renderer settings of
  * a mesh layer. The layer must be connected and an active dataset
  * must be selected.
  */
-class QgsMeshRendererScalarSettingsWidget : public QWidget, private Ui::QgsMeshRendererScalarSettingsWidgetBase
+class GUI_EXPORT QgsMeshRendererScalarSettingsWidget : public QWidget, private Ui::QgsMeshRendererScalarSettingsWidgetBase
 {
     Q_OBJECT
 
   public:
-
     /**
      * A widget to hold the renderer scalar settings for a mesh layer.
      * \param parent Parent object
@@ -56,6 +58,9 @@ class QgsMeshRendererScalarSettingsWidget : public QWidget, private Ui::QgsMeshR
     //! Synchronizes widgets state with associated mesh layer
     void syncToLayer();
 
+    //! Associates map canvas with the widget
+    void setCanvas( QgsMapCanvas *canvas );
+
   signals:
     //! Mesh rendering settings changed
     void widgetChanged();
@@ -68,12 +73,17 @@ class QgsMeshRendererScalarSettingsWidget : public QWidget, private Ui::QgsMeshR
   private:
     double spinBoxValue( const QgsDoubleSpinBox *spinBox ) const;
     QgsMeshRendererScalarSettings::DataResamplingMethod dataIntepolationMethod() const;
+    void mUserDefinedRadioButton_toggled( bool toggled );
+    void mMinMaxRadioButton_toggled( bool toggled );
+
+    void recalculateMinMax();
 
     bool dataIsDefinedOnFaces() const;
     bool dataIsDefinedOnEdges() const;
 
     QgsMeshLayer *mMeshLayer = nullptr; // not owned
     int mActiveDatasetGroup = -1;
+    QgsMapCanvas *mCanvas = nullptr;
 };
 
 #endif // QGSMESHRENDERERSCALARSETTINGSWIDGET_H

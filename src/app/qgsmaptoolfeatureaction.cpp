@@ -14,18 +14,14 @@
  ***************************************************************************/
 
 #include "qgsmaptoolfeatureaction.h"
+#include "moc_qgsmaptoolfeatureaction.cpp"
 
 #include "qgsfeatureiterator.h"
-#include "qgsfields.h"
-#include "qgsgeometry.h"
 #include "qgslogger.h"
 #include "qgsmapcanvas.h"
 #include "qgsmaptopixel.h"
-#include "qgsmessageviewer.h"
 #include "qgsactionmanager.h"
-#include "qgscoordinatereferencesystem.h"
 #include "qgsexception.h"
-#include "qgsvectordataprovider.h"
 #include "qgsvectorlayer.h"
 #include "qgsproject.h"
 #include "qgsmaplayeractionregistry.h"
@@ -34,6 +30,7 @@
 #include "qgsstatusbar.h"
 #include "qgsmapmouseevent.h"
 #include "qgsexpressioncontextutils.h"
+#include "qgsmaplayeraction.h"
 
 #include <QSettings>
 #include <QStatusBar>
@@ -57,20 +54,21 @@ void QgsMapToolFeatureAction::canvasReleaseEvent( QgsMapMouseEvent *e )
 {
   QgsMapLayer *layer = mCanvas->currentLayer();
 
-  if ( !layer || layer->type() != QgsMapLayerType::VectorLayer )
+  if ( !layer || layer->type() != Qgis::LayerType::Vector )
   {
     emit messageEmitted( tr( "To run an action, you must choose an active vector layer." ), Qgis::MessageLevel::Info );
     return;
   }
 
-  if ( !mCanvas->layers().contains( layer ) )
+  if ( !mCanvas->layers( true ).contains( layer ) )
   {
     // do not run actions on hidden layers
     return;
   }
 
   QgsVectorLayer *vlayer = qobject_cast<QgsVectorLayer *>( layer );
-  if ( vlayer->actions()->actions( QStringLiteral( "Canvas" ) ).isEmpty() && QgsGui::mapLayerActionRegistry()->mapLayerActions( vlayer ).isEmpty() )
+  QgsMapLayerActionContext context;
+  if ( vlayer->actions()->actions( QStringLiteral( "Canvas" ) ).isEmpty() && QgsGui::mapLayerActionRegistry()->mapLayerActions( vlayer, Qgis::MapLayerActionTarget::AllActions, context ).isEmpty() )
   {
     emit messageEmitted( tr( "The active vector layer has no defined actions" ), Qgis::MessageLevel::Info );
     return;
@@ -119,12 +117,12 @@ bool QgsMapToolFeatureAction::doAction( QgsVectorLayer *layer, int x, int y )
   {
     Q_UNUSED( cse )
     // catch exception for 'invalid' point and proceed with no features found
-    QgsDebugMsg( QStringLiteral( "Caught CRS exception %1" ).arg( cse.what() ) );
+    QgsDebugError( QStringLiteral( "Caught CRS exception %1" ).arg( cse.what() ) );
   }
 
   QgsFeature f;
   QgsFeatureList features;
-  QgsFeatureIterator fit = layer->getFeatures( QgsFeatureRequest().setFilterRect( r ).setFlags( QgsFeatureRequest::ExactIntersect ) );
+  QgsFeatureIterator fit = layer->getFeatures( QgsFeatureRequest().setFilterRect( r ).setFlags( Qgis::FeatureRequestFlag::ExactIntersect ) );
   while ( fit.nextFeature( f ) )
   {
     features.append( f );
@@ -151,11 +149,10 @@ bool QgsMapToolFeatureAction::doAction( QgsVectorLayer *layer, int x, int y )
           featureTitle = FID_TO_STRING( feature.id() );
 
         QAction *featureAction = featureMenu->addAction( featureTitle );
-        connect( featureAction, &QAction::triggered, this, [ = ] { doActionForFeature( layer, feature, point );} );
+        connect( featureAction, &QAction::triggered, this, [=] { doActionForFeature( layer, feature, point ); } );
       }
       QAction *allFeatureAction = featureMenu->addAction( tr( "All Features" ) );
-      connect( allFeatureAction, &QAction::triggered, this, [ = ]
-      {
+      connect( allFeatureAction, &QAction::triggered, this, [=] {
         for ( const QgsFeature &feature : std::as_const( features ) )
         {
           doActionForFeature( layer, feature, point );
@@ -191,7 +188,11 @@ void QgsMapToolFeatureAction::doActionForFeature( QgsVectorLayer *layer, const Q
     QgsMapLayerAction *mapLayerAction = QgsGui::mapLayerActionRegistry()->defaultActionForLayer( layer );
     if ( mapLayerAction )
     {
+      QgsMapLayerActionContext context;
+      Q_NOWARN_DEPRECATED_PUSH
       mapLayerAction->triggerForFeature( layer, feature );
+      Q_NOWARN_DEPRECATED_POP
+      mapLayerAction->triggerForFeature( layer, feature, context );
     }
   }
 }

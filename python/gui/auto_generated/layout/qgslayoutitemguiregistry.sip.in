@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/layout/qgslayoutitemguiregistry.h                            *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -20,15 +20,12 @@ the components related to the GUI behavior of a layout item.
 .. note::
 
    In C++ you can use :py:class:`QgsLayoutItemGuiMetadata` convenience class.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgslayoutitemguiregistry.h"
 %End
   public:
-
     enum Flag
     {
       FlagNoCreationTools,
@@ -93,7 +90,7 @@ should be created. The default behavior is to create a rectangular rubber band.
 .. seealso:: :py:func:`createNodeRubberBand`
 %End
 
-    virtual QAbstractGraphicsShapeItem *createNodeRubberBand( QgsLayoutView *view ) /TransferBack/;
+    virtual QGraphicsItem *createNodeRubberBand( QgsLayoutView *view ) /TransferBack/;
 %Docstring
 Creates a rubber band for use when creating layout node based items of this type. Can return ``None`` if no rubber band
 should be created. The default behavior is to return ``None``.
@@ -114,7 +111,17 @@ This is only called for additions which result from GUI operations - i.e. it is 
 called for items added from templates.
 %End
 
+    virtual void handleDoubleClick( QgsLayoutItem *item, Qgis::MouseHandlesAction action );
+%Docstring
+Called when a layout item is double-clicked.
+The action parameter is used to specify which mouse handle, if any, was clicked
+If no mouse handle is selected, :py:class:`Qgis`.MouseHandlesAction.NoAction is used
+
+.. versionadded:: 3.42
+%End
+
 };
+
 
 
 
@@ -131,15 +138,12 @@ which should be presented to users grouped together.
 
 For instance, the various basic shape creation tools would use :py:class:`QgsLayoutItemGuiGroup`
 to display grouped within designer dialogs.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgslayoutitemguiregistry.h"
 %End
   public:
-
     QgsLayoutItemGuiGroup( const QString &id = QString(), const QString &name = QString(), const QIcon &icon = QIcon() );
 %Docstring
 Constructor for QgsLayoutItemGuiGroup.
@@ -150,7 +154,6 @@ Constructor for QgsLayoutItemGuiGroup.
     QString name;
 
     QIcon icon;
-
 };
 
 
@@ -164,15 +167,12 @@ Registry of available layout item GUI behavior.
 
 This acts as a companion to :py:class:`QgsLayoutItemRegistry`, handling only
 the components related to the GUI behavior of layout items.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgslayoutitemguiregistry.h"
 %End
   public:
-
     QgsLayoutItemGuiRegistry( QObject *parent = 0 );
 %Docstring
 Creates a new empty item GUI registry.
@@ -250,7 +250,7 @@ Creates a new instance of a layout item configuration widget for the specified `
 
 
 
-    QList< int > itemMetadataIds() const;
+    QList<int> itemMetadataIds() const;
 %Docstring
 Returns a list of available item metadata ids handled by the registry.
 %End
@@ -267,13 +267,10 @@ Emitted whenever a new item type is added to the registry, with the specified
     QgsLayoutItemGuiRegistry( const QgsLayoutItemGuiRegistry &rh );
 };
 
-
-
-
 /************************************************************************
  * This file has been generated automatically from                      *
  *                                                                      *
  * src/gui/layout/qgslayoutitemguiregistry.h                            *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

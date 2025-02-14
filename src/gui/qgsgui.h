@@ -18,7 +18,9 @@
 #ifndef QGSGUI_H
 #define QGSGUI_H
 
+#include "qgis.h"
 #include "qgis_gui.h"
+#include "qgssettingstree.h"
 #include "qgis_sip.h"
 #include <QWidget>
 #include <memory>
@@ -32,8 +34,10 @@ class QgsSourceSelectProviderRegistry;
 class QgsNative;
 class QgsLayoutItemGuiRegistry;
 class QgsAnnotationItemGuiRegistry;
+class QgsAdvancedDigitizingToolsRegistry;
 class QgsWidgetStateHelper;
 class QgsProcessingGuiRegistry;
+class QgsProcessingFavoriteAlgorithmManager;
 class QgsProcessingRecentAlgorithmLog;
 class QgsWindowManagerInterface;
 class QgsDataItemGuiProviderRegistry;
@@ -45,18 +49,23 @@ class QgsMessageBar;
 class QgsSubsetStringEditorProviderRegistry;
 class QgsProviderSourceWidgetProviderRegistry;
 class QgsRelationWidgetRegistry;
+class QgsMapToolShapeRegistry;
+class QgsHistoryProviderRegistry;
+class QgsSensorGuiRegistry;
+class QgsSettingsEditorWidgetRegistry;
+class QgsInputControllerManager;
 
 /**
  * \ingroup gui
  * \brief QgsGui is a singleton class containing various registry and other global members
  * related to GUI classes.
- * \since QGIS 3.0
  */
 class GUI_EXPORT QgsGui : public QObject
 {
     Q_OBJECT
 
   public:
+    static inline QgsSettingsTreeNode *sTtreeWidgetLastUsedValues = QgsSettingsTree::sTreeApp->createChildNode( QStringLiteral( "widget-last-used-values" ) ) SIP_SKIP;
 
     /**
      * Defines the behavior to use when setting the CRS for a newly created project.
@@ -64,14 +73,11 @@ class GUI_EXPORT QgsGui : public QObject
     enum ProjectCrsBehavior
     {
       UseCrsOfFirstLayerAdded = 1, //!< Set the project CRS to the CRS of the first layer added to a new project
-      UsePresetCrs = 2, //!< Always set new projects to use a preset default CRS
+      UsePresetCrs = 2,            //!< Always set new projects to use a preset default CRS
     };
     Q_ENUM( ProjectCrsBehavior )
 
-    //! QgsGui cannot be copied
     QgsGui( const QgsGui &other ) = delete;
-
-    //! QgsGui cannot be copied
     QgsGui &operator=( const QgsGui &other ) = delete;
 
     /**
@@ -130,6 +136,13 @@ class GUI_EXPORT QgsGui : public QObject
     static QgsAnnotationItemGuiRegistry *annotationItemGuiRegistry() SIP_KEEPREFERENCE;
 
     /**
+     * Returns the global advanced digitizing tools registry, used for registering advanced digitizing tools.
+     *
+     * \since QGIS 3.40
+     */
+    static QgsAdvancedDigitizingToolsRegistry *advancedDigitizingToolsRegistry() SIP_KEEPREFERENCE;
+
+    /**
      * Returns the global processing gui registry, used for registering the GUI behavior of processing algorithms.
      * \since QGIS 3.2
      */
@@ -154,6 +167,12 @@ class GUI_EXPORT QgsGui : public QObject
     static QgsProcessingRecentAlgorithmLog *processingRecentAlgorithmLog();
 
     /**
+     * Returns the global Processing favorite algorithm manager, used for tracking favorite Processing algorithms.
+     * \since QGIS 3.40
+     */
+    static QgsProcessingFavoriteAlgorithmManager *processingFavoriteAlgorithmManager();
+
+    /**
      * Returns the global data item GUI provider registry, used for tracking providers which affect the browser
      * GUI.
      * \since QGIS 3.6
@@ -173,6 +192,12 @@ class GUI_EXPORT QgsGui : public QObject
     static QgsProviderGuiRegistry *providerGuiRegistry() SIP_KEEPREFERENCE;
 
     /**
+     * Returns the registry of GUI-related components for sensors
+     * \since QGIS 3.32
+     */
+    static QgsSensorGuiRegistry *sensorGuiRegistry() SIP_KEEPREFERENCE;
+
+    /**
      * Returns the registry of subset string editors of data providers
      * \since QGIS 3.18
      */
@@ -189,6 +214,25 @@ class GUI_EXPORT QgsGui : public QObject
     * \since QGIS 3.18
      */
     static QgsRelationWidgetRegistry *relationWidgetRegistry() SIP_KEEPREFERENCE;
+
+    /**
+     * Returns the registry of shape map tools
+     * \note Not available in Python bindings
+    * \since QGIS 3.26
+     */
+    static QgsMapToolShapeRegistry *mapToolShapeRegistry() SIP_SKIP;
+
+    /**
+     * Returns the global history provider registry, used for tracking history providers.
+     * \since QGIS 3.24
+     */
+    static QgsHistoryProviderRegistry *historyProviderRegistry() SIP_KEEPREFERENCE;
+
+    /**
+     * Returns the registry of settings editors.
+     * \since QGIS 3.32
+     */
+    static QgsSettingsEditorWidgetRegistry *settingsEditorWidgetRegistry() SIP_KEEPREFERENCE;
 
     /**
      * Register the widget to allow its position to be automatically saved and restored when open and closed.
@@ -211,13 +255,19 @@ class GUI_EXPORT QgsGui : public QObject
     static void setWindowManager( QgsWindowManagerInterface *manager SIP_TRANSFER );
 
     /**
+     * Returns the global input controller manager.
+     * \since QGIS 3.32
+     */
+    static QgsInputControllerManager *inputControllerManager() SIP_KEEPREFERENCE;
+
+    /**
      * HIG flags, which indicate the Human Interface Guidelines for the current platform.
      * \since QGIS 3.4
     */
-    enum HigFlag
+    enum HigFlag SIP_ENUM_BASETYPE( IntFlag )
     {
-      HigMenuTextIsTitleCase = 1 << 0,       //!< Menu action texts should be title case
-      HigDialogTitleIsTitleCase = 1 << 1     //!< Dialog titles should be title case
+      HigMenuTextIsTitleCase = 1 << 0,   //!< Menu action texts should be title case
+      HigDialogTitleIsTitleCase = 1 << 1 //!< Dialog titles should be title case
     };
     Q_DECLARE_FLAGS( HigFlags, HigFlag )
 
@@ -244,15 +294,35 @@ class GUI_EXPORT QgsGui : public QObject
     static QScreen *findScreenAt( QPoint point );
 
     /**
-     * Returns TRUE if python macros are currently allowed to be run
-     * If the global option is to ask user, a modal dialog will be shown
+     * Returns TRUE if python embedded in a project is currently allowed to be loaded.
+     * If the global option is to ask user, a modal dialog will be shown for macros
+     * or a button to enable Python expressions will be shown in a message bar.
      * \param lambda a pointer to a lambda method. If specified, the dialog is not modal,
      * a message is shown with a button to enable macro.
      * The lambda will be run either if macros are currently allowed or if the user accepts the message.
      * The \a messageBar must be given in such case.
      * \param messageBar the message bar must be provided if a lambda method is used.
+     * \param embeddedType enum value to identify if macros or expression functions should be checked.
+     *
+     * \note Not available in Python bindings
+     * \since QGIS 3.40
      */
-    static bool pythonMacroAllowed( void ( *lambda )() = nullptr, QgsMessageBar *messageBar = nullptr ) SIP_SKIP;
+    static bool pythonEmbeddedInProjectAllowed( void ( *lambda )() = nullptr, QgsMessageBar *messageBar = nullptr, Qgis::PythonEmbeddedType embeddedType = Qgis::PythonEmbeddedType::Macro ) SIP_SKIP;
+
+    /**
+     * Initializes callout widgets.
+     *
+     * \note Not available in Python bindings
+     * \since QGIS 3.40
+     */
+    static void initCalloutWidgets() SIP_SKIP;
+
+    /**
+     *  Checks whether QWebEngineView is available to display HTML content.
+     *
+     * \since QGIS 3.42
+     */
+    static bool hasWebEngine();
 
     ///@cond PRIVATE
     void emitOptionsChanged() SIP_SKIP;
@@ -273,7 +343,6 @@ class GUI_EXPORT QgsGui : public QObject
     void optionsChanged();
 
   private:
-
     QgsGui();
 
     QgsSettingsRegistryGui *mSettingsRegistryGui = nullptr;
@@ -287,7 +356,9 @@ class GUI_EXPORT QgsGui : public QObject
     QgsMapLayerActionRegistry *mMapLayerActionRegistry = nullptr;
     QgsLayoutItemGuiRegistry *mLayoutItemGuiRegistry = nullptr;
     QgsAnnotationItemGuiRegistry *mAnnotationItemGuiRegistry = nullptr;
+    QgsAdvancedDigitizingToolsRegistry *mAdvancedDigitizingToolsRegistry = nullptr;
     QgsProcessingGuiRegistry *mProcessingGuiRegistry = nullptr;
+    QgsProcessingFavoriteAlgorithmManager *mProcessingFavoriteAlgorithmManager = nullptr;
     QgsProcessingRecentAlgorithmLog *mProcessingRecentAlgorithmLog = nullptr;
     QgsNumericFormatGuiRegistry *mNumericFormatGuiRegistry = nullptr;
     QgsDataItemGuiProviderRegistry *mDataItemGuiProviderRegistry = nullptr;
@@ -296,12 +367,16 @@ class GUI_EXPORT QgsGui : public QObject
     QgsSubsetStringEditorProviderRegistry *mSubsetStringEditorProviderRegistry = nullptr;
     QgsProviderSourceWidgetProviderRegistry *mProviderSourceWidgetProviderRegistry = nullptr;
     QgsRelationWidgetRegistry *mRelationEditorRegistry = nullptr;
-    std::unique_ptr< QgsWindowManagerInterface > mWindowManager;
+    QgsMapToolShapeRegistry *mShapeMapToolRegistry = nullptr;
+    QgsHistoryProviderRegistry *mHistoryProviderRegistry = nullptr;
+    QgsSensorGuiRegistry *mSensorGuiRegistry = nullptr;
+    QgsSettingsEditorWidgetRegistry *mSettingsEditorRegistry = nullptr;
+    QgsInputControllerManager *mInputControllerManager = nullptr;
+    std::unique_ptr<QgsWindowManagerInterface> mWindowManager;
 
 #ifdef SIP_RUN
     QgsGui( const QgsGui &other );
 #endif
-
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS( QgsGui::HigFlags )

@@ -21,6 +21,7 @@
 #include "qgis_core.h"
 #include "qgis.h"
 #include "qgsdataitem.h"
+#include "qgslayermetadata.h"
 
 /**
  * \ingroup core
@@ -55,8 +56,10 @@ class CORE_EXPORT QgsLayerItem : public QgsDataItem
 
     // --- New virtual methods for layer item derived classes ---
 
-    //! Returns QgsMapLayerType
-    QgsMapLayerType mapLayerType() const;
+    /**
+     * Returns the associated map layer type.
+     */
+    Qgis::LayerType mapLayerType() const;
 
     /**
      * Returns the layer item type corresponding to a QgsMapLayer \a layer.
@@ -67,24 +70,18 @@ class CORE_EXPORT QgsLayerItem : public QgsDataItem
     //! Returns layer uri or empty string if layer cannot be created
     QString uri() const { return mUri; }
 
-    //! Returns provider key
-    QString providerKey() const { return mProviderKey; }
-
     /**
      * Returns the supported CRS
-     *  \since QGIS 2.8
      */
     QStringList supportedCrs() const { return mSupportedCRS; }
 
     /**
      * Returns the supported formats
-     *  \since QGIS 2.8
      */
     QStringList supportedFormats() const { return mSupportFormats; }
 
     /**
      * Returns comments of the layer
-     * \since QGIS 2.12
      */
     virtual QString comments() const { return QString(); }
 
@@ -124,7 +121,7 @@ class CORE_EXPORT QgsLayerItem : public QgsDataItem
      * Returns the icon for a vector layer whose geometry type is provided.
      * \since QGIS 3.18
      */
-    static QIcon iconForWkbType( QgsWkbTypes::Type type );
+    static QIcon iconForWkbType( Qgis::WkbType type );
 
     static QIcon iconPoint();
     static QIcon iconLine();
@@ -141,6 +138,23 @@ class CORE_EXPORT QgsLayerItem : public QgsDataItem
     //! \returns the layer name
     virtual QString layerName() const { return name(); }
     QgsAbstractDatabaseProviderConnection *databaseConnection() const override;
+
+    /**
+     * Returns layer's metadata, it may be a default constructed metadata
+     * if metadata is not explicitly set.
+     * \since QGIS 3.28
+     */
+    const QgsLayerMetadata &layerMetadata() const;
+
+    /**
+     * Set layer's \a metadata.
+     * \since QGIS 3.28
+     */
+    void setLayerMetadata( const QgsLayerMetadata &metadata );
+
+  private:
+
+    QgsLayerMetadata mLayerMetadata;
 
 };
 

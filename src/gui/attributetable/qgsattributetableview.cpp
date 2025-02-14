@@ -20,26 +20,24 @@
 #include <QToolButton>
 #include <QHBoxLayout>
 
-#include "qgssettings.h"
 #include "qgsactionmanager.h"
 #include "qgsattributetableview.h"
+#include "moc_qgsattributetableview.cpp"
 #include "qgsattributetablemodel.h"
 #include "qgsattributetabledelegate.h"
 #include "qgsattributetablefiltermodel.h"
 #include "qgsvectorlayer.h"
 #include "qgsvectorlayercache.h"
 #include "qgsvectorlayerselectionmanager.h"
-#include "qgsvectordataprovider.h"
-#include "qgslogger.h"
-#include "qgsmapcanvas.h"
 #include "qgsfeatureselectionmodel.h"
 #include "qgsmaplayeractionregistry.h"
 #include "qgsfeatureiterator.h"
 #include "qgsstringutils.h"
 #include "qgsgui.h"
+#include "qgsmaplayeraction.h"
 
 QgsAttributeTableView::QgsAttributeTableView( QWidget *parent )
-  : QTableView( parent )
+  : QgsTableView( parent )
 {
   const QgsSettings settings;
   restoreGeometry( settings.value( QStringLiteral( "BetterAttributeTable/geometry" ) ).toByteArray() );
@@ -55,14 +53,14 @@ QgsAttributeTableView::QgsAttributeTableView( QWidget *parent )
 
   setSelectionBehavior( QAbstractItemView::SelectRows );
   setSelectionMode( QAbstractItemView::ExtendedSelection );
-  setSortingEnabled( true ); // At this point no data is in the model yet, so actually nothing is sorted.
+  setSortingEnabled( true );                          // At this point no data is in the model yet, so actually nothing is sorted.
   horizontalHeader()->setSortIndicatorShown( false ); // So hide the indicator to avoid confusion.
 
   setHorizontalScrollMode( QAbstractItemView::ScrollPerPixel );
 
   verticalHeader()->viewport()->installEventFilter( this );
 
-  connect( verticalHeader(), &QHeaderView::sectionPressed, this, [ = ]( int row ) { selectRow( row, true ); } );
+  connect( verticalHeader(), &QHeaderView::sectionPressed, this, [=]( int row ) { selectRow( row, true ); } );
   connect( verticalHeader(), &QHeaderView::sectionEntered, this, &QgsAttributeTableView::_q_selectRow );
   connect( horizontalHeader(), &QHeaderView::sectionResized, this, &QgsAttributeTableView::columnSizeChanged );
   connect( horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, &QgsAttributeTableView::showHorizontalSortIndicator );
@@ -94,6 +92,7 @@ void QgsAttributeTableView::setAttributeTableConfig( const QgsAttributeTableConf
 {
   int i = 0;
   const auto constColumns = config.columns();
+  QMap<QString, int> columns;
   for ( const QgsAttributeTableConfig::ColumnConfig &columnConfig : constColumns )
   {
     if ( columnConfig.hidden )
@@ -107,11 +106,32 @@ void QgsAttributeTableView::setAttributeTableConfig( const QgsAttributeTableConf
     {
       setColumnWidth( i, horizontalHeader()->defaultSectionSize() );
     }
+    columns.insert( columnConfig.name, i );
     i++;
   }
   mConfig = config;
   if ( config.sortExpression().isEmpty() )
+  {
     horizontalHeader()->setSortIndicatorShown( false );
+  }
+  else
+  {
+    if ( mSortExpression != config.sortExpression() )
+    {
+      const QgsExpression sortExp { config.sortExpression() };
+      if ( sortExp.isField() )
+      {
+        const QStringList refCols { sortExp.referencedColumns().values() };
+        horizontalHeader()->setSortIndicatorShown( true );
+        horizontalHeader()->setSortIndicator( columns.value( refCols.constFirst() ), config.sortOrder() );
+      }
+      else
+      {
+        horizontalHeader()->setSortIndicatorShown( false );
+      }
+    }
+  }
+  mSortExpression = config.sortExpression();
 }
 
 QList<QgsFeatureId> QgsAttributeTableView::selectedFeaturesIds() const
@@ -131,7 +151,7 @@ QList<QgsFeatureId> QgsAttributeTableView::selectedFeaturesIds() const
   QList<QgsFeatureId> ids;
   for ( const QModelIndex &index : indexList )
   {
-    const QgsFeatureId id = mFilterModel->data( index, QgsAttributeTableModel::FeatureIdRole ).toLongLong();
+    const QgsFeatureId id = mFilterModel->data( index, static_cast<int>( QgsAttributeTableModel::CustomRole::FeatureId ) ).toLongLong();
     ids.append( id );
   }
   return ids;
@@ -155,17 +175,15 @@ void QgsAttributeTableView::setModel( QgsAttributeTableFilterModel *filterModel 
   {
     if ( !mFeatureSelectionManager )
     {
-      mOwnedFeatureSelectionManager =  new QgsVectorLayerSelectionManager( mFilterModel->layer(), this );
+      mOwnedFeatureSelectionManager = new QgsVectorLayerSelectionManager( mFilterModel->layer(), this );
       mFeatureSelectionManager = mOwnedFeatureSelectionManager;
     }
 
     mFeatureSelectionModel = new QgsFeatureSelectionModel( mFilterModel, mFilterModel, mFeatureSelectionManager, mFilterModel );
     setSelectionModel( mFeatureSelectionModel );
     mTableDelegate->setFeatureSelectionModel( mFeatureSelectionModel );
-    connect( mFeatureSelectionModel, static_cast<void ( QgsFeatureSelectionModel::* )( const QModelIndexList &indexes )>( &QgsFeatureSelectionModel::requestRepaint ),
-             this, static_cast<void ( QgsAttributeTableView::* )( const QModelIndexList &indexes )>( &QgsAttributeTableView::repaintRequested ) );
-    connect( mFeatureSelectionModel, static_cast<void ( QgsFeatureSelectionModel::* )()>( &QgsFeatureSelectionModel::requestRepaint ),
-             this, static_cast<void ( QgsAttributeTableView::* )()>( &QgsAttributeTableView::repaintRequested ) );
+    connect( mFeatureSelectionModel, static_cast<void ( QgsFeatureSelectionModel::* )( const QModelIndexList &indexes )>( &QgsFeatureSelectionModel::requestRepaint ), this, static_cast<void ( QgsAttributeTableView::* )( const QModelIndexList &indexes )>( &QgsAttributeTableView::repaintRequested ) );
+    connect( mFeatureSelectionModel, static_cast<void ( QgsFeatureSelectionModel::* )()>( &QgsFeatureSelectionModel::requestRepaint ), this, static_cast<void ( QgsAttributeTableView::* )()>( &QgsAttributeTableView::repaintRequested ) );
 
     connect( mFilterModel->layer(), &QgsVectorLayer::editingStarted, this, &QgsAttributeTableView::recreateActionWidgets );
     connect( mFilterModel->layer(), &QgsVectorLayer::editingStopped, this, &QgsAttributeTableView::recreateActionWidgets );
@@ -197,7 +215,7 @@ QWidget *QgsAttributeTableView::createActionWidget( QgsFeatureId fid )
 
   if ( attributeTableConfig.actionWidgetStyle() == QgsAttributeTableConfig::DropDown )
   {
-    toolButton  = new QToolButton();
+    toolButton = new QToolButton();
     toolButton->setToolButtonStyle( Qt::ToolButtonTextBesideIcon );
     toolButton->setPopupMode( QToolButton::MenuButtonPopup );
     container = toolButton;
@@ -209,7 +227,7 @@ QWidget *QgsAttributeTableView::createActionWidget( QgsFeatureId fid )
     container->layout()->setContentsMargins( 0, 0, 0, 0 );
   }
 
-  QList< QAction * > actionList;
+  QList<QAction *> actionList;
   QAction *defaultAction = nullptr;
 
   // first add user created layer actions
@@ -220,7 +238,8 @@ QWidget *QgsAttributeTableView::createActionWidget( QgsFeatureId fid )
     if ( !mFilterModel->layer()->isEditable() && action.isEnabledOnlyWhenEditable() )
       continue;
 
-    const QString actionTitle = !action.shortTitle().isEmpty() ? action.shortTitle() : action.icon().isNull() ? action.name() : QString();
+    const QString actionTitle = !action.shortTitle().isEmpty() ? action.shortTitle() : action.icon().isNull() ? action.name()
+                                                                                                              : QString();
     QAction *act = new QAction( action.icon(), actionTitle, container );
     act->setToolTip( action.name() );
     act->setData( "user_action" );
@@ -233,7 +252,8 @@ QWidget *QgsAttributeTableView::createActionWidget( QgsFeatureId fid )
       defaultAction = act;
   }
 
-  const auto mapLayerActions {QgsGui::mapLayerActionRegistry()->mapLayerActions( mFilterModel->layer(), QgsMapLayerAction::SingleFeature ) };
+  QgsMapLayerActionContext context;
+  const QList<QgsMapLayerAction *> mapLayerActions = QgsGui::mapLayerActionRegistry()->mapLayerActions( mFilterModel->layer(), Qgis::MapLayerActionTarget::SingleFeature, context );
   // next add any registered actions for this layer
   for ( QgsMapLayerAction *mapLayerAction : mapLayerActions )
   {
@@ -245,8 +265,7 @@ QWidget *QgsAttributeTableView::createActionWidget( QgsFeatureId fid )
     connect( action, &QAction::triggered, this, &QgsAttributeTableView::actionTriggered );
     actionList << action;
 
-    if ( !defaultAction &&
-         QgsGui::mapLayerActionRegistry()->defaultActionForLayer( mFilterModel->layer() ) == mapLayerAction )
+    if ( !defaultAction && QgsGui::mapLayerActionRegistry()->defaultActionForLayer( mFilterModel->layer() ) == mapLayerAction )
       defaultAction = action;
   }
 
@@ -275,7 +294,7 @@ QWidget *QgsAttributeTableView::createActionWidget( QgsFeatureId fid )
 
   if ( attributeTableConfig.actionWidgetStyle() == QgsAttributeTableConfig::ButtonList )
   {
-    static_cast< QHBoxLayout * >( container->layout() )->addStretch();
+    static_cast<QHBoxLayout *>( container->layout() )->addStretch();
   }
 
   // TODO: Rethink default actions
@@ -310,7 +329,7 @@ void QgsAttributeTableView::mouseReleaseEvent( QMouseEvent *event )
   {
     const QModelIndex index = indexAt( event->pos() );
     const QVariant data = model()->data( index, Qt::DisplayRole );
-    if ( data.type() == QVariant::String )
+    if ( data.userType() == QMetaType::Type::QString )
     {
       const QString textVal = data.toString();
       if ( QgsStringUtils::isUrl( textVal ) )
@@ -332,7 +351,6 @@ void QgsAttributeTableView::keyPressEvent( QKeyEvent *event )
 {
   switch ( event->key() )
   {
-
     // Default Qt behavior would be to change the selection.
     // We don't make it that easy for the user to trash his selection.
     case Qt::Key_Up:
@@ -421,8 +439,7 @@ void QgsAttributeTableView::modelDeleted()
 void QgsAttributeTableView::selectRow( int row, bool anchor )
 {
   if ( selectionBehavior() == QTableView::SelectColumns
-       || ( selectionMode() == QTableView::SingleSelection
-            && selectionBehavior() == QTableView::SelectItems ) )
+       || ( selectionMode() == QTableView::SingleSelection && selectionBehavior() == QTableView::SelectItems ) )
     return;
 
   if ( row >= 0 && row < model()->rowCount() )
@@ -440,7 +457,8 @@ void QgsAttributeTableView::selectRow( int row, bool anchor )
     {
       if ( anchor )
         mCtrlDragSelectionFlag = mFeatureSelectionModel->isSelected( index )
-                                 ? QItemSelectionModel::Deselect : QItemSelectionModel::Select;
+                                   ? QItemSelectionModel::Deselect
+                                   : QItemSelectionModel::Select;
       command &= ~QItemSelectionModel::Toggle;
       command |= mCtrlDragSelectionFlag;
       if ( !anchor )
@@ -479,7 +497,11 @@ void QgsAttributeTableView::actionTriggered()
     QgsMapLayerAction *layerAction = qobject_cast<QgsMapLayerAction *>( object );
     if ( layerAction )
     {
+      QgsMapLayerActionContext context;
+      Q_NOWARN_DEPRECATED_PUSH
       layerAction->triggerForFeature( mFilterModel->layer(), f );
+      Q_NOWARN_DEPRECATED_POP
+      layerAction->triggerForFeature( mFilterModel->layer(), f, context );
     }
   }
 }
@@ -494,7 +516,7 @@ void QgsAttributeTableView::onActionColumnItemPainted( const QModelIndex &index 
 {
   if ( !indexWidget( index ) )
   {
-    QWidget *widget = createActionWidget( mFilterModel->data( index, QgsAttributeTableModel::FeatureIdRole ).toLongLong() );
+    QWidget *widget = createActionWidget( mFilterModel->data( index, static_cast<int>( QgsAttributeTableModel::CustomRole::FeatureId ) ).toLongLong() );
     mActionWidgets.insert( index, widget );
     setIndexWidget( index, widget );
   }
@@ -502,7 +524,7 @@ void QgsAttributeTableView::onActionColumnItemPainted( const QModelIndex &index 
 
 void QgsAttributeTableView::recreateActionWidgets()
 {
-  QMap< QModelIndex, QWidget * >::const_iterator it = mActionWidgets.constBegin();
+  QMap<QModelIndex, QWidget *>::const_iterator it = mActionWidgets.constBegin();
   for ( ; it != mActionWidgets.constEnd(); ++it )
   {
     // ownership of widget was transferred by initial call to setIndexWidget - clearing
@@ -528,4 +550,11 @@ void QgsAttributeTableView::scrollToFeature( const QgsFeatureId &fid, int col )
     return;
 
   selectionModel()->setCurrentIndex( index, QItemSelectionModel::SelectCurrent );
+}
+
+void QgsAttributeTableView::closeCurrentEditor()
+{
+  QWidget *editor = indexWidget( currentIndex() );
+  commitData( editor );
+  closeEditor( editor, QAbstractItemDelegate::NoHint );
 }

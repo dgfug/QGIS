@@ -16,12 +16,24 @@
 #include "qgswcsprovider.h"
 #include "qgsproviderguimetadata.h"
 
-class QgsWcsProviderGuiMetadata: public QgsProviderGuiMetadata
+#include "qgsprovidersourcewidgetprovider.h"
+
+class QgsWcsProviderGuiMetadata : public QgsProviderGuiMetadata
 {
   public:
     QgsWcsProviderGuiMetadata();
 
     QList<QgsSourceSelectProvider *> sourceSelectProviders() override;
     QList<QgsDataItemGuiProvider *> dataItemGuiProviders() override;
+    QList<QgsProviderSourceWidgetProvider *> sourceWidgetProviders() override;
 };
 
+
+class QgsWcsSourceWidgetProvider : public QgsProviderSourceWidgetProvider
+{
+  public:
+    QgsWcsSourceWidgetProvider();
+    QString providerKey() const override;
+    bool canHandleLayer( QgsMapLayer *layer ) const override;
+    QgsProviderSourceWidget *createWidget( QgsMapLayer *layer, QWidget *parent = nullptr ) override;
+};

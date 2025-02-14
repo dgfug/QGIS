@@ -39,13 +39,12 @@ class BuPyramid
 {
 public:
     BuPyramid(BaseInfo& common);
-    void run(const Options& options, ProgressWriter& progress);
+    void run(ProgressWriter& progress);
 
 private:
     void getInputFiles();
     void readBaseInfo();
     size_t queueWork();
-    void writeInfo();
 
     BaseInfo m_b;
     PyramidManager m_manager;

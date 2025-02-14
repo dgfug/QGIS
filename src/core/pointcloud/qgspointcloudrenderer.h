@@ -24,11 +24,13 @@
 #include "qgis_sip.h"
 #include "qgsvector3d.h"
 #include "qgspointcloudattribute.h"
+#include "qgsstyle.h"
 
 class QgsPointCloudBlock;
 class QgsLayerTreeLayer;
 class QgsLayerTreeModelLegendNode;
 class QgsPointCloudLayer;
+class QgsElevationMap;
 
 /**
  * \ingroup core
@@ -57,10 +59,7 @@ class CORE_EXPORT QgsPointCloudRenderContext
     QgsPointCloudRenderContext( QgsRenderContext &context, const QgsVector3D &scale, const QgsVector3D &offset,
                                 double zValueScale, double zValueFixedOffset, QgsFeedback *feedback = nullptr );
 
-    //! QgsPointCloudRenderContext cannot be copied.
     QgsPointCloudRenderContext( const QgsPointCloudRenderContext &rh ) = delete;
-
-    //! QgsPointCloudRenderContext cannot be copied.
     QgsPointCloudRenderContext &operator=( const QgsPointCloudRenderContext & ) = delete;
 
     /**
@@ -72,7 +71,7 @@ class CORE_EXPORT QgsPointCloudRenderContext
      * Returns a reference to the context's render context.
      * \note Not available in Python bindings.
      */
-    const QgsRenderContext &renderContext() const { return mRenderContext; } SIP_SKIP
+    const QgsRenderContext &renderContext() const SIP_SKIP { return mRenderContext; }
 
     /**
      * Returns the scale of the layer's int32 coordinates compared to CRS coords.
@@ -180,16 +179,29 @@ class CORE_EXPORT QgsPointCloudRenderContext
      * \a type indicates the original data type for the attribute.
      */
     template <typename T>
-    void getAttribute( const char *data, std::size_t offset, QgsPointCloudAttribute::DataType type, T &value ) const
+    static void getAttribute( const char *data, std::size_t offset, QgsPointCloudAttribute::DataType type, T &value )
     {
       switch ( type )
       {
+        case QgsPointCloudAttribute::UChar:
+          value = *reinterpret_cast< const unsigned char * >( data + offset );
+          return;
         case QgsPointCloudAttribute::Char:
           value = *( data + offset );
           return;
 
+        case QgsPointCloudAttribute::UInt32:
+          value = *reinterpret_cast< const quint32 * >( data + offset );
+          return;
         case QgsPointCloudAttribute::Int32:
           value = *reinterpret_cast< const qint32 * >( data + offset );
+          return;
+
+        case QgsPointCloudAttribute::UInt64:
+          value = *reinterpret_cast< const quint64 * >( data + offset );
+          return;
+        case QgsPointCloudAttribute::Int64:
+          value = *reinterpret_cast< const qint64 * >( data + offset );
           return;
 
         case QgsPointCloudAttribute::Short:
@@ -211,6 +223,28 @@ class CORE_EXPORT QgsPointCloudRenderContext
     }
 #endif
 
+#ifndef SIP_RUN    // this is only meant for low-level rendering in C++ code
+
+    /**
+     * Helper data structure used when rendering points as triangulated surface.
+     * We populate the structure as we traverse the nodes and then run Delaunay
+     * triangulation at the end + draw the triangles.
+     * \since QGIS 3.36
+     */
+    struct TriangulationData
+    {
+      std::vector<double> points;     //!< X,Y for each point - kept in this structure so that we can use it without further conversions in Delaunator-cpp
+      std::vector<QRgb> colors;       //!< RGB color for each point
+      std::vector<float> elevations;  //!< Z value for each point (only used when global map shading is enabled)
+    };
+
+    /**
+     * Returns reference to the triangulation data structure (only used when rendering as triangles is enabled)
+     * \since QGIS 3.36
+     */
+    TriangulationData &triangulationData() { return mTriangulationData; }
+#endif
+
   private:
 #ifdef SIP_RUN
     QgsPointCloudRenderContext( const QgsPointCloudRenderContext &rh );
@@ -229,7 +263,51 @@ class CORE_EXPORT QgsPointCloudRenderContext
     double mZValueFixedOffset = 0;
 
     QgsFeedback *mFeedback = nullptr;
+
+    TriangulationData mTriangulationData;
 };
+
+#ifndef SIP_RUN
+
+/**
+ * \ingroup core
+ * \class QgsPreparedPointCloudRendererData
+ *
+ * \brief Base class for 2d point cloud renderer prepared data containers.
+ * \note Not available in Python bindings
+ *
+ * \since QGIS 3.26
+ */
+class CORE_EXPORT QgsPreparedPointCloudRendererData
+{
+  public:
+
+    virtual ~QgsPreparedPointCloudRendererData();
+
+    /**
+     * Returns the set of attributes used by the prepared point cloud renderer.
+     */
+    virtual QSet< QString > usedAttributes() const = 0;
+
+    /**
+     * Prepares the renderer for using the specified \a block.
+     *
+     * Returns FALSE if preparation failed.
+     */
+    virtual bool prepareBlock( const QgsPointCloudBlock *block ) = 0;
+
+    /**
+     * An optimised method of retrieving the color of a point from a point cloud block.
+     *
+     * Before calling this method prepareBlock() must be called for each incoming point cloud block.
+     *
+     * \since QGIS 3.26
+     */
+    virtual QColor pointColor( const QgsPointCloudBlock *block, int i, double z ) = 0;
+
+};
+
+#endif
 
 
 /**
@@ -263,19 +341,7 @@ class CORE_EXPORT QgsPointCloudRenderer
 
   public:
 
-    /**
-     * Rendering symbols for points.
-     */
-    enum PointSymbol
-    {
-      Square, //!< Renders points as squares
-      Circle, //!< Renders points as circles
-    };
-
-    /**
-     * Constructor for QgsPointCloudRenderer.
-     */
-    QgsPointCloudRenderer() = default;
+    QgsPointCloudRenderer();
 
     virtual ~QgsPointCloudRenderer() = default;
 
@@ -348,6 +414,14 @@ class CORE_EXPORT QgsPointCloudRenderer
     virtual QSet< QString > usedAttributes( const QgsPointCloudRenderContext &context ) const;
 
     /**
+     * Returns prepared data container for bulk point color retrieval.
+     *
+     * \note Not available in Python bindings.
+     * \since QGIS 3.26
+     */
+    virtual std::unique_ptr< QgsPreparedPointCloudRendererData > prepare() SIP_SKIP;
+
+    /**
      * Must be called when a new render cycle is started. A call to startRender() must always
      * be followed by a corresponding call to stopRender() after all features have been rendered.
      *
@@ -410,7 +484,7 @@ class CORE_EXPORT QgsPointCloudRenderer
      * \see pointSizeUnit()
      * \see setPointSizeMapUnitScale()
      */
-    void setPointSizeUnit( const QgsUnitTypes::RenderUnit units ) { mPointSizeUnit = units; }
+    void setPointSizeUnit( const Qgis::RenderUnit units ) { mPointSizeUnit = units; }
 
     /**
      * Returns the units used for the point size.
@@ -418,7 +492,7 @@ class CORE_EXPORT QgsPointCloudRenderer
      * \see pointSize()
      * \see pointSizeMapUnitScale()
      */
-    QgsUnitTypes::RenderUnit pointSizeUnit() const { return mPointSizeUnit; }
+    Qgis::RenderUnit pointSizeUnit() const { return mPointSizeUnit; }
 
     /**
      * Sets the map unit \a scale used for the point size.
@@ -437,18 +511,34 @@ class CORE_EXPORT QgsPointCloudRenderer
     const QgsMapUnitScale &pointSizeMapUnitScale() const { return mPointSizeMapUnitScale; }
 
     /**
+     * Returns the drawing order used by the renderer for drawing points.
+     *
+     * \see setDrawOrder2d()
+     * \since QGIS 3.24
+     */
+    Qgis::PointCloudDrawOrder drawOrder2d() const;
+
+    /**
+     * Sets the drawing \a order used by the renderer for drawing points.
+     *
+     * \see drawOrder2d()
+     * \since QGIS 3.24
+     */
+    void setDrawOrder2d( Qgis::PointCloudDrawOrder order );
+
+    /**
      * Returns the symbol used by the renderer for drawing points.
      *
      * \see setPointSymbol()
      */
-    PointSymbol pointSymbol() const;
+    Qgis::PointCloudSymbol pointSymbol() const;
 
     /**
      * Sets the \a symbol used by the renderer for drawing points.
      *
      * \see pointSymbol()
      */
-    void setPointSymbol( PointSymbol symbol );
+    void setPointSymbol( Qgis::PointCloudSymbol symbol );
 
     /**
      * Returns the maximum screen error allowed when rendering the point cloud.
@@ -480,7 +570,7 @@ class CORE_EXPORT QgsPointCloudRenderer
      * \see maximumScreenError()
      * \see setMaximumScreenErrorUnit()
      */
-    QgsUnitTypes::RenderUnit maximumScreenErrorUnit() const;
+    Qgis::RenderUnit maximumScreenErrorUnit() const;
 
     /**
      * Sets the \a unit for the maximum screen error allowed when rendering the point cloud.
@@ -488,7 +578,93 @@ class CORE_EXPORT QgsPointCloudRenderer
      * \see setMaximumScreenError()
      * \see maximumScreenErrorUnit()
      */
-    void setMaximumScreenErrorUnit( QgsUnitTypes::RenderUnit unit );
+    void setMaximumScreenErrorUnit( Qgis::RenderUnit unit );
+
+    /**
+     * Returns whether points are triangulated to render solid surface
+     *
+     * \since QGIS 3.36
+     */
+    bool renderAsTriangles() const { return mRenderAsTriangles; }
+
+    /**
+     * Sets whether points are triangulated to render solid surface
+     *
+     * \since QGIS 3.36
+     */
+    void setRenderAsTriangles( bool asTriangles ) { mRenderAsTriangles = asTriangles; }
+
+    /**
+     * Returns whether large triangles will get rendered. This only applies when renderAsTriangles()
+     * is enabled. When the triangle filtering is enabled, triangles where at least one side is
+     * horizontally longer than the threshold in horizontalTriangleFilterThreshold() do not get rendered.
+     *
+     * \see horizontalTriangleFilterThreshold()
+     * \see horizontalTriangleFilterUnit()
+     * \see setHorizontalTriangleFilter()
+     * \since QGIS 3.36
+     */
+    bool horizontalTriangleFilter() const { return mHorizontalTriangleFilter; }
+
+    /**
+     * Sets whether large triangles will get rendered. This only applies when renderAsTriangles()
+     * is enabled. When the triangle filtering is enabled, triangles where at least one side is
+     * horizontally longer than the threshold in horizontalTriangleFilterThreshold() do not get rendered.
+     *
+     * \see setHorizontalTriangleFilterThreshold()
+     * \see setHorizontalTriangleFilterUnit()
+     * \see horizontalTriangleFilter()
+     * \since QGIS 3.36
+     */
+    void setHorizontalTriangleFilter( bool enabled ) { mHorizontalTriangleFilter = enabled; }
+
+    /**
+     * Returns threshold for filtering of triangles. This only applies when renderAsTriangles() and
+     * horizontalTriangleFilter() are both enabled. If any edge of a triangle is horizontally longer
+     * than the threshold, such triangle will not get rendered. Units of the threshold value are
+     * given by horizontalTriangleFilterUnits().
+     *
+     * \see horizontalTriangleFilter()
+     * \see horizontalTriangleFilterUnit()
+     * \see setHorizontalTriangleFilterThreshold()
+     * \since QGIS 3.36
+     */
+    double horizontalTriangleFilterThreshold() const { return mHorizontalTriangleFilterThreshold; }
+
+    /**
+     * Sets threshold for filtering of triangles. This only applies when renderAsTriangles() and
+     * horizontalTriangleFilter() are both enabled. If any edge of a triangle is horizontally longer
+     * than the threshold, such triangle will not get rendered. Units of the threshold value are
+     * given by horizontalTriangleFilterUnits().
+     *
+     * \see horizontalTriangleFilter()
+     * \see horizontalTriangleFilterUnit()
+     * \see horizontalTriangleFilterThreshold()
+     * \since QGIS 3.36
+     */
+    void setHorizontalTriangleFilterThreshold( double threshold ) { mHorizontalTriangleFilterThreshold = threshold; }
+
+    /**
+     * Returns units of the threshold for filtering of triangles. This only applies when renderAsTriangles() and
+     * horizontalTriangleFilter() are both enabled.
+     *
+     * \see horizontalTriangleFilter()
+     * \see horizontalTriangleFilterThreshold()
+     * \see setHorizontalTriangleFilterUnit()
+     * \since QGIS 3.36
+     */
+    Qgis::RenderUnit horizontalTriangleFilterUnit() const { return mHorizontalTriangleFilterUnit; }
+
+    /**
+     * Sets units of the threshold for filtering of triangles. This only applies when renderAsTriangles() and
+     * horizontalTriangleFilter() are both enabled.
+     *
+     * \see horizontalTriangleFilter()
+     * \see horizontalTriangleFilterThreshold()
+     * \see horizontalTriangleFilterUnit()
+     * \since QGIS 3.36
+     */
+    void setHorizontalTriangleFilterUnit( Qgis::RenderUnit unit ) { mHorizontalTriangleFilterUnit = unit; }
 
     /**
      * Creates a set of legend nodes representing the renderer.
@@ -499,6 +675,43 @@ class CORE_EXPORT QgsPointCloudRenderer
      * Returns a list of all rule keys for legend nodes created by the renderer.
      */
     virtual QStringList legendRuleKeys() const;
+
+    /**
+     * Set whether the renderer should also render file labels inside extent
+     * \since QGIS 3.42
+     */
+    void setShowLabels( const bool show ) { mShowLabels = show; }
+
+    /**
+     * Returns whether the renderer shows file labels inside the extent
+     * rectangle
+     * \since QGIS 3.42
+     */
+    bool showLabels() const { return mShowLabels; }
+
+    /**
+       * Sets the text format renderers should use for rendering labels
+       * \since QGIS 3.42
+       */
+    void setLabelTextFormat( const QgsTextFormat &textFormat ) { mLabelTextFormat = textFormat; }
+
+    /**
+     * Returns the text format renderer is using for rendering labels
+     * \since QGIS 3.42
+     */
+    QgsTextFormat labelTextFormat() const { return mLabelTextFormat; }
+
+    /**
+     * Sets the renderer behavior when zoomed out
+     * \since QGIS 3.42
+     */
+    void setZoomOutBehavior( const Qgis::PointCloudZoomOutRenderBehavior behavior ) { mZoomOutBehavior = behavior; }
+
+    /**
+     * Returns the renderer behavior when zoomed out
+     * \since QGIS 3.42
+     */
+    Qgis::PointCloudZoomOutRenderBehavior zoomOutBehavior() const { return mZoomOutBehavior; }
 
   protected:
 
@@ -531,25 +744,65 @@ class CORE_EXPORT QgsPointCloudRenderer
      */
     void drawPoint( double x, double y, const QColor &color, QgsPointCloudRenderContext &context ) const
     {
+      drawPoint( x, y, color, mDefaultPainterPenWidth, context );
+    }
+
+    /**
+     * Draws a point using a \a color and painter \a width at the specified \a x and \a y (in map coordinates).
+     *
+     * \since QGIS 3.36
+     */
+    void drawPoint( double x, double y, const QColor &color, int width, QgsPointCloudRenderContext &context ) const
+    {
       const QPointF originalXY( x, y );
       context.renderContext().mapToPixel().transformInPlace( x, y );
       QPainter *painter = context.renderContext().painter();
       switch ( mPointSymbol )
       {
-        case Square:
-          painter->fillRect( QRectF( x - mPainterPenWidth * 0.5,
-                                     y - mPainterPenWidth * 0.5,
-                                     mPainterPenWidth, mPainterPenWidth ), color );
+        case Qgis::PointCloudSymbol::Square:
+          painter->fillRect( QRectF( x - width * 0.5,
+                                     y - width * 0.5,
+                                     width, width ), color );
           break;
 
-        case Circle:
+        case Qgis::PointCloudSymbol::Circle:
           painter->setBrush( QBrush( color ) );
           painter->setPen( Qt::NoPen );
-          painter->drawEllipse( QRectF( x - mPainterPenWidth * 0.5,
-                                        y - mPainterPenWidth * 0.5,
-                                        mPainterPenWidth, mPainterPenWidth ) );
+          painter->drawEllipse( QRectF( x - width * 0.5,
+                                        y - width * 0.5,
+                                        width, width ) );
           break;
       };
+    }
+
+#ifndef SIP_RUN   // intentionally left out from SIP to avoid API breaks in future when we move elevation post-processing elsewhere
+
+    /**
+     * Draws a point at the elevation \a z using at the specified \a x and \a y (in map coordinates) on the elevation map.
+     * \since QGIS 3.28
+     */
+    void drawPointToElevationMap( double x, double y, double z, QgsPointCloudRenderContext &context ) const;
+
+    /**
+     * Draws a point at the elevation \a z using at the specified \a x and \a y (in map coordinates) and painter \a width on the elevation map.
+     * \since QGIS 3.36
+     */
+    void drawPointToElevationMap( double x, double y, double z, int width, QgsPointCloudRenderContext &context ) const;
+#endif
+
+    /**
+     * Adds a point to the list of points to be triangulated (only used when renderAsTriangles() is enabled)
+     * \since QGIS 3.36
+     */
+    void addPointToTriangulation( double x, double y, double z, const QColor &color, QgsPointCloudRenderContext &context )
+    {
+      QgsPointXY p = context.renderContext().mapToPixel().transform( x, y ) * context.renderContext().devicePixelRatio();
+      QgsPointCloudRenderContext::TriangulationData &triangulation = context.triangulationData();
+      triangulation.points.push_back( p.x() );
+      triangulation.points.push_back( p.y() );
+      triangulation.colors.push_back( color.rgb() );
+      if ( context.renderContext().elevationMap() )
+        triangulation.elevations.push_back( static_cast<float>( z ) );
     }
 
     /**
@@ -584,14 +837,25 @@ class CORE_EXPORT QgsPointCloudRenderer
 #endif
 
     double mMaximumScreenError = 0.3;
-    QgsUnitTypes::RenderUnit mMaximumScreenErrorUnit = QgsUnitTypes::RenderMillimeters;
+    Qgis::RenderUnit mMaximumScreenErrorUnit = Qgis::RenderUnit::Millimeters;
 
     double mPointSize = 1;
-    QgsUnitTypes::RenderUnit mPointSizeUnit = QgsUnitTypes::RenderMillimeters;
+    Qgis::RenderUnit mPointSizeUnit = Qgis::RenderUnit::Millimeters;
     QgsMapUnitScale mPointSizeMapUnitScale;
 
-    PointSymbol mPointSymbol = Square;
-    int mPainterPenWidth = 1;
+    Qgis::PointCloudSymbol mPointSymbol = Qgis::PointCloudSymbol::Square;
+    int mDefaultPainterPenWidth = 1;
+    Qgis::PointCloudDrawOrder mDrawOrder2d = Qgis::PointCloudDrawOrder::Default;
+
+    bool mRenderAsTriangles = false;
+    bool mHorizontalTriangleFilter = false;
+    double mHorizontalTriangleFilterThreshold = 5.0;
+    Qgis::RenderUnit mHorizontalTriangleFilterUnit = Qgis::RenderUnit::Millimeters;
+
+    bool mShowLabels = false;
+    QgsTextFormat mLabelTextFormat;
+
+    Qgis::PointCloudZoomOutRenderBehavior mZoomOutBehavior = Qgis::PointCloudZoomOutRenderBehavior::RenderExtents;
 };
 
 #endif // QGSPOINTCLOUDRENDERER_H

@@ -14,11 +14,13 @@
  ***************************************************************************/
 
 #include "qgspuzzlewidget.h"
+#include "moc_qgspuzzlewidget.cpp"
 
 #include "qgsmapcanvas.h"
 
 #include <QGraphicsPixmapItem>
 #include <QMessageBox>
+#include <QRandomGenerator>
 
 
 static bool testSolved( QVector<int> &positions )
@@ -57,11 +59,10 @@ static void shuffle( QVector<int> &positions, int count )
   {
     do
     {
-      const int move = qrand() % 4;
+      const int move = QRandomGenerator::global()->generate() % 4;
       cOther = cEmpty + moveX[move];
       rOther = rEmpty + moveY[move];
-    }
-    while ( cOther < 0 || cOther >= size || rOther < 0 || rOther >= size );
+    } while ( cOther < 0 || cOther >= size || rOther < 0 || rOther >= size );
 
     const int idxOther = rOther * size + cOther;
     std::swap( positions[idxEmpty], positions[idxOther] );
@@ -81,7 +82,7 @@ QgsPuzzleWidget::QgsPuzzleWidget( QgsMapCanvas *canvas )
 void QgsPuzzleWidget::mousePressEvent( QMouseEvent *event )
 {
   if ( mTileWidth == 0 || mTileHeight == 0 )
-    return;  // not initialized
+    return; // not initialized
 
   const int idxEmpty = findEmpty( mPositions );
   const int rEmpty = idxEmpty / mSize;
@@ -133,6 +134,7 @@ bool QgsPuzzleWidget::letsGetThePartyStarted()
 
   QPixmap pixmap;
   pixmap.load( filename );
+  pixmap = pixmap.scaled( mCanvas->width() - 2, mCanvas->height() - 2 );
 
   const int tileWidth = pixmap.width() / mSize;
   const int tileHeight = pixmap.height() / mSize;
@@ -185,7 +187,7 @@ void QgsPuzzleWidget::updateTilePositions()
   {
     const int itemIndex = mPositions[i];
     if ( itemIndex == -1 )
-      continue;  // empty tile
+      continue; // empty tile
 
     int r = i / mSize, c = i % mSize;
     int x = c * mTileWidth, y = r * mTileHeight;

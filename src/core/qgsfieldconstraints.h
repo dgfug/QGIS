@@ -21,12 +21,12 @@
 #include <QObject>
 
 #include "qgis_core.h"
+#include "qgis_sip.h"
 
 /**
  * \class QgsFieldConstraints
  * \ingroup core
  * \brief Stores information about constraints which may be present on a field.
- * \since QGIS 3.0
  */
 
 class CORE_EXPORT QgsFieldConstraints
@@ -40,7 +40,7 @@ class CORE_EXPORT QgsFieldConstraints
     /**
      * Constraints which may be present on a field.
      */
-    enum Constraint
+    enum Constraint SIP_ENUM_BASETYPE( IntFlag )
     {
       ConstraintNotNull = 1, //!< Field may not be null
       ConstraintUnique = 1 << 1, //!< Field must have a unique value
@@ -89,7 +89,8 @@ class CORE_EXPORT QgsFieldConstraints
 
     /**
      * Returns the strength of a field constraint, or ConstraintStrengthNotSet if the constraint
-     * is not present on this field.
+     * is not present on this field. If the strength is not set returns ConstraintStrengthNotSet
+     * for anything but ConstraintExpression which returns ConstraintStrengthHard.
      * \see constraints()
      * \see setConstraintStrength()
      */
@@ -141,6 +142,22 @@ class CORE_EXPORT QgsFieldConstraints
      */
     void setConstraintExpression( const QString &expression, const QString &description = QString() );
 
+    /**
+     * Returns the associated field domain name, for providers which support field domains.
+     *
+     * \see setDomainName()
+     * \since QGIS 3.26
+     */
+    QString domainName() const { return mDomainName; }
+
+    /**
+     * Sets the associated field \a domain name, for providers which support field domains.
+     *
+     * \see domainName()
+     * \since QGIS 3.26
+     */
+    void setDomainName( const QString &domain ) { mDomainName = domain; }
+
     // TODO c++20 - replace with = default
     bool operator==( const QgsFieldConstraints &other ) const;
 
@@ -160,6 +177,9 @@ class CORE_EXPORT QgsFieldConstraints
 
     //! Expression constraint descriptive name
     QString mExpressionConstraintDescription;
+
+    //! Field domain name, for providers which support field domains
+    QString mDomainName;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS( QgsFieldConstraints::Constraints )

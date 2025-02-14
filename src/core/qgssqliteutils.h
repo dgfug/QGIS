@@ -35,7 +35,6 @@ class QVariant;
  *
  * \brief Closes a sqlite3 database.
  *
- * \since QGIS 3.0
  */
 struct CORE_EXPORT QgsSqlite3Closer
 {
@@ -43,7 +42,7 @@ struct CORE_EXPORT QgsSqlite3Closer
   /**
    * Closes an sqlite \a database.
    */
-  void operator()( sqlite3 *database );
+  void operator()( sqlite3 *database ) const;
 };
 
 /**
@@ -55,7 +54,7 @@ struct CORE_EXPORT  QgsSqlite3StatementFinalizer
   /**
    * Finalizes an sqlite3 \a statement.
    */
-  void operator()( sqlite3_stmt *statement );
+  void operator()( sqlite3_stmt *statement ) const;
 };
 
 /**
@@ -64,7 +63,6 @@ struct CORE_EXPORT  QgsSqlite3StatementFinalizer
  * \brief Unique pointer for sqlite3 prepared statements, which automatically finalizes
  * the statement when the pointer goes out of scope or is reset.
  *
- * \since QGIS 3.0
  */
 class CORE_EXPORT sqlite3_statement_unique_ptr : public std::unique_ptr< sqlite3_stmt, QgsSqlite3StatementFinalizer>
 {
@@ -113,7 +111,6 @@ class CORE_EXPORT sqlite3_statement_unique_ptr : public std::unique_ptr< sqlite3
  * \brief Unique pointer for sqlite3 databases, which automatically closes
  * the database when the pointer goes out of scope or is reset.
  *
- * \since QGIS 3.0
  */
 class CORE_EXPORT sqlite3_database_unique_ptr : public std::unique_ptr< sqlite3, QgsSqlite3Closer>
 {

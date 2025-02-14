@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/symbology/qgsrendererregistry.h                             *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -77,8 +77,6 @@ Sets an ``icon`` representing the renderer.
     virtual QgsRendererAbstractMetadata::LayerTypes compatibleLayerTypes() const;
 %Docstring
 Returns flags indicating the types of layer the renderer is compatible with.
-
-.. versionadded:: 2.16
 %End
 
     virtual QgsFeatureRenderer *createRenderer( QDomElement &elem, const QgsReadWriteContext &context ) = 0 /Factory/;
@@ -96,7 +94,10 @@ If not ``None``, it may be used to initialize GUI of the widget from the previou
 The old renderer does not have to be of the same type as returned by :py:func:`~QgsRendererAbstractMetadata.createRenderer`.
 %End
 
-    virtual QgsFeatureRenderer *createRendererFromSld( QDomElement &elem, QgsWkbTypes::GeometryType geomType ) /Factory/;
+    virtual QgsFeatureRenderer *createRendererFromSld( QDomElement &elem, Qgis::GeometryType geomType ) /Factory/;
+%Docstring
+Returns a new instance of the renderer, converted from an SLD XML element.
+%End
 
   protected:
 };
@@ -122,7 +123,7 @@ Convenience metadata class that uses static functions to create renderer and its
 
     virtual QgsFeatureRenderer *createRenderer( QDomElement &elem, const QgsReadWriteContext &context ) /Factory/;
     virtual QgsRendererWidget *createRendererWidget( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer ) /Factory/;
-    virtual QgsFeatureRenderer *createRendererFromSld( QDomElement &elem, QgsWkbTypes::GeometryType geomType ) /Factory/;
+    virtual QgsFeatureRenderer *createRendererFromSld( QDomElement &elem, Qgis::GeometryType geomType ) /Factory/;
 
 
 
@@ -192,8 +193,6 @@ Returns a list of available renderers.
 Returns a list of available renderers which are compatible with a specified layer.
 
 :param layer: vector layer
-
-.. versionadded:: 2.16
 %End
 
   private:
@@ -205,5 +204,5 @@ Returns a list of available renderers which are compatible with a specified laye
  *                                                                      *
  * src/core/symbology/qgsrendererregistry.h                             *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

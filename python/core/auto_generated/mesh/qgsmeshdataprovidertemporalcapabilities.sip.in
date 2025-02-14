@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/mesh/qgsmeshdataprovidertemporalcapabilities.h              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -81,14 +81,14 @@ Returns the time extent using an external ``reference`` date time
 and the first and last times available from the all the dataset
 %End
 
-    void setTemporalUnit( QgsUnitTypes::TemporalUnit temporalUnit );
+    void setTemporalUnit( Qgis::TemporalUnit temporalUnit );
 %Docstring
 Sets the temporal unit (``temporalUnit``) used to read data by the data provider
 
 Temporal units supported are milliseconds, seconds, minutes, hors, days and weeks
 %End
 
-    QgsUnitTypes::TemporalUnit temporalUnit() const;
+    Qgis::TemporalUnit temporalUnit() const;
 %Docstring
 Returns the temporal unit used to read data by the data provider
 %End
@@ -100,7 +100,7 @@ Returns the relative time in milliseconds of the dataset
 
     void clear();
 %Docstring
-Clears alls stored reference times and dataset times
+Clears all stored reference times and dataset times
 %End
 
     qint64 firstTimeStepDuration( int group ) const;
@@ -117,5 +117,5 @@ The value is -1 if the dataset group is not present or if it contains only one d
  *                                                                      *
  * src/core/mesh/qgsmeshdataprovidertemporalcapabilities.h              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

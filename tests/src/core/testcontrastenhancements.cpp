@@ -29,42 +29,35 @@
  * \ingroup UnitTests
  * This is a unit test for the ContrastEnhancements contrast enhancement classes.
  */
-class TestContrastEnhancements: public QObject
+class TestContrastEnhancements : public QgsTest
 {
     Q_OBJECT
+  public:
+    TestContrastEnhancements()
+      : QgsTest( QStringLiteral( "Raster Contrast Enhancement Tests" ) ) {}
+
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init() {} // will be called before each testfunction is executed.
-    void cleanup() {} // will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
+    void init() {}          // will be called before each testfunction is executed.
+    void cleanup() {}       // will be called after every testfunction.
 
     void clipMinMaxEnhancementTest();
     void linearMinMaxEnhancementWithClipTest();
     void linearMinMaxEnhancementTest();
-  private:
-    QString mReport;
 };
 
-//runs before all tests
+
 void TestContrastEnhancements::initTestCase()
 {
-  mReport += QLatin1String( "<h1>Raster Contrast Enhancement Tests</h1>\n" );
+  QgsApplication::init();
+  QgsApplication::initQgis();
 }
-//runs after all tests
+
 void TestContrastEnhancements::cleanupTestCase()
 {
-  const QString myReportFile = QDir::tempPath() + "/qgistest.html";
-  QFile myFile( myReportFile );
-  if ( myFile.open( QIODevice::WriteOnly | QIODevice::Append ) )
-  {
-    QTextStream myQTextStream( &myFile );
-    myQTextStream << mReport;
-    myFile.close();
-    //QDesktopServices::openUrl( "file:///" + myReportFile );
-  }
-
+  QgsApplication::exitQgis();
 }
-
 
 void TestContrastEnhancements::clipMinMaxEnhancementTest()
 {

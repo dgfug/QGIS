@@ -25,17 +25,16 @@
 #include "qgsapplication.h"
 #include "qgsdataitemprovider.h"
 #include "qgsdataitemproviderregistry.h"
-#include "qgsdataprovider.h"
 #include "qgsmimedatautils.h"
 #include "qgslogger.h"
-#include "qgsproviderregistry.h"
 #include "qgsbrowsermodel.h"
+#include "moc_qgsbrowsermodel.cpp"
 #include "qgsproject.h"
 #include "qgssettings.h"
 #include "qgsdirectoryitem.h"
-#include "qgsprojectitem.h"
 #include "qgslayeritem.h"
 #include "qgsfavoritesitem.h"
+#include "qgslayermetadata.h"
 
 #define PROJECT_HOME_PREFIX "project:"
 #define HOME_PREFIX "home:"
@@ -85,7 +84,7 @@ QgsBrowserModel::~QgsBrowserModel()
 
 void QgsBrowserModel::updateProjectHome()
 {
-  QString home = QgsProject::instance()->homePath();
+  QString home = QgsProject::instance()->homePath(); // skip-keyword-check
   if ( mProjectHome && mProjectHome->path().mid( QStringLiteral( PROJECT_HOME_PREFIX ).length() ) == home )
     return;
 
@@ -250,7 +249,7 @@ void QgsBrowserModel::initialize()
 {
   if ( ! mInitialized )
   {
-    connect( QgsProject::instance(), &QgsProject::homePathChanged, this, &QgsBrowserModel::updateProjectHome );
+    connect( QgsProject::instance(), &QgsProject::homePathChanged, this, &QgsBrowserModel::updateProjectHome ); // skip-keyword-check
     addRootItems();
     mInitialized = true;
   }
@@ -300,7 +299,7 @@ QVariant QgsBrowserModel::data( const QModelIndex &index, int role ) const
   {
     return item->name();
   }
-  else if ( role == QgsBrowserModel::SortRole )
+  else if ( role == static_cast< int >( QgsBrowserModel::CustomRole::Sort ) )
   {
     return item->sortKey();
   }
@@ -312,11 +311,11 @@ QVariant QgsBrowserModel::data( const QModelIndex &index, int role ) const
   {
     return item->icon();
   }
-  else if ( role == QgsBrowserModel::PathRole )
+  else if ( role == static_cast< int >( QgsBrowserModel::CustomRole::Path ) )
   {
     return item->path();
   }
-  else if ( role == QgsBrowserModel::CommentRole )
+  else if ( role == static_cast< int >( QgsBrowserModel::CustomRole::Comment ) )
   {
     if ( item->type() == Qgis::BrowserItemType::Layer )
     {
@@ -325,7 +324,16 @@ QVariant QgsBrowserModel::data( const QModelIndex &index, int role ) const
     }
     return QVariant();
   }
-  else if ( role == QgsBrowserModel::ProviderKeyRole )
+  else if ( role == static_cast< int >( QgsBrowserModel::CustomRole::LayerMetadata ) )
+  {
+    if ( item->type() == Qgis::BrowserItemType::Layer )
+    {
+      QgsLayerItem *lyrItem = qobject_cast<QgsLayerItem *>( item );
+      return QVariant::fromValue( lyrItem->layerMetadata() );
+    }
+    return QVariant();
+  }
+  else if ( role == static_cast< int >( QgsBrowserModel::CustomRole::ProviderKey ) )
   {
     return item->providerKey();
   }
@@ -377,7 +385,7 @@ QVariant QgsBrowserModel::headerData( int section, Qt::Orientation orientation, 
 
 int QgsBrowserModel::rowCount( const QModelIndex &parent ) const
 {
-  //QgsDebugMsg(QString("isValid = %1 row = %2 column = %3").arg(parent.isValid()).arg(parent.row()).arg(parent.column()));
+  //QgsDebugMsgLevel(QString("isValid = %1 row = %2 column = %3").arg(parent.isValid()).arg(parent.row()).arg(parent.column()), 2);
 
   if ( !parent.isValid() )
   {
@@ -388,7 +396,7 @@ int QgsBrowserModel::rowCount( const QModelIndex &parent ) const
   {
     // ordinary item: number of its children
     QgsDataItem *item = dataItem( parent );
-    //if ( item ) QgsDebugMsg(QString("path = %1 rowCount = %2").arg(item->path()).arg(item->rowCount()) );
+    //if ( item ) QgsDebugMsgLevel(QString("path = %1 rowCount = %2").arg(item->path()).arg(item->rowCount()), 2);
     return item ? item->rowCount() : 0;
   }
 }
@@ -429,7 +437,7 @@ QModelIndex QgsBrowserModel::findPath( QAbstractItemModel *model, const QString 
     {
       QModelIndex idx = model->index( i, 0, index );
 
-      QString itemPath = model->data( idx, PathRole ).toString();
+      QString itemPath = model->data( idx, static_cast< int >( QgsBrowserModel::CustomRole::Path ) ).toString();
       if ( itemPath == path )
       {
         QgsDebugMsgLevel( "Arrived " + itemPath, 4 );
@@ -559,7 +567,7 @@ QModelIndex QgsBrowserModel::parent( const QModelIndex &index ) const
   if ( !item )
     return QModelIndex();
 
-  return findItem( item->parent() );
+  return findItem( item->parent(), item->parent() ? item->parent()->parent() : nullptr );
 }
 
 QModelIndex QgsBrowserModel::findItem( QgsDataItem *item, QgsDataItem *parent ) const
@@ -664,7 +672,17 @@ QMimeData *QgsBrowserModel::mimeData( const QModelIndexList &indexes ) const
     if ( index.isValid() )
     {
       QgsDataItem *ptr = reinterpret_cast< QgsDataItem * >( index.internalPointer() );
-      const QgsMimeDataUtils::UriList uris = ptr->mimeUris();
+      QgsMimeDataUtils::UriList uris = ptr->mimeUris();
+      if ( uris.isEmpty() )
+      {
+        Q_NOWARN_DEPRECATED_PUSH
+        QgsMimeDataUtils::Uri uri = ptr->mimeUri();
+        Q_NOWARN_DEPRECATED_POP
+        if ( uri.isValid() )
+        {
+          uris << uri;
+        }
+      }
       for ( QgsMimeDataUtils::Uri uri : std::as_const( uris ) )
       {
         if ( ptr->capabilities2() & Qgis::BrowserItemCapability::ItemRepresentsFile )
@@ -704,7 +722,7 @@ bool QgsBrowserModel::canFetchMore( const QModelIndex &parent ) const
 {
   QgsDataItem *item = dataItem( parent );
   // if ( item )
-  //   QgsDebugMsg( QStringLiteral( "path = %1 canFetchMore = %2" ).arg( item->path() ).arg( item && ! item->isPopulated() ) );
+  //   QgsDebugMsgLevel( QStringLiteral( "path = %1 canFetchMore = %2" ).arg( item->path() ).arg( item && ! item->isPopulated() ), 2 );
   return ( item && item->state() == Qgis::BrowserItemState::NotPopulated );
 }
 
@@ -804,8 +822,8 @@ void QgsBrowserModel::removeRootItem( QgsDataItem *item )
 
 QgsDataItem *QgsBrowserModel::addProviderRootItem( QgsDataItemProvider *pr )
 {
-  int capabilities = pr->capabilities();
-  if ( capabilities == QgsDataProvider::NoDataCapabilities )
+  const Qgis::DataItemProviderCapabilities capabilities = pr->capabilities();
+  if ( capabilities == Qgis::DataItemProviderCapabilities( Qgis::DataItemProviderCapability::NoCapabilities ) )
   {
     QgsDebugMsgLevel( pr->name() + " does not have any dataCapabilities", 4 );
     return nullptr;

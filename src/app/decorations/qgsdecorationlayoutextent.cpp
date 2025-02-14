@@ -17,19 +17,15 @@
  ***************************************************************************/
 
 #include "qgsdecorationlayoutextent.h"
+#include "moc_qgsdecorationlayoutextent.cpp"
 #include "qgsdecorationlayoutextentdialog.h"
 
-#include "qgslayoutmanager.h"
-#include "qgslayout.h"
 #include "qgslayoutitemmap.h"
 #include "qgsgeometry.h"
 #include "qgsexception.h"
 #include "qgslinesymbollayer.h"
 #include "qgslayoutdesignerdialog.h"
 #include "qgisapp.h"
-#include "qgsapplication.h"
-#include "qgslogger.h"
-#include "qgsmapcanvas.h"
 #include "qgsproject.h"
 #include "qgssymbollayerutils.h"
 #include "qgsreadwritecontext.h"
@@ -42,7 +38,7 @@ QgsDecorationLayoutExtent::QgsDecorationLayoutExtent( QObject *parent )
   : QgsDecorationItem( parent )
 {
   mPlacement = BottomRight;
-  mMarginUnit = QgsUnitTypes::RenderMillimeters;
+  mMarginUnit = Qgis::RenderUnit::Millimeters;
 
   setDisplayName( tr( "Layout Extent" ) );
   mConfigurationName = QStringLiteral( "LayoutExtent" );
@@ -68,7 +64,7 @@ void QgsDecorationLayoutExtent::projectRead()
     elem = doc.documentElement();
     mSymbol.reset( QgsSymbolLayerUtils::loadSymbol<QgsFillSymbol>( elem, rwContext ) );
   }
-  if ( ! mSymbol )
+  if ( !mSymbol )
   {
     mSymbol.reset( new QgsFillSymbol() );
     QgsSimpleLineSymbolLayer *layer = new QgsSimpleLineSymbolLayer( QColor( 0, 0, 0, 100 ), 0, Qt::DashLine );
@@ -132,12 +128,12 @@ void QgsDecorationLayoutExtent::render( const QgsMapSettings &mapSettings, QgsRe
   QTransform transform = m2p.transform();
 
   // only loop through open layout designers
-  const QSet< QgsLayoutDesignerDialog * > designers = QgisApp::instance()->layoutDesigners();
+  const QSet<QgsLayoutDesignerDialog *> designers = QgisApp::instance()->layoutDesigners();
 
   for ( QgsLayoutDesignerDialog *designer : designers )
   {
     QgsLayout *layout = designer->currentLayout();
-    QList< QgsLayoutItemMap * > maps;
+    QList<QgsLayoutItemMap *> maps;
     layout->layoutItems( maps );
     for ( const QgsLayoutItemMap *map : std::as_const( maps ) )
     {
@@ -145,12 +141,10 @@ void QgsDecorationLayoutExtent::render( const QgsMapSettings &mapSettings, QgsRe
       QPointF labelPoint = extent.at( 1 );
       QgsGeometry g = QgsGeometry::fromQPolygonF( extent );
 
-      if ( map->crs() !=
-           mapSettings.destinationCrs() )
+      if ( map->crs() != mapSettings.destinationCrs() )
       {
         // reproject extent
-        QgsCoordinateTransform ct( map->crs(),
-                                   mapSettings.destinationCrs(), QgsProject::instance() );
+        QgsCoordinateTransform ct( map->crs(), mapSettings.destinationCrs(), QgsProject::instance() );
         g = g.densifyByCount( 20 );
         try
         {
@@ -169,8 +163,7 @@ void QgsDecorationLayoutExtent::render( const QgsMapSettings &mapSettings, QgsRe
 
       if ( mLabelExtents )
       {
-        QgsTextRenderer::drawText( labelPoint, ( map->mapRotation() - mapSettings.rotation() ) * M_PI / 180.0, QgsTextRenderer::AlignRight, QStringList() << tr( "%1: %2" ).arg( designer->masterLayout()->name(), map->displayName() ),
-                                   context, mTextFormat );
+        QgsTextRenderer::drawText( labelPoint, ( map->mapRotation() - mapSettings.rotation() ) * M_PI / 180.0, Qgis::TextHorizontalAlignment::Right, QStringList() << tr( "%1: %2" ).arg( designer->masterLayout()->name(), map->displayName() ), context, mTextFormat );
       }
     }
   }

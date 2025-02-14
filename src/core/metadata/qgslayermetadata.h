@@ -51,7 +51,6 @@ class QgsMapLayer;
  * subclasses. E.g. validating against the native QGIS metadata schema can be performed
  * using QgsNativeMetadataValidator.
  *
- * \since QGIS 3.0
  */
 class CORE_EXPORT QgsLayerMetadata : public QgsAbstractMetadataBase
 {
@@ -79,7 +78,7 @@ class CORE_EXPORT QgsLayerMetadata : public QgsAbstractMetadataBase
        * compulsory.
        * \see extentCrs
        */
-      QgsBox3d bounds;
+      QgsBox3D bounds;
 
       // TODO c++20 - replace with = default
       bool operator==( const QgsLayerMetadata::SpatialExtent &other ) const;
@@ -167,10 +166,8 @@ class CORE_EXPORT QgsLayerMetadata : public QgsAbstractMetadataBase
      */
     typedef QList< QgsLayerMetadata::Constraint > ConstraintList;
 
-    /**
-     * Constructor for QgsLayerMetadata.
-     */
     QgsLayerMetadata() = default;
+
 
     QgsLayerMetadata *clone() const override SIP_FACTORY;
 
@@ -322,6 +319,24 @@ class CORE_EXPORT QgsLayerMetadata : public QgsAbstractMetadataBase
 
     bool operator==( const QgsLayerMetadata &metadataOther ) const;
 
+    /**
+     * Returns TRUE if the metadata identifier, title, abstract, keywords or categories
+     * contain \a searchString using case-insensitive search.
+     *
+     * If \a searchString is empty this method returns FALSE.
+     *
+     * \since QGIS 3.28
+     */
+    bool contains( const QString &searchString ) const;
+
+    /**
+     * Returns TRUE if the metadata identifier, title, abstract, keywords or categories
+     * matches any regular expression from \a searchReList.
+     *
+     * \since QGIS 3.28
+     */
+    bool matches( const QVector<QRegularExpression> &searchReList ) const;
+
   private:
 
     /*
@@ -356,5 +371,6 @@ class CORE_EXPORT QgsLayerMetadata : public QgsAbstractMetadataBase
 
 Q_DECLARE_METATYPE( QgsLayerMetadata::ConstraintList )
 Q_DECLARE_METATYPE( QgsLayerMetadata::Extent )
+Q_DECLARE_METATYPE( QgsLayerMetadata )
 
 #endif // QGSLAYERMETADATA_H

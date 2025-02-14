@@ -30,14 +30,14 @@ QString QgsFieldFormatter::representValue( QgsVectorLayer *layer, int fieldIndex
     return QString();
 
   QString defVal;
-  if ( layer->fields().fieldOrigin( fieldIndex ) == QgsFields::OriginProvider && layer->dataProvider() )
+  if ( layer->fields().fieldOrigin( fieldIndex ) == Qgis::FieldOrigin::Provider && layer->dataProvider() )
     defVal = layer->dataProvider()->defaultValueClause( layer->fields().fieldOriginIndex( fieldIndex ) );
 
   if ( !defVal.isNull() && defVal == value )
   {
     return defVal;
   }
-  else if ( value.isNull() )
+  else if ( QgsVariantUtils::isNull( value ) )
   {
     return QgsApplication::nullRepresentation();
   }

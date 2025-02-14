@@ -30,12 +30,10 @@ class QgsAbstractMaterialSettings;
  * \warning This is not considered stable API, and may change in future QGIS releases. It is
  * exposed to the Python bindings as a tech preview only.
  *
- * \since QGIS 3.0
  */
 class _3D_EXPORT QgsLine3DSymbol : public QgsAbstract3DSymbol SIP_NODEFAULTCTORS
 {
   public:
-    //! Constructor for QgsLine3DSymbol
     QgsLine3DSymbol();
     ~QgsLine3DSymbol() override;
 
@@ -51,27 +49,51 @@ class _3D_EXPORT QgsLine3DSymbol : public QgsAbstract3DSymbol SIP_NODEFAULTCTORS
 
     void writeXml( QDomElement &elem, const QgsReadWriteContext &context ) const override;
     void readXml( const QDomElement &elem, const QgsReadWriteContext &context ) override;
-    QList< QgsWkbTypes::GeometryType > compatibleGeometryTypes() const override;
+    QList<Qgis::GeometryType> compatibleGeometryTypes() const override;
+    void setDefaultPropertiesFromLayer( const QgsVectorLayer *layer ) override;
 
     //! Returns method that determines altitude (whether to clamp to feature to terrain)
-    Qgs3DTypes::AltitudeClamping altitudeClamping() const { return mAltClamping; }
+    Qgis::AltitudeClamping altitudeClamping() const { return mAltClamping; }
     //! Sets method that determines altitude (whether to clamp to feature to terrain)
-    void setAltitudeClamping( Qgs3DTypes::AltitudeClamping altClamping ) { mAltClamping = altClamping; }
+    void setAltitudeClamping( Qgis::AltitudeClamping altClamping ) { mAltClamping = altClamping; }
 
     //! Returns method that determines how altitude is bound to individual vertices
-    Qgs3DTypes::AltitudeBinding altitudeBinding() const { return mAltBinding; }
+    Qgis::AltitudeBinding altitudeBinding() const { return mAltBinding; }
     //! Sets method that determines how altitude is bound to individual vertices
-    void setAltitudeBinding( Qgs3DTypes::AltitudeBinding altBinding ) { mAltBinding = altBinding; }
+    void setAltitudeBinding( Qgis::AltitudeBinding altBinding ) { mAltBinding = altBinding; }
 
     //! Returns width of the line symbol (in map units)
     float width() const { return mWidth; }
     //! Sets width of the line symbol (in map units)
     void setWidth( float width ) { mWidth = width; }
 
-    //! Returns height (altitude) of the symbol (in map units)
-    float height() const { return mHeight; }
-    //! Sets height (altitude) of the symbol (in map units)
-    void setHeight( float height ) { mHeight = height; }
+    /**
+     * Returns height (altitude) of the symbol (in map units)
+     *
+     * \deprecated QGIS 3.36. Use offset() instead.
+     */
+    Q_DECL_DEPRECATED float height() const SIP_DEPRECATED { return mOffset; }
+
+    /**
+     * Sets height (altitude) of the symbol (in map units)
+     *
+     * \deprecated QGIS 3.36. Use setOffset() instead.
+     */
+    Q_DECL_DEPRECATED void setHeight( float height ) SIP_DEPRECATED { mOffset = height; }
+
+    /**
+     * Returns vertical offset of the symbol (in map units)
+     *
+     * \since QGIS 3.36
+     */
+    float offset() const { return mOffset; }
+
+    /**
+     * Sets vertical offset of the symbol (in map units)
+     *
+     * \since QGIS 3.36
+     */
+    void setOffset( float offset ) { mOffset = offset; }
 
     //! Returns extrusion height (in map units)
     float extrusionHeight() const { return mExtrusionHeight; }
@@ -83,15 +105,15 @@ class _3D_EXPORT QgsLine3DSymbol : public QgsAbstract3DSymbol SIP_NODEFAULTCTORS
     //! Sets whether the renderer will render data with simple lines (otherwise it uses buffer)
     void setRenderAsSimpleLines( bool enabled ) { mRenderAsSimpleLines = enabled; }
 
-    //! Returns material used for shading of the symbol
-    QgsAbstractMaterialSettings *material() const;
+    //! Returns material settings used for shading of the symbol
+    QgsAbstractMaterialSettings *materialSettings() const;
 
     /**
      * Sets the \a material settings used for shading of the symbol.
      *
      * Ownership of \a material is transferred to the symbol.
      */
-    void setMaterial( QgsAbstractMaterialSettings *material SIP_TRANSFER );
+    void setMaterialSettings( QgsAbstractMaterialSettings *materialSettings SIP_TRANSFER );
 
     /**
      * Exports the geometries contained within the hierarchy of entity.
@@ -101,15 +123,15 @@ class _3D_EXPORT QgsLine3DSymbol : public QgsAbstract3DSymbol SIP_NODEFAULTCTORS
 
   private:
     //! how to handle altitude of vector features
-    Qgs3DTypes::AltitudeClamping mAltClamping = Qgs3DTypes::AltClampRelative;
+    Qgis::AltitudeClamping mAltClamping = Qgis::AltitudeClamping::Absolute;
     //! how to handle clamping of vertices of individual features
-    Qgs3DTypes::AltitudeBinding mAltBinding = Qgs3DTypes::AltBindCentroid;
+    Qgis::AltitudeBinding mAltBinding = Qgis::AltitudeBinding::Centroid;
 
-    float mWidth = 2.0f;            //!< Line width (horizontally)
-    float mHeight = 0.0f;           //!< Base height of polygons
-    float mExtrusionHeight = 0.0f;  //!< How much to extrude (0 means no walls)
-    bool mRenderAsSimpleLines = false;   //!< Whether to render data with simple lines (otherwise it uses buffer)
-    std::unique_ptr< QgsAbstractMaterialSettings > mMaterial;  //!< Defines appearance of objects
+    float mWidth = 2.0f;                                            //!< Line width (horizontally)
+    float mOffset = 0.0f;                                           //!< Base height of polygons
+    float mExtrusionHeight = 0.0f;                                  //!< How much to extrude (0 means no walls)
+    bool mRenderAsSimpleLines = false;                              //!< Whether to render data with simple lines (otherwise it uses buffer)
+    std::unique_ptr<QgsAbstractMaterialSettings> mMaterialSettings; //!< Defines appearance of objects
 };
 
 

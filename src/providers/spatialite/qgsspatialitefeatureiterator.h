@@ -18,6 +18,7 @@
 #include "qgsfeatureiterator.h"
 #include "qgsfields.h"
 #include "qgscoordinatetransform.h"
+#include "qgsdbquerylog.h"
 
 extern "C"
 {
@@ -28,7 +29,7 @@ extern "C"
 class QgsSqliteHandle;
 class QgsSpatiaLiteProvider;
 
-class QgsSpatiaLiteFeatureSource final: public QgsAbstractFeatureSource
+class QgsSpatiaLiteFeatureSource final : public QgsAbstractFeatureSource
 {
   public:
     explicit QgsSpatiaLiteFeatureSource( const QgsSpatiaLiteProvider *p );
@@ -58,7 +59,7 @@ class QgsSpatiaLiteFeatureSource final: public QgsAbstractFeatureSource
     friend class QgsSpatiaLiteExpressionCompiler;
 };
 
-class QgsSpatiaLiteFeatureIterator final: public QgsAbstractFeatureIteratorFromSource<QgsSpatiaLiteFeatureSource>
+class QgsSpatiaLiteFeatureIterator final : public QgsAbstractFeatureIteratorFromSource<QgsSpatiaLiteFeatureSource>
 {
   public:
     QgsSpatiaLiteFeatureIterator( QgsSpatiaLiteFeatureSource *source, bool ownSource, const QgsFeatureRequest &request );
@@ -68,12 +69,10 @@ class QgsSpatiaLiteFeatureIterator final: public QgsAbstractFeatureIteratorFromS
     bool close() override;
 
   protected:
-
     bool fetchFeature( QgsFeature &feature ) override;
     bool nextFeatureFilterExpression( QgsFeature &f ) override;
 
   private:
-
     QString whereClauseRect();
     QString whereClauseFid();
     QString whereClauseFids();
@@ -82,7 +81,7 @@ class QgsSpatiaLiteFeatureIterator final: public QgsAbstractFeatureIteratorFromS
     QString quotedPrimaryKey();
     bool getFeature( sqlite3_stmt *stmt, QgsFeature &feature );
     QString fieldName( const QgsField &fld );
-    QVariant getFeatureAttribute( sqlite3_stmt *stmt, int ic, QVariant::Type type, QVariant::Type subType );
+    QVariant getFeatureAttribute( sqlite3_stmt *stmt, int ic, QMetaType::Type type, QMetaType::Type subType );
     void getFeatureGeometry( sqlite3_stmt *stmt, int ic, QgsFeature &feature );
 
     //! QGIS wrapper of the SQLite database connection
@@ -112,7 +111,12 @@ class QgsSpatiaLiteFeatureIterator final: public QgsAbstractFeatureIteratorFromS
     QgsRectangle mFilterRect;
     QgsCoordinateTransform mTransform;
     QgsGeometry mDistanceWithinGeom;
-    std::unique_ptr< QgsGeometryEngine > mDistanceWithinEngine;
+    std::unique_ptr<QgsGeometryEngine> mDistanceWithinEngine;
+
+    // Last prepared sql statement for logging purposes
+    QString mLastSql;
+
+    std::unique_ptr<QgsDatabaseQueryLogWrapper> mQueryLogWrapper;
 };
 
 #endif // QGSSPATIALITEFEATUREITERATOR_H

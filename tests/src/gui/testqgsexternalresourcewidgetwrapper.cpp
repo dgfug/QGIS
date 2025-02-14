@@ -22,6 +22,7 @@
 #include "qgsexternalstorage.h"
 #include "qgsexternalstorageregistry.h"
 #include "qgspixmaplabel.h"
+#include "qgsmediawidget.h"
 #include "qgsmessagebar.h"
 #include "qgsexternalstoragefilewidget.h"
 
@@ -47,10 +48,10 @@ class TestQgsExternalResourceWidgetWrapper : public QObject
 {
     Q_OBJECT
   private slots:
-    void initTestCase();// will be called before the first testfunction is executed.
-    void cleanupTestCase();// will be called after the last testfunction was executed.
-    void init();// will be called before each testfunction is executed.
-    void cleanup();// will be called after every testfunction.
+    void initTestCase();    // will be called before the first testfunction is executed.
+    void cleanupTestCase(); // will be called after the last testfunction was executed.
+    void init();            // will be called before each testfunction is executed.
+    void cleanup();         // will be called after every testfunction.
     void testSetNullValues();
 
     void testUrlStorageExpression();
@@ -82,7 +83,6 @@ class QgsTestExternalStorageFetchedContent
     Q_OBJECT
 
   public:
-
     QgsTestExternalStorageFetchedContent( QString url )
       : QgsExternalStorageFetchedContent()
       , mCached( url.endsWith( QLatin1String( "cached.txt" ) ) )
@@ -94,11 +94,11 @@ class QgsTestExternalStorageFetchedContent
     {
       if ( mCached )
       {
-        mStatus = Qgis::ContentStatus::Finished;
+        setStatus( Qgis::ContentStatus::Finished );
         emit fetched();
       }
       else
-        mStatus = Qgis::ContentStatus::Running;
+        setStatus( Qgis::ContentStatus::Running );
     }
 
 
@@ -109,25 +109,24 @@ class QgsTestExternalStorageFetchedContent
 
     void emitFetched()
     {
-      mStatus = Qgis::ContentStatus::Finished;
+      setStatus( Qgis::ContentStatus::Finished );
       emit fetched();
     }
 
     void emitErrorOccurred()
     {
-      mStatus = Qgis::ContentStatus::Failed;
+      setStatus( Qgis::ContentStatus::Failed );
       mErrorString = QStringLiteral( "an error" );
       emit errorOccurred( mErrorString );
     }
 
     void cancel() override
     {
-      mStatus = Qgis::ContentStatus::Canceled;
+      setStatus( Qgis::ContentStatus::Canceled );
       emit canceled();
     }
 
   private:
-
     bool mCached = false;
     QString mUrl;
 };
@@ -138,45 +137,42 @@ class QgsTestExternalStorageStoredContent
     Q_OBJECT
 
   public:
-
     QgsTestExternalStorageStoredContent( const QString &url )
-      : QgsExternalStorageStoredContent(),
-        mUrl( url )
+      : QgsExternalStorageStoredContent(), mUrl( url )
     {
     }
 
     void store() override
     {
-      mStatus = Qgis::ContentStatus::Running;
+      setStatus( Qgis::ContentStatus::Running );
     }
 
     void emitStored()
     {
-      mStatus = Qgis::ContentStatus::Finished;
+      setStatus( Qgis::ContentStatus::Finished );
       emit stored();
     }
 
     void emitErrorOccurred()
     {
-      mStatus = Qgis::ContentStatus::Failed;
+      setStatus( Qgis::ContentStatus::Failed );
       mErrorString = "an error";
       emit errorOccurred( mErrorString );
     }
 
     void cancel() override
     {
-      mStatus = Qgis::ContentStatus::Canceled;
+      setStatus( Qgis::ContentStatus::Canceled );
       emit canceled();
     };
 
     QString url() const override
     {
       return mUrl.endsWith( "/" ) ? QString( "http://www.test.com/here/myfile.txt" )
-             : mUrl;
+                                  : mUrl;
     }
 
   private:
-
     QString mUrl;
 };
 
@@ -184,7 +180,6 @@ class QgsTestExternalStorageStoredContent
 class QgsTestExternalStorage : public QgsExternalStorage
 {
   public:
-
     QString type() const override { return QStringLiteral( "test" ); }
 
     QString displayName() const override { return QStringLiteral( "Test" ); }
@@ -234,15 +229,13 @@ void TestQgsExternalResourceWidgetWrapper::cleanupTestCase()
 
 void TestQgsExternalResourceWidgetWrapper::init()
 {
-  vl = std::make_unique<QgsVectorLayer>( QStringLiteral( "NoGeometry?field=type:string&field=url:string" ),
-                                         QStringLiteral( "myvl" ),
-                                         QLatin1String( "memory" ) );
+  vl = std::make_unique<QgsVectorLayer>( QStringLiteral( "NoGeometry?field=type:string&field=url:string" ), QStringLiteral( "myvl" ), QLatin1String( "memory" ) );
 
-  QgsFeature feat1( vl->fields(),  1 );
+  QgsFeature feat1( vl->fields(), 1 );
   feat1.setAttribute( QStringLiteral( "type" ), QStringLiteral( "type1" ) );
   vl->dataProvider()->addFeature( feat1 );
 
-  QgsFeature feat2( vl->fields(),  2 );
+  QgsFeature feat2( vl->fields(), 2 );
   feat2.setAttribute( QStringLiteral( "type" ), QStringLiteral( "type2" ) );
   vl->dataProvider()->addFeature( feat2 );
 }
@@ -270,12 +263,12 @@ void TestQgsExternalResourceWidgetWrapper::testSetNullValues()
 
   ww.updateValues( QVariant() );
   QCOMPARE( ww.mLineEdit->text(), QgsApplication::nullRepresentation() );
-  QCOMPARE( ww.mQgsWidget->documentPath(), QVariant( QVariant::String ) );
+  QCOMPARE( ww.mQgsWidget->documentPath(), QgsVariantUtils::createNullVariant( QMetaType::Type::QString ) );
   QCOMPARE( spy.count(), 2 );
 
   ww.updateValues( QgsApplication::nullRepresentation() );
   QCOMPARE( ww.mLineEdit->text(), QgsApplication::nullRepresentation() );
-  QCOMPARE( ww.mQgsWidget->documentPath(), QVariant( QVariant::String ) );
+  QCOMPARE( ww.mQgsWidget->documentPath(), QgsVariantUtils::createNullVariant( QMetaType::Type::QString ) );
   QCOMPARE( spy.count(), 2 );
 
   delete widget;
@@ -283,7 +276,7 @@ void TestQgsExternalResourceWidgetWrapper::testSetNullValues()
 
 void TestQgsExternalResourceWidgetWrapper::testUrlStorageExpression()
 {
-  // test that everything related to Url storage expresssion is correctly set
+  // test that everything related to Url storage expression is correctly set
   // according to configuration
 
   QVariantMap globalVariables;
@@ -297,10 +290,10 @@ void TestQgsExternalResourceWidgetWrapper::testUrlStorageExpression()
   QVariantMap config;
   config.insert( QStringLiteral( "StorageType" ), QStringLiteral( "test" ) );
   QgsPropertyCollection propertyCollection;
-  propertyCollection.setProperty( QgsWidgetWrapper::StorageUrl, QgsProperty::fromExpression(
-                                    "@myurl || @layer_name || '/' || \"type\" || '/' "
-                                    "|| attribute( @current_feature, 'type' ) "
-                                    "|| '/' || $id || '/test'", true ) );
+  propertyCollection.setProperty( QgsWidgetWrapper::Property::StorageUrl, QgsProperty::fromExpression( "@myurl || @layer_name || '/' || \"type\" || '/' "
+                                                                                                       "|| attribute( @current_feature, 'type' ) "
+                                                                                                       "|| '/' || $id || '/test'",
+                                                                                                       true ) );
   config.insert( QStringLiteral( "PropertyCollection" ), propertyCollection.toVariant( QgsWidgetWrapper::propertyDefinitions() ) );
   ww.setConfig( config );
 
@@ -318,8 +311,7 @@ void TestQgsExternalResourceWidgetWrapper::testUrlStorageExpression()
 
   QgsExpressionContext expressionContext = ww.mQgsWidget->fileWidget()->expressionContext();
   QVERIFY( expression->prepare( &expressionContext ) );
-  QCOMPARE( expression->evaluate( &expressionContext ).toString(),
-            QStringLiteral( "http://url.test.com/myvl/type1/type1/1/test" ) );
+  QCOMPARE( expression->evaluate( &expressionContext ).toString(), QStringLiteral( "http://url.test.com/myvl/type1/type1/1/test" ) );
 
   feat = vl->getFeature( 2 );
   QVERIFY( feat.isValid() );
@@ -327,8 +319,7 @@ void TestQgsExternalResourceWidgetWrapper::testUrlStorageExpression()
 
   expressionContext = ww.mQgsWidget->fileWidget()->expressionContext();
   QVERIFY( expression->prepare( &expressionContext ) );
-  QCOMPARE( expression->evaluate( &expressionContext ).toString(),
-            QStringLiteral( "http://url.test.com/myvl/type2/type2/2/test" ) );
+  QCOMPARE( expression->evaluate( &expressionContext ).toString(), QStringLiteral( "http://url.test.com/myvl/type2/type2/2/test" ) );
 }
 
 void TestQgsExternalResourceWidgetWrapper::testLoadExternalDocument_data()
@@ -336,6 +327,8 @@ void TestQgsExternalResourceWidgetWrapper::testLoadExternalDocument_data()
   QTest::addColumn<int>( "documentType" );
 
   QTest::newRow( "image" ) << static_cast<int>( QgsExternalResourceWidget::Image );
+  QTest::newRow( "audio" ) << static_cast<int>( QgsExternalResourceWidget::Audio );
+  QTest::newRow( "video" ) << static_cast<int>( QgsExternalResourceWidget::Video );
 #ifdef WITH_QTWEBKIT
   QTest::newRow( "webview" ) << static_cast<int>( QgsExternalResourceWidget::Web );
 #endif
@@ -372,11 +365,15 @@ void TestQgsExternalResourceWidgetWrapper::testLoadExternalDocument()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
+  }
+  else if ( documentType == QgsExternalResourceWidget::Audio )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
+  }
+  else if ( documentType == QgsExternalResourceWidget::Video )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -414,11 +411,7 @@ void TestQgsExternalResourceWidgetWrapper::testLoadExternalDocument()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -455,11 +448,7 @@ void TestQgsExternalResourceWidgetWrapper::testLoadExternalDocument()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -524,6 +513,8 @@ void TestQgsExternalResourceWidgetWrapper::testLoadNullExternalDocument_data()
   QTest::addColumn<int>( "documentType" );
 
   QTest::newRow( "image" ) << static_cast<int>( QgsExternalResourceWidget::Image );
+  QTest::newRow( "audio" ) << static_cast<int>( QgsExternalResourceWidget::Audio );
+  QTest::newRow( "video" ) << static_cast<int>( QgsExternalResourceWidget::Video );
 #ifdef WITH_QTWEBKIT
   QTest::newRow( "webview" ) << static_cast<int>( QgsExternalResourceWidget::Web );
 #endif
@@ -558,11 +549,15 @@ void TestQgsExternalResourceWidgetWrapper::testLoadNullExternalDocument()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
+  }
+  else if ( documentType == QgsExternalResourceWidget::Audio )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
+  }
+  else if ( documentType == QgsExternalResourceWidget::Video )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -586,11 +581,7 @@ void TestQgsExternalResourceWidgetWrapper::testLoadNullExternalDocument()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -605,7 +596,6 @@ void TestQgsExternalResourceWidgetWrapper::testLoadNullExternalDocument()
   QVERIFY( ww.mQgsWidget->mLoadingMovie->state() != QMovie::Running );
   QVERIFY( !ww.mQgsWidget->mErrorLabel->isVisible() );
   QVERIFY( !messageBar->currentItem() );
-
 }
 
 void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocument_data()
@@ -613,6 +603,8 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocument_data()
   QTest::addColumn<int>( "documentType" );
 
   QTest::newRow( "image" ) << static_cast<int>( QgsExternalResourceWidget::Image );
+  QTest::newRow( "audio" ) << static_cast<int>( QgsExternalResourceWidget::Audio );
+  QTest::newRow( "video" ) << static_cast<int>( QgsExternalResourceWidget::Video );
 #ifdef WITH_QTWEBKIT
   QTest::newRow( "webview" ) << static_cast<int>( QgsExternalResourceWidget::Web );
 #endif
@@ -634,9 +626,9 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocument()
   config.insert( QStringLiteral( "DocumentViewer" ), documentType );
 
   QgsPropertyCollection propertyCollection;
-  propertyCollection.setProperty( QgsWidgetWrapper::StorageUrl, QgsProperty::fromExpression(
-                                    "'http://mytest.com/' || $id || '/' "
-                                    " || file_name(@selected_file_path)", true ) );
+  propertyCollection.setProperty( QgsWidgetWrapper::Property::StorageUrl, QgsProperty::fromExpression( "'http://mytest.com/' || $id || '/' "
+                                                                                                       " || file_name(@selected_file_path)",
+                                                                                                       true ) );
   config.insert( QStringLiteral( "PropertyCollection" ), propertyCollection.toVariant( QgsWidgetWrapper::propertyDefinitions() ) );
   ww.setConfig( config );
 
@@ -657,11 +649,15 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocument()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
+  }
+  else if ( documentType == QgsExternalResourceWidget::Audio )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
+  }
+  else if ( documentType == QgsExternalResourceWidget::Video )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -707,6 +703,8 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentError_data()
   QTest::addColumn<int>( "documentType" );
 
   QTest::newRow( "image" ) << static_cast<int>( QgsExternalResourceWidget::Image );
+  QTest::newRow( "audio" ) << static_cast<int>( QgsExternalResourceWidget::Audio );
+  QTest::newRow( "video" ) << static_cast<int>( QgsExternalResourceWidget::Video );
 #ifdef WITH_QTWEBKIT
   QTest::newRow( "webview" ) << static_cast<int>( QgsExternalResourceWidget::Web );
 #endif
@@ -727,9 +725,9 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentError()
   config.insert( QStringLiteral( "StorageType" ), QStringLiteral( "test" ) );
   config.insert( QStringLiteral( "DocumentViewer" ), documentType );
   QgsPropertyCollection propertyCollection;
-  propertyCollection.setProperty( QgsWidgetWrapper::StorageUrl, QgsProperty::fromExpression(
-                                    "'http://mytest.com/' || $id || '/' "
-                                    " || file_name(@selected_file_path)", true ) );
+  propertyCollection.setProperty( QgsWidgetWrapper::Property::StorageUrl, QgsProperty::fromExpression( "'http://mytest.com/' || $id || '/' "
+                                                                                                       " || file_name(@selected_file_path)",
+                                                                                                       true ) );
   config.insert( QStringLiteral( "PropertyCollection" ), propertyCollection.toVariant( QgsWidgetWrapper::propertyDefinitions() ) );
   ww.setConfig( config );
 
@@ -750,11 +748,15 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentError()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
+  }
+  else if ( documentType == QgsExternalResourceWidget::Audio )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
+  }
+  else if ( documentType == QgsExternalResourceWidget::Video )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -782,11 +784,7 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentError()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -818,6 +816,8 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentCancel_data(
   QTest::addColumn<int>( "documentType" );
 
   QTest::newRow( "image" ) << static_cast<int>( QgsExternalResourceWidget::Image );
+  QTest::newRow( "audio" ) << static_cast<int>( QgsExternalResourceWidget::Audio );
+  QTest::newRow( "video" ) << static_cast<int>( QgsExternalResourceWidget::Video );
 #ifdef WITH_QTWEBKIT
   QTest::newRow( "webview" ) << static_cast<int>( QgsExternalResourceWidget::Web );
 #endif
@@ -838,9 +838,9 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentCancel()
   config.insert( QStringLiteral( "StorageType" ), QStringLiteral( "test" ) );
   config.insert( QStringLiteral( "DocumentViewer" ), documentType );
   QgsPropertyCollection propertyCollection;
-  propertyCollection.setProperty( QgsWidgetWrapper::StorageUrl, QgsProperty::fromExpression(
-                                    "'http://mytest.com/' || $id || '/' "
-                                    " || file_name(@selected_file_path)", true ) );
+  propertyCollection.setProperty( QgsWidgetWrapper::Property::StorageUrl, QgsProperty::fromExpression( "'http://mytest.com/' || $id || '/' "
+                                                                                                       " || file_name(@selected_file_path)",
+                                                                                                       true ) );
   config.insert( QStringLiteral( "PropertyCollection" ), propertyCollection.toVariant( QgsWidgetWrapper::propertyDefinitions() ) );
   ww.setConfig( config );
 
@@ -861,11 +861,15 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentCancel()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
+  }
+  else if ( documentType == QgsExternalResourceWidget::Audio )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
+  }
+  else if ( documentType == QgsExternalResourceWidget::Video )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -896,11 +900,7 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentCancel()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -931,6 +931,8 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentNoExpression
   QTest::addColumn<int>( "documentType" );
 
   QTest::newRow( "image" ) << static_cast<int>( QgsExternalResourceWidget::Image );
+  QTest::newRow( "audio" ) << static_cast<int>( QgsExternalResourceWidget::Audio );
+  QTest::newRow( "video" ) << static_cast<int>( QgsExternalResourceWidget::Video );
 #ifdef WITH_QTWEBKIT
   QTest::newRow( "webview" ) << static_cast<int>( QgsExternalResourceWidget::Web );
 #endif
@@ -972,11 +974,15 @@ void TestQgsExternalResourceWidgetWrapper::testStoreExternalDocumentNoExpression
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
+  }
+  else if ( documentType == QgsExternalResourceWidget::Audio )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
+  }
+  else if ( documentType == QgsExternalResourceWidget::Video )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -1020,6 +1026,8 @@ void TestQgsExternalResourceWidgetWrapper::testChangeValueBeforeLoaded_data()
   QTest::addColumn<int>( "documentType" );
 
   QTest::newRow( "image" ) << static_cast<int>( QgsExternalResourceWidget::Image );
+  QTest::newRow( "audio" ) << static_cast<int>( QgsExternalResourceWidget::Audio );
+  QTest::newRow( "video" ) << static_cast<int>( QgsExternalResourceWidget::Video );
 #ifdef WITH_QTWEBKIT
   QTest::newRow( "webview" ) << static_cast<int>( QgsExternalResourceWidget::Web );
 #endif
@@ -1057,11 +1065,15 @@ void TestQgsExternalResourceWidgetWrapper::testChangeValueBeforeLoaded()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
+  }
+  else if ( documentType == QgsExternalResourceWidget::Audio )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
+  }
+  else if ( documentType == QgsExternalResourceWidget::Video )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -1107,7 +1119,7 @@ void TestQgsExternalResourceWidgetWrapper::testChangeValueBeforeLoaded()
   QVERIFY( !ww.mQgsWidget->mErrorLabel->isVisible() );
   QVERIFY( !messageBar->currentItem() );
 
-  // first fetch has been canceled and should be detroyed
+  // first fetch has been canceled and should be destroyed
   connect( firstFetchContent, &QObject::destroyed, &loop, &QEventLoop::quit );
   loop.exec();
 
@@ -1127,11 +1139,7 @@ void TestQgsExternalResourceWidgetWrapper::testChangeValueBeforeLoaded()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -1197,6 +1205,8 @@ void TestQgsExternalResourceWidgetWrapper::testChangeValueToNullBeforeLoaded_dat
   QTest::addColumn<int>( "documentType" );
 
   QTest::newRow( "image" ) << static_cast<int>( QgsExternalResourceWidget::Image );
+  QTest::newRow( "audio" ) << static_cast<int>( QgsExternalResourceWidget::Audio );
+  QTest::newRow( "video" ) << static_cast<int>( QgsExternalResourceWidget::Video );
 #ifdef WITH_QTWEBKIT
   QTest::newRow( "webview" ) << static_cast<int>( QgsExternalResourceWidget::Web );
 #endif
@@ -1234,11 +1244,15 @@ void TestQgsExternalResourceWidgetWrapper::testChangeValueToNullBeforeLoaded()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
+  }
+  else if ( documentType == QgsExternalResourceWidget::Audio )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
+  }
+  else if ( documentType == QgsExternalResourceWidget::Video )
+  {
+    QVERIFY( ww.mQgsWidget->mMediaWidget->isVisible() );
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -1277,11 +1291,7 @@ void TestQgsExternalResourceWidgetWrapper::testChangeValueToNullBeforeLoaded()
   if ( documentType == QgsExternalResourceWidget::Image )
   {
     QVERIFY( ww.mQgsWidget->mPixmapLabel->isVisible() );
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-    QVERIFY( !ww.mQgsWidget->mPixmapLabel->pixmap() );
-#else
     QVERIFY( ww.mQgsWidget->mPixmapLabel->pixmap( Qt::ReturnByValue ).isNull() );
-#endif
   }
 #ifdef WITH_QTWEBKIT
   else if ( documentType == QgsExternalResourceWidget::Web )
@@ -1306,7 +1316,6 @@ void TestQgsExternalResourceWidgetWrapper::testChangeValueToNullBeforeLoaded()
   delete messageBar;
   delete widget;
 }
-
 
 
 QGSTEST_MAIN( TestQgsExternalResourceWidgetWrapper )

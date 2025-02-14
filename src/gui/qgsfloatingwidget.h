@@ -16,6 +16,7 @@
 #define QGSFLOATINGWIDGET_H
 
 #include <QWidget>
+#include <QPointer>
 #include "qgis_sip.h"
 #include "qgis_gui.h"
 
@@ -27,10 +28,9 @@ class QgsFloatingWidgetEventFilter;
  * \brief A QWidget subclass for creating widgets which float outside of the normal Qt layout
  * system. Floating widgets use an "anchor widget" to determine how they are anchored
  * within their parent widget.
- * \since QGIS 3.0
  */
 
-class GUI_EXPORT QgsFloatingWidget: public QWidget
+class GUI_EXPORT QgsFloatingWidget : public QWidget
 {
     Q_OBJECT
     Q_PROPERTY( QWidget *anchorWidget READ anchorWidget WRITE setAnchorWidget NOTIFY anchorWidgetChanged )
@@ -38,19 +38,18 @@ class GUI_EXPORT QgsFloatingWidget: public QWidget
     Q_PROPERTY( AnchorPoint anchorWidgetPoint READ anchorWidgetPoint WRITE setAnchorWidgetPoint NOTIFY anchorWidgetPointChanged )
 
   public:
-
     //! Reference points for anchoring widget position
     enum AnchorPoint
     {
-      TopLeft, //!< Top-left of widget
-      TopMiddle, //!< Top center of widget
-      TopRight, //!< Top-right of widget
-      MiddleLeft, //!< Middle left of widget
-      Middle, //!< Middle of widget
-      MiddleRight, //!< Middle right of widget
-      BottomLeft, //!< Bottom-left of widget
+      TopLeft,      //!< Top-left of widget
+      TopMiddle,    //!< Top center of widget
+      TopRight,     //!< Top-right of widget
+      MiddleLeft,   //!< Middle left of widget
+      Middle,       //!< Middle of widget
+      MiddleRight,  //!< Middle right of widget
+      BottomLeft,   //!< Bottom-left of widget
       BottomMiddle, //!< Bottom center of widget
-      BottomRight, //!< Bottom-right of widget
+      BottomRight,  //!< Bottom-right of widget
     };
     Q_ENUM( AnchorPoint )
 
@@ -128,13 +127,11 @@ class GUI_EXPORT QgsFloatingWidget: public QWidget
     void onAnchorPointChanged();
 
   private:
-
-    QWidget *mAnchorWidget = nullptr;
+    QPointer<QWidget> mAnchorWidget;
     QgsFloatingWidgetEventFilter *mParentEventFilter = nullptr;
     QgsFloatingWidgetEventFilter *mAnchorEventFilter = nullptr;
     AnchorPoint mFloatAnchorPoint = BottomMiddle;
     AnchorPoint mAnchorWidgetAnchorPoint = TopMiddle;
-
 };
 
 
@@ -142,12 +139,11 @@ class GUI_EXPORT QgsFloatingWidget: public QWidget
 
 /// @cond PRIVATE
 
-class QgsFloatingWidgetEventFilter: public QObject
+class QgsFloatingWidgetEventFilter : public QObject
 {
     Q_OBJECT
 
   public:
-
     QgsFloatingWidgetEventFilter( QWidget *parent = nullptr );
 
     bool eventFilter( QObject *object, QEvent *event ) override;
@@ -156,7 +152,6 @@ class QgsFloatingWidgetEventFilter: public QObject
 
     //! Emitted when the filter's parent is moved or resized
     void anchorPointChanged();
-
 };
 
 /// @endcond

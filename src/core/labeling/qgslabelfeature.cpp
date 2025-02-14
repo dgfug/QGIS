@@ -51,7 +51,7 @@ void QgsLabelFeature::setPermissibleZone( const QgsGeometry &geometry )
   if ( !mPermissibleZoneGeos )
     return;
 
-  mPermissibleZoneGeosPrepared.reset( GEOSPrepare_r( QgsGeos::getGEOSHandler(), mPermissibleZoneGeos.get() ) );
+  mPermissibleZoneGeosPrepared.reset( GEOSPrepare_r( QgsGeosContext::get(), mPermissibleZoneGeos.get() ) );
 }
 
 QgsFeature QgsLabelFeature::feature() const
@@ -96,6 +96,23 @@ double QgsLabelFeature::overrunSmoothDistance() const
 void QgsLabelFeature::setOverrunSmoothDistance( double overrunSmoothDistance )
 {
   mOverrunSmoothDistance = overrunSmoothDistance;
+}
+
+QgsLabelLineSettings::AnchorTextPoint QgsLabelFeature::lineAnchorTextPoint() const
+{
+  if ( mAnchorTextPoint == QgsLabelLineSettings::AnchorTextPoint::FollowPlacement )
+  {
+    if ( mLineAnchorPercent < 0.25 )
+      return QgsLabelLineSettings::AnchorTextPoint::StartOfText;
+    else if ( mLineAnchorPercent > 0.75 )
+      return QgsLabelLineSettings::AnchorTextPoint::EndOfText;
+    else
+      return QgsLabelLineSettings::AnchorTextPoint::CenterOfText;
+  }
+  else
+  {
+    return mAnchorTextPoint;
+  }
 }
 
 const QgsLabelObstacleSettings &QgsLabelFeature::obstacleSettings() const

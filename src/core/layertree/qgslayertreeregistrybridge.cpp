@@ -14,9 +14,10 @@
  ***************************************************************************/
 
 #include "qgslayertreeregistrybridge.h"
+#include "moc_qgslayertreeregistrybridge.cpp"
 
 #include "qgslayertree.h"
-
+#include "qgslayertreeutils.h"
 #include "qgsproject.h"
 #include "qgslogger.h"
 
@@ -27,7 +28,7 @@ QgsLayerTreeRegistryBridge::QgsLayerTreeRegistryBridge( QgsLayerTreeGroup *root,
   , mRegistryRemovingLayers( false )
   , mEnabled( true )
   , mNewLayersVisible( true )
-  , mInsertionPoint( root, 0 )
+  , mInsertionPointGroup( root )
 {
   connect( mProject, &QgsProject::legendLayersAdded, this, &QgsLayerTreeRegistryBridge::layersAdded );
   connect( mProject, qOverload<const QStringList &>( &QgsProject::layersWillBeRemoved ), this, &QgsLayerTreeRegistryBridge::layersWillBeRemoved );
@@ -38,13 +39,20 @@ QgsLayerTreeRegistryBridge::QgsLayerTreeRegistryBridge( QgsLayerTreeGroup *root,
 
 void QgsLayerTreeRegistryBridge::setLayerInsertionPoint( QgsLayerTreeGroup *parentGroup, int index )
 {
-  mInsertionPoint.group = parentGroup;
-  mInsertionPoint.position = index;
+  mInsertionPointGroup = parentGroup;
+  mInsertionPointPosition = index;
 }
 
 void QgsLayerTreeRegistryBridge::setLayerInsertionPoint( const InsertionPoint &insertionPoint )
 {
-  mInsertionPoint = insertionPoint;
+  mInsertionPointGroup = insertionPoint.group;
+  mInsertionPointPosition = insertionPoint.position;
+}
+
+QgsLayerTreeRegistryBridge::InsertionPoint QgsLayerTreeRegistryBridge::layerInsertionPoint() const
+{
+  QgsLayerTreeGroup *group = mInsertionPointGroup.isNull() ? mRoot : mInsertionPointGroup.data();
+  return InsertionPoint( group, mInsertionPointPosition );
 }
 
 void QgsLayerTreeRegistryBridge::layersAdded( const QList<QgsMapLayer *> &layers )
@@ -52,13 +60,36 @@ void QgsLayerTreeRegistryBridge::layersAdded( const QList<QgsMapLayer *> &layers
   if ( !mEnabled )
     return;
 
-  QList<QgsLayerTreeNode *> nodes;
+  QList<QgsLayerTreeNode *> newNodes;
   for ( QgsMapLayer *layer : layers )
   {
-    QgsLayerTreeLayer *nodeLayer = new QgsLayerTreeLayer( layer );
-    nodeLayer->setItemVisibilityChecked( mNewLayersVisible );
+    QgsLayerTreeLayer *nodeLayer = nullptr;
+    switch ( mInsertionMethod )
+    {
+      case Qgis::LayerTreeInsertionMethod::OptimalInInsertionGroup:
+      {
+        QgsLayerTreeGroup *targetGroup = mInsertionPointGroup;
+        if ( !targetGroup )
+          targetGroup = mRoot;
 
-    nodes << nodeLayer;
+        // returned layer is already owned by the group!
+        nodeLayer = QgsLayerTreeUtils::insertLayerAtOptimalPlacement( targetGroup, layer );
+        break;
+      }
+
+      case Qgis::LayerTreeInsertionMethod::AboveInsertionPoint:
+      case Qgis::LayerTreeInsertionMethod::TopOfTree:
+      {
+        nodeLayer = new QgsLayerTreeLayer( layer );
+        newNodes << nodeLayer;
+        break;
+      }
+    }
+
+    if ( !nodeLayer )
+      continue;
+
+    nodeLayer->setItemVisibilityChecked( mNewLayersVisible );
 
     // check whether the layer is marked as embedded
     const QString projectFile = mProject->layerIsEmbedded( nodeLayer->layerId() );
@@ -69,8 +100,22 @@ void QgsLayerTreeRegistryBridge::layersAdded( const QList<QgsMapLayer *> &layers
     }
   }
 
-  // add new layers to the right place
-  mInsertionPoint.group->insertChildNodes( mInsertionPoint.position, nodes );
+  switch ( mInsertionMethod )
+  {
+    case Qgis::LayerTreeInsertionMethod::AboveInsertionPoint:
+      if ( QgsLayerTreeGroup *group = mInsertionPointGroup )
+      {
+        group->insertChildNodes( mInsertionPointPosition, newNodes );
+        break;
+      }
+      // if no group for the insertion point, then insert into root instead
+      [[fallthrough]];
+    case Qgis::LayerTreeInsertionMethod::TopOfTree:
+      mRoot->insertChildNodes( 0, newNodes );
+      break;
+    case Qgis::LayerTreeInsertionMethod::OptimalInInsertionGroup:
+      break;
+  }
 
   // tell other components that layers have been added - this signal is used in QGIS to auto-select the first layer
   emit addedLayersToLayerTree( layers );

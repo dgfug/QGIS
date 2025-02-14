@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/effects/qgsgloweffect.h                                     *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -16,8 +16,6 @@ class QgsGlowEffect : QgsPaintEffect
 %Docstring(signature="appended")
 Base class for paint effect which draw a glow inside or outside a
 picture.
-
-.. versionadded:: 2.9
 %End
 
 %TypeHeaderCode
@@ -66,7 +64,7 @@ Returns the spread distance used for drawing the glow effect.
 .. seealso:: :py:func:`spreadMapUnitScale`
 %End
 
-    void setSpreadUnit( const QgsUnitTypes::RenderUnit unit );
+    void setSpreadUnit( const Qgis::RenderUnit unit );
 %Docstring
 Sets the units used for the glow spread distance.
 
@@ -79,7 +77,7 @@ Sets the units used for the glow spread distance.
 .. seealso:: :py:func:`setSpreadMapUnitScale`
 %End
 
-    QgsUnitTypes::RenderUnit spreadUnit() const;
+    Qgis::RenderUnit spreadUnit() const;
 %Docstring
 Returns the units used for the glow spread distance.
 
@@ -145,7 +143,7 @@ Returns the blur level (radius) for the glow.
 .. seealso:: :py:func:`blurMapUnitScale`
 %End
 
-    void setBlurUnit( const QgsUnitTypes::RenderUnit unit );
+    void setBlurUnit( const Qgis::RenderUnit unit );
 %Docstring
 Sets the units used for the glow blur level (radius).
 
@@ -160,7 +158,7 @@ Sets the units used for the glow blur level (radius).
 .. versionadded:: 3.4.9
 %End
 
-    QgsUnitTypes::RenderUnit blurUnit() const;
+    Qgis::RenderUnit blurUnit() const;
 %Docstring
 Returns the units used for the glow blur level (radius).
 
@@ -350,8 +348,6 @@ class QgsOuterGlowEffect : QgsGlowEffect
 {
 %Docstring(signature="appended")
 A paint effect which draws a glow outside of a picture.
-
-.. versionadded:: 2.9
 %End
 
 %TypeHeaderCode
@@ -386,8 +382,6 @@ class QgsInnerGlowEffect : QgsGlowEffect
 {
 %Docstring(signature="appended")
 A paint effect which draws a glow within a picture.
-
-.. versionadded:: 2.9
 %End
 
 %TypeHeaderCode
@@ -422,5 +416,5 @@ Creates a new QgsInnerGlowEffect effect from a properties string map.
  *                                                                      *
  * src/core/effects/qgsgloweffect.h                                     *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

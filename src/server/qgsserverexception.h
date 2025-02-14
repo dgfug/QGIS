@@ -36,7 +36,6 @@ using namespace nlohmann;
  * \ingroup server
  * \class  QgsServerException
  * \brief Exception base class for server exceptions.
- * \since QGIS 3.0
  */
 #ifndef SIP_RUN
 class SERVER_EXPORT QgsServerException : public QgsException
@@ -76,7 +75,6 @@ class SERVER_EXPORT QgsServerException
  * Note that this exception is associated with a default return code 200 which may be
  * not appropriate in some situations.
  *
- * \since QGIS 3.0
  */
 #ifndef SIP_RUN
 class SERVER_EXPORT QgsOgcServiceException : public QgsServerException
@@ -87,14 +85,13 @@ class SERVER_EXPORT QgsOgcServiceException
 #endif
   public:
     //! Construction
-    QgsOgcServiceException( const QString &code, const QString &message, const QString &locator = QString(),
-                            int responseCode = 200, const QString &version = QStringLiteral( "1.3.0" ) );
+    QgsOgcServiceException( const QString &code, const QString &message, const QString &locator = QString(), int responseCode = 200, const QString &version = QStringLiteral( "1.3.0" ) );
 
     //! Returns the exception message
     QString message() const { return mMessage; }
 
     //! Returns the exception code
-    QString code()    const { return mCode; }
+    QString code() const { return mCode; }
 
     //! Returns the locator
     QString locator() const { return mLocator; }
@@ -118,10 +115,9 @@ class SERVER_EXPORT QgsOgcServiceException
  * \since QGIS 3.4
  */
 #ifndef SIP_RUN
-class SERVER_EXPORT QgsBadRequestException: public QgsOgcServiceException
+class SERVER_EXPORT QgsBadRequestException : public QgsOgcServiceException
 {
   public:
-
     /**
      * Constructor for QgsBadRequestException (HTTP error code 400).
      * \param code Error code name
@@ -146,7 +142,7 @@ class SERVER_EXPORT QgsBadRequestException: public QgsOgcServiceException
  *
  * \since QGIS 3.10
  */
-class SERVER_EXPORT QgsServerApiException: public QgsServerException
+class SERVER_EXPORT QgsServerApiException : public QgsServerException
 {
   public:
     //! Construction
@@ -160,27 +156,14 @@ class SERVER_EXPORT QgsServerApiException: public QgsServerException
     QByteArray formatResponse( QString &responseFormat SIP_OUT ) const override
     {
       responseFormat = mMimeType;
-      const json data
-      {
+      const json data {
         {
           { "code", mCode.toStdString() },
           { "description", what().toStdString() },
         }
       };
-      if ( responseFormat == QLatin1String( "application/json" ) )
-      {
-        return QByteArray::fromStdString( data.dump() );
-      }
-      else if ( responseFormat == QLatin1String( "text/html" ) )
-      {
-        // TODO: template
-        return QByteArray::fromStdString( data.dump() );
-      }
-      else
-      {
-        // TODO: template
-        return QByteArray::fromStdString( data.dump() );
-      }
+
+      return QByteArray::fromStdString( data.dump() );
     }
 
   private:
@@ -199,7 +182,7 @@ class SERVER_EXPORT QgsServerApiException: public QgsServerException
  *
  * \since QGIS 3.10
  */
-class SERVER_EXPORT QgsServerApiInternalServerError: public QgsServerApiException
+class SERVER_EXPORT QgsServerApiInternalServerError : public QgsServerApiException
 {
   public:
     //! Construction
@@ -220,7 +203,7 @@ class SERVER_EXPORT QgsServerApiInternalServerError: public QgsServerApiExceptio
  *
  * \since QGIS 3.10
  */
-class SERVER_EXPORT QgsServerApiNotFoundError: public QgsServerApiException
+class SERVER_EXPORT QgsServerApiNotFoundError : public QgsServerApiException
 {
   public:
     //! Construction
@@ -241,7 +224,7 @@ class SERVER_EXPORT QgsServerApiNotFoundError: public QgsServerApiException
  *
  * \since QGIS 3.10
  */
-class SERVER_EXPORT QgsServerApiBadRequestException: public QgsServerApiException
+class SERVER_EXPORT QgsServerApiBadRequestException : public QgsServerApiException
 {
   public:
     //! Construction
@@ -262,7 +245,7 @@ class SERVER_EXPORT QgsServerApiBadRequestException: public QgsServerApiExceptio
  *
  * \since QGIS 3.12
  */
-class SERVER_EXPORT QgsServerApiPermissionDeniedException: public QgsServerApiException
+class SERVER_EXPORT QgsServerApiPermissionDeniedException : public QgsServerApiException
 {
   public:
     //! Construction
@@ -282,7 +265,7 @@ class SERVER_EXPORT QgsServerApiPermissionDeniedException: public QgsServerApiEx
  *
  * \since QGIS 3.10
  */
-class SERVER_EXPORT QgsServerApiImproperlyConfiguredException: public QgsServerApiException
+class SERVER_EXPORT QgsServerApiImproperlyConfiguredException : public QgsServerApiException
 {
   public:
     //! Construction
@@ -303,7 +286,7 @@ class SERVER_EXPORT QgsServerApiImproperlyConfiguredException: public QgsServerA
  *
  * \since QGIS 3.10
  */
-class SERVER_EXPORT QgsServerApiNotImplementedException: public QgsServerApiException
+class SERVER_EXPORT QgsServerApiNotImplementedException : public QgsServerApiException
 {
   public:
     //! Construction
@@ -323,7 +306,7 @@ class SERVER_EXPORT QgsServerApiNotImplementedException: public QgsServerApiExce
  *
  * \since QGIS 3.10
  */
-class SERVER_EXPORT QgsServerApiInvalidMimeTypeException: public QgsServerApiException
+class SERVER_EXPORT QgsServerApiInvalidMimeTypeException : public QgsServerApiException
 {
   public:
     //! Construction

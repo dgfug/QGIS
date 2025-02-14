@@ -42,7 +42,6 @@ class checkDock : public QgsDockWidget, private Ui::checkDock
     Q_OBJECT
 
   public:
-
     /**
      * Constructor
      * \param qIface  pointer to QgisInterface instance that is passed to the rulesDialog
@@ -106,8 +105,24 @@ class checkDock : public QgsDockWidget, private Ui::checkDock
      */
     void updateRubberBands( bool visible );
 
+    /**
+     * Update the filter combo box to reflect
+     * current error names
+     */
+    void updateFilterComboBox();
+
+    /**
+     * Filter errors using the current filter combo box's value
+     */
+    void filterErrors();
 
   private:
+    /**
+     * Update check table model according to current errors
+     * \since QGIS 3.38
+     */
+    void updateModel();
+
     rulesDialog *mConfigureDialog = nullptr;
 
     QObjectUniquePtr<QgsRubberBand> mRBConflict;
@@ -119,8 +134,9 @@ class checkDock : public QgsDockWidget, private Ui::checkDock
     QgsVertexMarker *mVMFeature2 = nullptr;
     QList<QgsRubberBand *> mRbErrorMarkers;
 
+    QStringList mErrorNames;
     ErrorList mErrorList;
-    DockModel *mErrorListModel = nullptr;
+    DockFilterModel *mErrorListModel = nullptr;
 
     QgisInterface *qgsInterface = nullptr;
 

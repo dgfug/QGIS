@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/editorwidgets/qgsrelationreferencewidget.h                   *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -30,7 +30,6 @@ class QgsRelationReferenceWidget : QWidget
       sipType = NULL;
 %End
   public:
-
     enum CanvasExtent
     {
       Fixed,
@@ -46,12 +45,13 @@ class QgsRelationReferenceWidget : QWidget
 
     void setRelationEditable( bool editable );
 
- void setForeignKey( const QVariant &value ) /Deprecated/;
+ void setForeignKey( const QVariant &value ) /Deprecated="Since 3.10. Use setForeignKeys."/;
 %Docstring
 this sets the related feature using from the foreign key
 
-.. deprecated:: QGIS 3.10
-   use setForeignKeys
+.. deprecated:: 3.10
+
+   Use setForeignKeys.
 %End
 
     void setForeignKeys( const QVariantList &values );
@@ -61,11 +61,11 @@ Sets the related feature using the foreign keys
 .. versionadded:: 3.10
 %End
 
- QVariant foreignKey() const /Deprecated/;
+ QVariant foreignKey() const /Deprecated="Since 3.10. "/;
 %Docstring
 returns the related feature foreign key
 
-.. deprecated:: QGIS 3.10
+.. deprecated:: 3.10
 %End
 
 
@@ -104,14 +104,6 @@ determines if the widget offers the possibility to select the related feature on
 %End
     void setAllowMapIdentification( bool allowMapIdentification );
 
-    bool orderByValue();
-%Docstring
-If the widget will order the combobox entries by value
-%End
-    void setOrderByValue( bool orderByValue );
-%Docstring
-Sets if the widget will order the combobox entries by value
-%End
     void setFilterFields( const QStringList &filterFields );
 %Docstring
 Sets the fields for which filter comboboxes will be created
@@ -157,22 +149,16 @@ if no feature is related, it returns an invalid feature
     void showIndeterminateState();
 %Docstring
 Sets the widget to display in an indeterminate "mixed value" state.
-
-.. versionadded:: 2.16
 %End
 
     bool allowAddFeatures() const;
 %Docstring
 Determines if a button for adding new features should be shown.
-
-.. versionadded:: 2.16
 %End
 
     void setAllowAddFeatures( bool allowAddFeatures );
 %Docstring
 Determines if a button for adding new features should be shown.
-
-.. versionadded:: 2.16
 %End
 
     QgsRelation relation() const;
@@ -245,6 +231,21 @@ Set the name of the referenced layer to ``referencedLayerName``
 .. versionadded:: 3.12
 %End
 
+    int fetchLimit() const;
+%Docstring
+Returns the limit of fetched features (0 means all features)
+
+.. versionadded:: 3.32
+%End
+
+    void setFetchLimit( int fetchLimit );
+%Docstring
+Set the limit of fetched features (0 means all features)
+
+.. versionadded:: 3.32
+%End
+
+
   public slots:
     void openForm();
 %Docstring
@@ -269,14 +270,14 @@ unset the currently related feature
 
   signals:
 
- void foreignKeyChanged( const QVariant & ) /Deprecated/;
+ void foreignKeyChanged( const QVariant &key ) /Deprecated="Since 3.10. "/;
 %Docstring
 Emitted when the foreign key changed
 
-.. deprecated:: QGIS 3.10
+.. deprecated:: 3.10
 %End
 
-    void foreignKeysChanged( const QVariantList & );
+    void foreignKeysChanged( const QVariantList &keys );
 %Docstring
 Emitted when the foreign keys changed
 
@@ -290,5 +291,5 @@ Emitted when the foreign keys changed
  *                                                                      *
  * src/gui/editorwidgets/qgsrelationreferencewidget.h                   *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

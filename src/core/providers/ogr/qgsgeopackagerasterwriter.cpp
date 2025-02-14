@@ -16,12 +16,13 @@
 
 ///@cond PRIVATE
 
+#define CPL_SUPRESS_CPLUSPLUS  //#spellok
 #include "gdal.h"
 #include "gdal_utils.h"
 #include "qgsogrutils.h"
 
 #include "qgsgeopackagerasterwriter.h"
-#include "qgscplerrorhandler.h"
+#include "qgscplerrorhandler_p.h"
 
 QgsGeoPackageRasterWriter::QgsGeoPackageRasterWriter( const QgsMimeDataUtils::Uri &sourceUri, const QString &outputUrl ):
   mSourceUri( sourceUri ),
@@ -34,7 +35,7 @@ QgsGeoPackageRasterWriter::WriterError QgsGeoPackageRasterWriter::writeRaster( Q
 {
   const char *args[] = { "-of", "gpkg", "-co", QStringLiteral( "RASTER_TABLE=%1" ).arg( mSourceUri.name ).toUtf8().constData(), "-co", "APPEND_SUBDATASET=YES", nullptr };
   // This sends OGR/GDAL errors to the message log
-  const QgsCPLErrorHandler handler;
+  const QgsCPLErrorHandler handler( QObject::tr( "GDAL" ) );
   GDALTranslateOptions *psOptions = GDALTranslateOptionsNew( ( char ** )args, nullptr );
 
   GDALTranslateOptionsSetProgress( psOptions, [ ]( double dfComplete, const char *pszMessage,  void *pProgressData ) -> int

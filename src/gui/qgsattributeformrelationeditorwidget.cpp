@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsattributeformrelationeditorwidget.h"
+#include "moc_qgsattributeformrelationeditorwidget.cpp"
 #include "qgsrelationaggregatesearchwidgetwrapper.h"
 #include "qgsattributeform.h"
 
@@ -44,4 +45,9 @@ QString QgsAttributeFormRelationEditorWidget::currentFilterExpression() const
     filterExpression = mSearchWidget->expression();
 
   return filterExpression;
+}
+
+void QgsAttributeFormRelationEditorWidget::setMultiEditFeatureIds( const QgsFeatureIds &fids )
+{
+  mWrapper->setMultiEditFeatureIds( fids );
 }

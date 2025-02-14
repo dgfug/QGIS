@@ -1,9 +1,9 @@
 /***************************************************************************
   qgsquickutils.cpp
   --------------------------------------
-  Date                 : Nov 2017
-  Copyright            : (C) 2017 by Peter Petrik
-  Email                : zilolv at gmail dot com
+  Date                 : 7.11.2022
+  Copyright            : (C) 2022 by Tomas Mizera
+  Email                : tomas.mizera (at) lutraconsulting.co.uk
  ***************************************************************************
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -13,37 +13,15 @@
  *                                                                         *
  ***************************************************************************/
 
-#include <QGuiApplication>
-#include <QScreen>
-#include <QString>
-#include <QWindow>
-
-#include "qgsquickmapsettings.h"
 #include "qgsquickutils.h"
+#include "moc_qgsquickutils.cpp"
 
 QgsQuickUtils::QgsQuickUtils( QObject *parent )
   : QObject( parent )
-  , mScreenDensity( calculateScreenDensity() )
 {
 }
 
-qreal QgsQuickUtils::screenDensity() const
+QgsPoint QgsQuickUtils::toQgsPoint( const QPointF &point )
 {
-  return mScreenDensity;
-}
-
-qreal QgsQuickUtils::calculateScreenDensity()
-{
-  // calculate screen density for calculation of real pixel sizes from density-independent pixels
-  // take the first top level window
-  double dpi = 96.0;
-  const QWindowList windows = QGuiApplication::topLevelWindows();
-  if ( !windows.isEmpty() )
-  {
-    QScreen *screen = windows.at( 0 )->screen();
-    double dpiX = screen->physicalDotsPerInchX();
-    double dpiY = screen->physicalDotsPerInchY();
-    dpi = dpiX < dpiY ? dpiX : dpiY; // In case of asymmetrical DPI. Improbable
-  }
-  return dpi / 160.;  // 160 DPI is baseline for density-independent pixels in Android
+  return QgsPoint( point );
 }

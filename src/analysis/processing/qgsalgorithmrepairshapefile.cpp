@@ -64,9 +64,7 @@ QgsRepairShapefileAlgorithm *QgsRepairShapefileAlgorithm::createInstance() const
 
 void QgsRepairShapefileAlgorithm::initAlgorithm( const QVariantMap & )
 {
-  addParameter( new QgsProcessingParameterFile( QStringLiteral( "INPUT" ), QObject::tr( "Input Shapefile" ), QgsProcessingParameterFile::File,
-                QStringLiteral( "shp" ), QVariant(), false, QObject::tr( "ESRI Shapefile" ) +
-                QStringLiteral( " (*.shp *.SHP)" ) ) );
+  addParameter( new QgsProcessingParameterFile( QStringLiteral( "INPUT" ), QObject::tr( "Input Shapefile" ), Qgis::ProcessingFileParameterBehavior::File, QStringLiteral( "shp" ), QVariant(), false, QObject::tr( "ESRI Shapefile" ) + QStringLiteral( " (*.shp *.SHP)" ) ) );
 
   addOutput( new QgsProcessingOutputVectorLayer( QStringLiteral( "OUTPUT" ), QObject::tr( "Repaired layer" ) ) );
 }
@@ -80,13 +78,16 @@ QVariantMap QgsRepairShapefileAlgorithm::processAlgorithm( const QVariantMap &pa
 
   CPLSetConfigOption( "SHAPE_RESTORE_SHX", "YES" );
 
-  std::unique_ptr< QgsVectorLayer > layer = std::make_unique< QgsVectorLayer >( path );
+  auto layer = std::make_unique<QgsVectorLayer>( path );
   if ( !layer->isValid() )
+  {
+    CPLSetConfigOption( "SHAPE_RESTORE_SHX", nullptr );
     throw QgsProcessingException( QObject::tr( "Could not repair %1." ).arg( path ) );
+  }
 
   CPLSetConfigOption( "SHAPE_RESTORE_SHX", nullptr );
 
-  feedback->pushInfo( QObject::tr( "Successfully repaired, found %1 features" ).arg( layer->featureCount() ) );
+  feedback->pushInfo( QObject::tr( "Successfully repaired, found %n feature(s)", nullptr, layer->featureCount() ) );
 
   QVariantMap outputs;
   outputs.insert( QStringLiteral( "OUTPUT" ), path );

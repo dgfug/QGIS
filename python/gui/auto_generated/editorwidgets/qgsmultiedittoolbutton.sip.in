@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/editorwidgets/qgsmultiedittoolbutton.h                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -14,15 +14,12 @@ class QgsMultiEditToolButton : QToolButton
 A tool button widget which is displayed next to editor widgets in attribute forms, and
 allows for controlling how the widget behaves and interacts with the form while in multi
 edit mode.
-
-.. versionadded:: 2.16
 %End
 
 %TypeHeaderCode
 #include "qgsmultiedittoolbutton.h"
 %End
   public:
-
     enum State
     {
       Default,
@@ -111,5 +108,5 @@ Emitted when the "reset to original values" option is selected.
  *                                                                      *
  * src/gui/editorwidgets/qgsmultiedittoolbutton.h                       *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

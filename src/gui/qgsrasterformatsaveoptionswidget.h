@@ -28,25 +28,21 @@ class QgsRasterLayer;
  * \ingroup gui
  * \brief A widget to select format-specific raster saving options
  */
-class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::QgsRasterFormatSaveOptionsWidgetBase
+class GUI_EXPORT QgsRasterFormatSaveOptionsWidget : public QWidget, private Ui::QgsRasterFormatSaveOptionsWidgetBase
 {
     Q_OBJECT
 
   public:
-
     enum Type
     {
-      Default, // everything except profile buttons (save as dlg)
-      Full, // everything (options dlg)
-      Table, // just table
-      LineEdit, // just the line edit
+      Default,        // everything except profile buttons (save as dlg)
+      Full,           // everything (options dlg)
+      Table,          // just table
+      LineEdit,       // just the line edit
       ProfileLineEdit // Profile + LineEdit
     };
 
-    QgsRasterFormatSaveOptionsWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr,
-                                      const QString &format = "GTiff",
-                                      QgsRasterFormatSaveOptionsWidget::Type type = Default,
-                                      const QString &provider = "gdal" );
+    QgsRasterFormatSaveOptionsWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr, const QString &format = "GTiff", QgsRasterFormatSaveOptionsWidget::Type type = Default, const QString &provider = "gdal" );
 
     /**
      * Set output raster format, it is used to determine list
@@ -63,12 +59,20 @@ class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::Q
     /**
      * Set output raster layer
      */
-    void setRasterLayer( QgsRasterLayer *rasterLayer ) { mRasterLayer = rasterLayer; mRasterFileName = QString(); }
+    void setRasterLayer( QgsRasterLayer *rasterLayer )
+    {
+      mRasterLayer = rasterLayer;
+      mRasterFileName = QString();
+    }
 
     /**
      * Set output raster file name
      */
-    void setRasterFileName( const QString &file ) { mRasterLayer = nullptr; mRasterFileName = file; }
+    void setRasterFileName( const QString &file )
+    {
+      mRasterLayer = nullptr;
+      mRasterFileName = file;
+    }
 
     /**
      * Returns list of selected options
@@ -80,7 +84,6 @@ class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::Q
      * Populate widget with user-defined options. String should contain
      * key=value pairs separated by spaces, e.g. "TILED=YES TFW=YES"
      * \see options()
-     * \since QGIS 3.0
      */
     void setOptions( const QString &options );
 
@@ -92,8 +95,11 @@ class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::Q
     /**
      * Set pyramids format to use
      */
-    void setPyramidsFormat( QgsRaster::RasterPyramidsFormat format )
-    { mPyramids = true; mPyramidsFormat = format; }
+    void setPyramidsFormat( Qgis::RasterPyramidFormat format )
+    {
+      mPyramids = true;
+      mPyramidsFormat = format;
+    }
 
   public slots:
 
@@ -133,18 +139,21 @@ class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::Q
     void showEvent( QShowEvent *event ) override;
 
   signals:
+
+    /**
+     * Emitted when the options configured in the widget are changed.
+     */
     void optionsChanged();
 
   private:
-
     QString mFormat;
     QString mProvider;
     QgsRasterLayer *mRasterLayer = nullptr;
     QString mRasterFileName;
-    QMap< QString, QString> mOptionsMap;
-    static QMap< QString, QStringList > sBuiltinProfiles;
+    QMap<QString, QString> mOptionsMap;
+    static QMap<QString, QStringList> sBuiltinProfiles;
     bool mPyramids = false;
-    QgsRaster::RasterPyramidsFormat mPyramidsFormat = QgsRaster::PyramidsGTiff;
+    Qgis::RasterPyramidFormat mPyramidsFormat = Qgis::RasterPyramidFormat::GeoTiff;
     int mBlockOptionUpdates = 0;
 
     QString settingsKey( QString profile ) const SIP_FORCE;
@@ -157,7 +166,6 @@ class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::Q
     QStringList profiles() const SIP_FORCE;
     bool eventFilter( QObject *obj, QEvent *event ) override SIP_FORCE;
     QString pseudoFormat() const SIP_FORCE;
-
 };
 
 // clazy:excludeall=qstring-allocations

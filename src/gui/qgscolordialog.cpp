@@ -15,12 +15,10 @@
  ***************************************************************************/
 
 #include "qgscolordialog.h"
-#include "qgscolorscheme.h"
-#include "qgscolorschemeregistry.h"
-#include "qgssymbollayerutils.h"
-#include "qgsapplication.h"
+#include "moc_qgscolordialog.cpp"
 #include "qgssettings.h"
 #include "qgsgui.h"
+#include "qgshelp.h"
 
 #include <QPushButton>
 #include <QMenu>
@@ -87,7 +85,7 @@ QColor QgsColorDialog::getColor( const QColor &initialColor, QWidget *parent, co
   const bool useNative = settings.value( QStringLiteral( "qgis/native_color_dialogs" ), false ).toBool();
   if ( useNative )
   {
-    return QColorDialog::getColor( initialColor, parent, dialogTitle, allowOpacity ? QColorDialog::ShowAlphaChannel : ( QColorDialog::ColorDialogOption )0 );
+    return QColorDialog::getColor( initialColor, parent, dialogTitle, allowOpacity ? QColorDialog::ShowAlphaChannel : ( QColorDialog::ColorDialogOption ) 0 );
   }
   else
   {

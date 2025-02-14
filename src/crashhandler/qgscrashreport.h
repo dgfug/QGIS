@@ -28,7 +28,6 @@
 class QgsCrashReport
 {
   public:
-
     /**
      * Include information to generate user friendly crash report for QGIS.
      */
@@ -37,14 +36,23 @@ class QgsCrashReport
   public:
     enum Flag
     {
-      Stack                = 1 << 0,
-      Plugins              = 1 << 1,
-      ProjectDetails       = 1 << 2,
-      SystemInfo           = 1 << 3,
-      QgisInfo             = 1 << 4,
-      All      = Stack | Plugins | ProjectDetails | SystemInfo | QgisInfo
+      Stack = 1 << 0,
+      Plugins = 1 << 1,
+      ProjectDetails = 1 << 2,
+      SystemInfo = 1 << 3,
+      QgisInfo = 1 << 4,
+      All = Stack | Plugins | ProjectDetails | SystemInfo | QgisInfo
     };
     Q_DECLARE_FLAGS( Flags, Flag )
+
+    enum class LikelyPythonFaultCause
+    {
+      NotPython,
+      Unknown,
+      ProcessingScript,
+      Plugin,
+      ConsoleCommand
+    };
 
     /**
      * Sets the stack trace for the crash report.
@@ -89,6 +97,21 @@ class QgsCrashReport
     void setVersionInfo( const QStringList &versionInfo ) { mVersionInfo = versionInfo; }
 
     /**
+     * Sets the \a path to the associated Python crash log.
+     */
+    void setPythonCrashLogFilePath( const QString &path );
+
+    class PythonFault
+    {
+      public:
+        LikelyPythonFaultCause cause = LikelyPythonFaultCause::NotPython;
+        QString title;
+        QString filePath;
+    };
+
+    PythonFault pythonFault() const { return mPythonFault; }
+
+    /**
      * convert htmlToMarkdown (copied from QgsStringUtils::htmlToMarkdown)
      * \param html text in html
      * \return the reformatted text in markdown
@@ -99,7 +122,9 @@ class QgsCrashReport
     Flags mFlags;
     QgsStackTrace *mStackTrace = nullptr;
     QStringList mVersionInfo;
+    QString mPythonCrashLogFilePath;
 
+    PythonFault mPythonFault;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS( QgsCrashReport::Flags )

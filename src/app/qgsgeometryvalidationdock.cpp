@@ -18,6 +18,7 @@ email                : matthias@opengis.ch
 #include <QPropertyAnimation>
 
 #include "qgsgeometryvalidationdock.h"
+#include "moc_qgsgeometryvalidationdock.cpp"
 #include "qgsgeometryvalidationmodel.h"
 #include "qgsgeometryvalidationservice.h"
 #include "qgsmapcanvas.h"
@@ -50,9 +51,6 @@ QgsGeometryValidationDock::QgsGeometryValidationDock( const QString &title, QgsM
   connect( mZoomToProblemButton, &QToolButton::clicked, this, &QgsGeometryValidationDock::zoomToProblem );
   connect( mZoomToFeatureButton, &QToolButton::clicked, this, &QgsGeometryValidationDock::zoomToFeature );
   connect( mMapCanvas, &QgsMapCanvas::currentLayerChanged, this, &QgsGeometryValidationDock::onCurrentLayerChanged );
-  connect( mMapCanvas, &QgsMapCanvas::currentLayerChanged, this, &QgsGeometryValidationDock::updateLayerTransform );
-  connect( mMapCanvas, &QgsMapCanvas::destinationCrsChanged, this, &QgsGeometryValidationDock::updateLayerTransform );
-  connect( mMapCanvas, &QgsMapCanvas::transformContextChanged, this, &QgsGeometryValidationDock::updateLayerTransform );
 
   mFeatureRubberband = new QgsRubberBand( mMapCanvas );
   mErrorRubberband = new QgsRubberBand( mMapCanvas );
@@ -120,7 +118,7 @@ void QgsGeometryValidationDock::zoomToProblem()
     return;
 
   const QgsRectangle problemExtent = currentIndex().data( QgsGeometryValidationModel::ProblemExtentRole ).value<QgsRectangle>();
-  QgsRectangle mapExtent = mLayerTransform.transform( problemExtent );
+  QgsRectangle mapExtent = layerTransform().transform( problemExtent );
   mMapCanvas->zoomToFeatureExtent( mapExtent );
 }
 
@@ -133,17 +131,17 @@ void QgsGeometryValidationDock::zoomToFeature()
   const QgsRectangle featureExtent = currentIndex().data( QgsGeometryValidationModel::FeatureExtentRole ).value<QgsRectangle>();
   if ( !featureExtent.isEmpty() )
   {
-    QgsRectangle mapExtent = mLayerTransform.transform( featureExtent );
+    QgsRectangle mapExtent = layerTransform().transform( featureExtent );
     mMapCanvas->zoomToFeatureExtent( mapExtent );
   }
 }
 
-void QgsGeometryValidationDock::updateLayerTransform()
+QgsCoordinateTransform QgsGeometryValidationDock::layerTransform() const
 {
   if ( !mMapCanvas->currentLayer() )
-    return;
+    return QgsCoordinateTransform();
 
-  mLayerTransform = QgsCoordinateTransform( mMapCanvas->currentLayer()->crs(), mMapCanvas->mapSettings().destinationCrs(), mMapCanvas->mapSettings().transformContext() );
+  return QgsCoordinateTransform( mMapCanvas->currentLayer()->crs(), mMapCanvas->mapSettings().destinationCrs(), mMapCanvas->mapSettings().transformContext() );
 }
 
 void QgsGeometryValidationDock::onDataChanged( const QModelIndex &topLeft, const QModelIndex &bottomRight, const QVector<int> &roles )
@@ -182,8 +180,7 @@ void QgsGeometryValidationDock::showErrorContextMenu( const QPoint &pos )
         QAction *action = new QAction( resolutionMethod.name(), mGeometryErrorContextMenu );
         action->setToolTip( resolutionMethod.description() );
         const int fixId = resolutionMethod.id();
-        connect( action, &QAction::triggered, this, [ fixId, error, this ]()
-        {
+        connect( action, &QAction::triggered, this, [fixId, error, this]() {
           mGeometryValidationService->fixError( error, fixId );
         } );
         mGeometryErrorContextMenu->addAction( action );
@@ -266,8 +263,7 @@ void QgsGeometryValidationDock::onCurrentErrorChanged( const QModelIndex &curren
         resolveLabel->setWordWrap( true );
         layout->addWidget( resolveLabel, resolutionIndex, 1 );
         const int fixId = resolutionMethod.id();
-        connect( resolveBtn, &QToolButton::clicked, this, [fixId, error, this]()
-        {
+        connect( resolveBtn, &QToolButton::clicked, this, [fixId, error, this]() {
           mGeometryValidationService->fixError( error, fixId );
         } );
         resolutionIndex++;
@@ -279,7 +275,7 @@ void QgsGeometryValidationDock::onCurrentErrorChanged( const QModelIndex &curren
     }
   }
 
-  const bool hasContextRectangle = !current.data( QgsGeometryValidationModel::FeatureExtentRole ).isNull();
+  const bool hasContextRectangle = !QgsVariantUtils::isNull( current.data( QgsGeometryValidationModel::FeatureExtentRole ) );
   mZoomToFeatureButton->setEnabled( hasContextRectangle );
 }
 
@@ -289,7 +285,7 @@ void QgsGeometryValidationDock::updateMapCanvasExtent()
   {
     switch ( mLastZoomToAction )
     {
-      case  ZoomToProblem:
+      case ZoomToProblem:
         zoomToProblem();
         break;
 
@@ -328,7 +324,7 @@ void QgsGeometryValidationDock::onLayerEditingStatusChanged()
 {
   if ( mCurrentLayer && mCurrentLayer->isSpatial() && mCurrentLayer->isEditable() )
   {
-    const QList<QgsGeometryCheckFactory *> topologyCheckFactories = QgsAnalysis::instance()->geometryCheckRegistry()->geometryCheckFactories( mCurrentLayer, QgsGeometryCheck::LayerCheck, QgsGeometryCheck::Flag::AvailableInValidation );
+    const QList<QgsGeometryCheckFactory *> topologyCheckFactories = QgsAnalysis::geometryCheckRegistry()->geometryCheckFactories( mCurrentLayer, QgsGeometryCheck::LayerCheck, QgsGeometryCheck::Flag::AvailableInValidation );
     const QStringList activeChecks = mCurrentLayer->geometryOptions()->geometryChecks();
     for ( const QgsGeometryCheckFactory *factory : topologyCheckFactories )
     {
@@ -358,8 +354,7 @@ void QgsGeometryValidationDock::showHighlight( const QModelIndex &current )
     QPropertyAnimation *featureAnimation = new QPropertyAnimation( mFeatureRubberband, "fillColor" );
     featureAnimation->setEasingCurve( QEasingCurve::OutQuad );
     connect( featureAnimation, &QPropertyAnimation::finished, featureAnimation, &QPropertyAnimation::deleteLater );
-    connect( featureAnimation, &QPropertyAnimation::valueChanged, this, [this]
-    {
+    connect( featureAnimation, &QPropertyAnimation::valueChanged, this, [this] {
       mFeatureRubberband->update();
     } );
 
@@ -374,8 +369,7 @@ void QgsGeometryValidationDock::showHighlight( const QModelIndex &current )
     QPropertyAnimation *errorAnimation = new QPropertyAnimation( mErrorRubberband, "fillColor" );
     errorAnimation->setEasingCurve( QEasingCurve::OutQuad );
     connect( errorAnimation, &QPropertyAnimation::finished, errorAnimation, &QPropertyAnimation::deleteLater );
-    connect( errorAnimation, &QPropertyAnimation::valueChanged, this, [this]
-    {
+    connect( errorAnimation, &QPropertyAnimation::valueChanged, this, [this] {
       mErrorRubberband->update();
     } );
 

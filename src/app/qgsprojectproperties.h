@@ -17,6 +17,9 @@
  ***************************************************************************/
 
 
+#ifndef QGSPROJECTPROPERTIES_H
+#define QGSPROJECTPROPERTIES_H
+
 #include "ui_qgsprojectpropertiesbase.h"
 
 #include "qgsoptionsdialogbase.h"
@@ -29,6 +32,7 @@
 #include "qgis_app.h"
 
 #include <QList>
+#include <QColorSpace>
 
 class QgsMapCanvas;
 class QgsRelationManagerDialog;
@@ -39,6 +43,7 @@ class QgsMetadataWidget;
 class QgsTreeWidgetItem;
 class QgsLayerCapabilitiesModel;
 class QgsBearingNumericFormat;
+class QgsGeographicCoordinateNumericFormat;
 class QgsOptionsPageWidget;
 
 /**
@@ -53,8 +58,7 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
 
   public:
     //! Constructor
-    QgsProjectProperties( QgsMapCanvas *mapCanvas, QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags,
-                          const QList<QgsOptionsWidgetFactory *> &optionsFactories = QList<QgsOptionsWidgetFactory *>() );
+    QgsProjectProperties( QgsMapCanvas *mapCanvas, QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, const QList<QgsOptionsWidgetFactory *> &optionsFactories = QList<QgsOptionsWidgetFactory *>() );
 
     ~QgsProjectProperties() override;
 
@@ -78,6 +82,11 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
      * Slot called when apply button is pressed or dialog is accepted
      */
     void apply();
+
+    /**
+     * Slot called when cancel button is pressed or dialog is not accepted
+     */
+    void cancel();
 
     /**
      * Let the user add a scale to the list of project scales
@@ -104,9 +113,9 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
     void onGenerateTsFileButton() const;
 
     /**
-     * Set WMS default extent to current canvas extent
+     * When the group box about advertised extent has been toggled
      */
-    void pbnWMSExtCanvas_clicked();
+    void wmsExtent_toggled();
 
     /**
      *
@@ -149,15 +158,6 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
     void pbnLaunchOWSChecker_clicked();
 
     /**
-     * Slots for Styles
-     */
-    void pbtnStyleManager_clicked();
-    void pbtnStyleMarker_clicked();
-    void pbtnStyleLine_clicked();
-    void pbtnStyleFill_clicked();
-    void pbtnStyleColorRamp_clicked();
-
-    /**
      * Slot to link WMTS checkboxes in tree widget
      */
     void twWmtsItemChanged( QTreeWidgetItem *item, int column );
@@ -189,6 +189,7 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
   private slots:
 
     void customizeBearingFormat();
+    void customizeGeographicCoordinateFormat();
 
     /**
      * Sets the start and end dates input values from the project
@@ -202,21 +203,44 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
      */
     void calculateFromLayersButton_clicked();
 
-  private:
+    void addStyleDatabase();
+    void removeStyleDatabase();
+    void newStyleDatabase();
 
+#if QT_VERSION >= QT_VERSION_CHECK( 6, 8, 0 )
+
+    /**
+     * Called whenever user select the add ICC profile button
+     */
+    void addIccProfile();
+
+    /**
+     * load \a iccProfileFilePath and set resulting color space to project
+     */
+    void addIccProfile( const QString &iccProfileFilePath );
+
+    /**
+     * Called whenever user select the remove ICC profile button
+     */
+    void removeIccProfile();
+
+    /**
+     * Called whenever user select the save ICC profile button
+     */
+    void saveIccProfile();
+
+    /**
+     * Update color space widget according to current project color space
+     */
+    void updateColorSpaceWidgets();
+
+#endif
+
+  private:
     /**
       * Called when the user sets a CRS for the project.
       */
     void crsChanged( const QgsCoordinateReferenceSystem &crs );
-
-    //! Formats for displaying coordinates
-    enum CoordinateFormat
-    {
-      DecimalDegrees, //!< Decimal degrees
-      DegreesMinutes, //!< Degrees, decimal minutes
-      DegreesMinutesSeconds, //!< Degrees, minutes, seconds
-      MapUnits, //!< Show coordinates in map units
-    };
 
     QgsRelationManagerDialog *mRelationManagerDlg = nullptr;
     QgsMapCanvas *mMapCanvas = nullptr;
@@ -231,9 +255,6 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
 
     void checkPageWidgetNameMap();
 
-    void populateStyles();
-    void editSymbol( QComboBox *cbo );
-
     /**
      * Reset the Python macros
      */
@@ -242,18 +263,20 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
     // List for all ellispods, also None and Custom
     struct EllipsoidDefs
     {
-      QString acronym;
-      QString description;
-      double semiMajor;
-      double semiMinor;
+        QString acronym;
+        QString description;
+        double semiMajor;
+        double semiMinor;
     };
     QList<EllipsoidDefs> mEllipsoidList;
     int mEllipsoidIndex;
     bool mBlockCrsUpdates = false;
+    QColorSpace mColorSpace;
 
-    QList< QgsOptionsPageWidget * > mAdditionalProjectPropertiesWidgets;
+    QList<QgsOptionsPageWidget *> mAdditionalProjectPropertiesWidgets;
 
-    std::unique_ptr< QgsBearingNumericFormat > mBearingFormat;
+    std::unique_ptr<QgsBearingNumericFormat> mBearingFormat;
+    std::unique_ptr<QgsGeographicCoordinateNumericFormat> mGeographicCoordinateFormat;
 
     //! populate WMTS tree
     void populateWmtsTree( const QgsLayerTreeGroup *treeGroup, QgsTreeWidgetItem *treeItem );
@@ -266,7 +289,7 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
     void setCurrentEllipsoid( const QString &ellipsoidAcronym );
 
     //! Create a new scale item and add it to the list of scales
-    QListWidgetItem *addScaleToScaleList( const QString &newScale );
+    QListWidgetItem *addScaleToScaleList( double newScaleDenominator );
 
     //! Add a scale item to the list of scales
     void addScaleToScaleList( QListWidgetItem *newItem );
@@ -274,8 +297,13 @@ class APP_EXPORT QgsProjectProperties : public QgsOptionsDialogBase, private Ui:
     static const char *GEO_NONE_DESC;
 
     void updateGuiForMapUnits();
+    void updateGuiForCoordinateType();
+    void updateGuiForCoordinateCrs();
+
+    void addStyleDatabasePrivate( bool createNew );
 
     void showHelp();
 
     friend class TestQgsProjectProperties;
 };
+#endif // QGSPROJECTPROPERTIES_H

@@ -42,7 +42,7 @@
 #define QGSVARIANTDELEGATE_H
 
 #include <QItemDelegate>
-#include <QRegExp>
+#include <QRegularExpression>
 
 class QgsVariantDelegate : public QItemDelegate
 {
@@ -51,33 +51,30 @@ class QgsVariantDelegate : public QItemDelegate
   public:
     explicit QgsVariantDelegate( QObject *parent = nullptr );
 
-    void paint( QPainter *painter, const QStyleOptionViewItem &option,
-                const QModelIndex &index ) const override;
-    QWidget *createEditor( QWidget *parent, const QStyleOptionViewItem &option,
-                           const QModelIndex &index ) const override;
+    void paint( QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index ) const override;
+    QWidget *createEditor( QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index ) const override;
     void setEditorData( QWidget *editor, const QModelIndex &index ) const override;
-    void setModelData( QWidget *editor, QAbstractItemModel *model,
-                       const QModelIndex &index ) const override;
+    void setModelData( QWidget *editor, QAbstractItemModel *model, const QModelIndex &index ) const override;
 
-    static bool isSupportedType( QVariant::Type type );
+    static bool isSupportedType( QMetaType::Type type );
     static QString displayText( const QVariant &value );
 
-    static QVariant::Type type( const QVariant &value );
+    static QMetaType::Type type( const QVariant &value );
 
   private:
-    QRegExp mBoolExp;
-    QRegExp mByteArrayExp;
-    QRegExp mCharExp;
-    QRegExp mColorExp;
-    QRegExp mDateExp;
-    QRegExp mDateTimeExp;
-    QRegExp mDoubleExp;
-    QRegExp mPointExp;
-    QRegExp mRectExp;
-    QRegExp mSignedIntegerExp;
-    QRegExp mSizeExp;
-    QRegExp mTimeExp;
-    QRegExp mUnsignedIntegerExp;
+    QRegularExpression mBoolExp;
+    QRegularExpression mByteArrayExp;
+    QRegularExpression mCharExp;
+    QRegularExpression mColorExp;
+    QRegularExpression mDateExp;
+    QRegularExpression mDateTimeExp;
+    QRegularExpression mDoubleExp;
+    QRegularExpression mPointExp;
+    QRegularExpression mRectExp;
+    QRegularExpression mSignedIntegerExp;
+    QRegularExpression mSizeExp;
+    QRegularExpression mTimeExp;
+    QRegularExpression mUnsignedIntegerExp;
 };
 
 #endif

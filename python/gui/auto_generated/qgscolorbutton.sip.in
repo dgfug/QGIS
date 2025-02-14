@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/qgscolorbutton.h                                             *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -14,8 +14,6 @@ class QgsColorButton : QToolButton
 A cross platform button subclass for selecting colors. Will open a color chooser dialog when clicked.
 Offers live updates to button from color chooser dialog. An attached drop-down menu allows for copying
 and pasting colors, picking colors from the screen, and selecting colors from color swatch grids.
-
-.. versionadded:: 2.5
 %End
 
 %TypeHeaderCode
@@ -28,7 +26,6 @@ and pasting colors, picking colors from the screen, and selecting colors from co
       sipType = NULL;
 %End
   public:
-
     enum Behavior
     {
       ShowDialog,
@@ -66,8 +63,6 @@ for the color. Defaults to ``False``.
 :param allowOpacity: set to ``True`` to allow opacity modification
 
 .. seealso:: :py:func:`allowOpacity`
-
-.. versionadded:: 3.0
 %End
 
     bool allowOpacity() const;
@@ -78,8 +73,6 @@ for the color.
 :return: ``True`` if opacity modification is allowed
 
 .. seealso:: :py:func:`setAllowOpacity`
-
-.. versionadded:: 3.0
 %End
 
     void setColorDialogTitle( const QString &title );
@@ -220,8 +213,6 @@ Sets whether a set to null (clear) option is shown in the button's drop-down men
 .. seealso:: :py:func:`showNull`
 
 .. seealso:: :py:func:`isNull`
-
-.. versionadded:: 2.16
 %End
 
     bool showNull() const;
@@ -231,8 +222,6 @@ Returns whether the set to null (clear) option is shown in the button's drop-dow
 .. seealso:: :py:func:`setShowNull`
 
 .. seealso:: :py:func:`isNull`
-
-.. versionadded:: 2.16
 %End
 
     bool isNull() const;
@@ -242,8 +231,6 @@ Returns ``True`` if the current color is null.
 .. seealso:: :py:func:`setShowNull`
 
 .. seealso:: :py:func:`showNull`
-
-.. versionadded:: 2.16
 %End
 
     QString noColorString() const;
@@ -417,8 +404,6 @@ Sets color to null.
 .. seealso:: :py:func:`setToNoColor`
 
 .. seealso:: :py:func:`cleared`
-
-.. versionadded:: 2.16
 %End
 
     void unlink();
@@ -475,7 +460,6 @@ to a project color and is now no longer linked.
 %End
 
   protected:
-
     virtual bool event( QEvent *e );
 
     virtual void changeEvent( QEvent *e );
@@ -532,6 +516,9 @@ Reimplemented to reset button appearance after drag leave
 Reimplemented to accept dropped colors
 %End
 
+    virtual void wheelEvent( QWheelEvent *event );
+
+
 };
 
 /************************************************************************
@@ -539,5 +526,5 @@ Reimplemented to accept dropped colors
  *                                                                      *
  * src/gui/qgscolorbutton.h                                             *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

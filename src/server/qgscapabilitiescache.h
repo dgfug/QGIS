@@ -26,6 +26,7 @@
 #include <QTimer>
 
 #include "qgis_server.h"
+#include "qgsserversettings.h"
 
 /**
  * \ingroup server
@@ -35,7 +36,7 @@ class SERVER_EXPORT QgsCapabilitiesCache : public QObject
 {
     Q_OBJECT
   public:
-    QgsCapabilitiesCache();
+    QgsCapabilitiesCache( int size );
 
     /**
      * Returns cached capabilities document (or 0 if document for configuration file not in cache)
@@ -52,18 +53,20 @@ class SERVER_EXPORT QgsCapabilitiesCache : public QObject
      */
     void insertCapabilitiesDocument( const QString &configFilePath, const QString &key, const QDomDocument *doc );
 
+  public slots:
+
     /**
-     * Remove capabilities document
+     * Removes capabilities document
      * \param path the project file path
-     * \since QGIS 2.16
      */
     void removeCapabilitiesDocument( const QString &path );
 
   private:
-    QHash< QString, QHash< QString, QDomDocument > > mCachedCapabilities;
-    QHash< QString, QDateTime> mCachedCapabilitiesTimestamps;
+    QHash<QString, QHash<QString, QDomDocument>> mCachedCapabilities;
+    QHash<QString, QDateTime> mCachedCapabilitiesTimestamps;
     QFileSystemWatcher mFileSystemWatcher;
     QTimer mTimer;
+    int mCacheSize;
 
   private slots:
     //! Removes changed entry from this cache

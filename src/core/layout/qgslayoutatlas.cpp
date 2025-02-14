@@ -19,12 +19,16 @@
 #include <QtAlgorithms>
 
 #include "qgslayoutatlas.h"
+#include "moc_qgslayoutatlas.cpp"
 #include "qgslayout.h"
 #include "qgsmessagelog.h"
 #include "qgsfeaturerequest.h"
 #include "qgsfeatureiterator.h"
 #include "qgsvectorlayer.h"
 #include "qgsexpressioncontextutils.h"
+#include "qgsvariantutils.h"
+#include "qgslayoutreportcontext.h"
+#include "qgslayoutrendercontext.h"
 
 QgsLayoutAtlas::QgsLayoutAtlas( QgsLayout *layout )
   : QObject( layout )
@@ -35,7 +39,7 @@ QgsLayoutAtlas::QgsLayoutAtlas( QgsLayout *layout )
   //listen out for layer removal
   connect( mLayout->project(), static_cast < void ( QgsProject::* )( const QStringList & ) >( &QgsProject::layersWillBeRemoved ), this, &QgsLayoutAtlas::removeLayers );
 
-  if ( mLayout->customProperty( QStringLiteral( "singleFile" ) ).isNull() )
+  if ( QgsVariantUtils::isNull( mLayout->customProperty( QStringLiteral( "singleFile" ) ) ) )
     mLayout->setCustomProperty( QStringLiteral( "singleFile" ), true );
 }
 
@@ -49,7 +53,7 @@ QgsLayout *QgsLayoutAtlas::layout()
   return mLayout;
 }
 
-const QgsLayout *QgsLayoutAtlas::layout() const
+const QgsLayout *QgsLayoutAtlas::layout() const  // cppcheck-suppress duplInheritedMember
 {
   return mLayout.data();
 }
@@ -117,6 +121,7 @@ bool QgsLayoutAtlas::readXml( const QDomElement &atlasElem, const QDomDocument &
   mFilterExpression = atlasElem.attribute( QStringLiteral( "featureFilter" ) );
 
   mHideCoverage = atlasElem.attribute( QStringLiteral( "hideCoverage" ), QStringLiteral( "0" ) ).toInt();
+  mLayout->renderContext().setFlag( QgsLayoutRenderContext::FlagHideCoverageLayer, mHideCoverage );
 
   emit toggled( mEnabled );
   emit changed();

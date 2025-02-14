@@ -19,19 +19,16 @@
  *                                                                         *
  ***************************************************************************/
 
-
-#include "qgswmsutils.h"
 #include "qgswmsrequest.h"
-#include "qgswmsserviceexception.h"
 #include "qgswmsgetstyles.h"
 #include "qgswmsrendercontext.h"
-#include "qgsserverprojectutils.h"
 
 #include "qgsproject.h"
 #include "qgsrenderer.h"
 #include "qgsvectorlayer.h"
 #include "qgsmaplayerstylemanager.h"
 #include "qgsvectorlayerlabeling.h"
+#include "qgsserverresponse.h"
 
 
 namespace QgsWms
@@ -42,23 +39,21 @@ namespace QgsWms
     QDomDocument getStyledLayerDescriptorDocument( QgsServerInterface *serverIface, const QgsProject *project, const QgsWmsRequest &request );
   }
 
-  void writeGetStyles( QgsServerInterface *serverIface, const QgsProject *project,
-                       const QgsWmsRequest &request, QgsServerResponse &response )
+  void writeGetStyles( QgsServerInterface *serverIface, const QgsProject *project, const QgsWmsRequest &request, QgsServerResponse &response )
   {
     const QDomDocument doc = getStyles( serverIface, project, request );
     response.setHeader( QStringLiteral( "Content-Type" ), QStringLiteral( "text/xml; charset=utf-8" ) );
     response.write( doc.toByteArray() );
   }
 
-  QDomDocument getStyles( QgsServerInterface *serverIface, const QgsProject *project,
-                          const QgsWmsRequest &request )
+  QDomDocument getStyles( QgsServerInterface *serverIface, const QgsProject *project, const QgsWmsRequest &request )
   {
     return getStyledLayerDescriptorDocument( serverIface, project, request );
   }
 
   namespace
   {
-    QDomDocument getStyledLayerDescriptorDocument( QgsServerInterface *serverIface, const QgsProject *project,   const QgsWmsRequest &request )
+    QDomDocument getStyledLayerDescriptorDocument( QgsServerInterface *serverIface, const QgsProject *project, const QgsWmsRequest &request )
     {
       // init WMS parameters and context
       const QgsWmsParameters parameters = request.wmsParameters();
@@ -94,11 +89,11 @@ namespace QgsWms
         nameNode.appendChild( myDocument.createTextNode( context.layerNickname( *layer ) ) );
         namedLayerNode.appendChild( nameNode );
 
-        if ( layer->type() != QgsMapLayerType::VectorLayer )
+        if ( layer->type() != Qgis::LayerType::Vector )
           continue;
 
         QgsVectorLayer *vlayer = qobject_cast<QgsVectorLayer *>( layer );
-        if ( ! vlayer->isSpatial() )
+        if ( !vlayer->isSpatial() )
           continue;
 
         const QString currentStyle = vlayer->styleManager()->currentStyle();
@@ -106,8 +101,8 @@ namespace QgsWms
         QVariantMap props;
         if ( vlayer->hasScaleBasedVisibility() )
         {
-          props[ QStringLiteral( "scaleMinDenom" ) ] = QString::number( vlayer->maximumScale() );
-          props[ QStringLiteral( "scaleMaxDenom" ) ] = QString::number( vlayer->minimumScale() );
+          props[QStringLiteral( "scaleMinDenom" )] = QString::number( vlayer->maximumScale() );
+          props[QStringLiteral( "scaleMaxDenom" )] = QString::number( vlayer->minimumScale() );
         }
 
         for ( const QString &styleName : vlayer->styleManager()->styles() )
@@ -137,5 +132,5 @@ namespace QgsWms
 
       return myDocument;
     }
-  }
+  } // namespace
 } // namespace QgsWms

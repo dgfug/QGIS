@@ -49,13 +49,25 @@ class CORE_EXPORT QgsSingleBandGrayRenderer: public QgsRasterRenderer
     const QgsSingleBandGrayRenderer &operator=( const QgsSingleBandGrayRenderer & ) = delete;
 
     QgsSingleBandGrayRenderer *clone() const override SIP_FACTORY;
+    Qgis::RasterRendererFlags flags() const override;
 
     static QgsRasterRenderer *create( const QDomElement &elem, QgsRasterInterface *input ) SIP_FACTORY;
 
     QgsRasterBlock *block( int bandNo, const QgsRectangle &extent, int width, int height, QgsRasterBlockFeedback *feedback = nullptr ) override SIP_FACTORY;
 
-    int grayBand() const { return mGrayBand; }
-    void setGrayBand( int band ) { mGrayBand = band; }
+    /**
+     * \deprecated QGIS 3.38. Use inputBand() instead.
+     */
+    Q_DECL_DEPRECATED int grayBand() const SIP_DEPRECATED { return mGrayBand; }
+
+    /**
+     * \deprecated QGIS 3.38. Use setInputBand() instead.
+     */
+    Q_DECL_DEPRECATED void setGrayBand( int band ) SIP_DEPRECATED;
+
+    int inputBand() const override;
+    bool setInputBand( int band ) override;
+
     const QgsContrastEnhancement *contrastEnhancement() const { return mContrastEnhancement.get(); }
     //! Takes ownership
     void setContrastEnhancement( QgsContrastEnhancement *ce SIP_TRANSFER );
@@ -89,6 +101,17 @@ class CORE_EXPORT QgsSingleBandGrayRenderer: public QgsRasterRenderer
      * \since QGIS 3.18
      */
     void setLegendSettings( QgsColorRampLegendNodeSettings *settings SIP_TRANSFER );
+
+    /**
+     * \brief Refreshes the renderer according to the \a min and \a max values associated with the \a extent.
+     * If \a min or \a max size is greater than 1, the last values are ignored.
+     * If \a forceRefresh is TRUE, this will force the refresh even if needsRefresh() returns FALSE.
+     * \returns TRUE if the renderer has been refreshed
+     * \note not available in Python bindings
+     *
+     * \since QGIS 3.42
+     */
+    bool refresh( const QgsRectangle &extent, const QList<double> &min, const QList<double> &max, bool forceRefresh = false ) override SIP_SKIP;
 
   private:
 #ifdef SIP_RUN

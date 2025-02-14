@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsuuidwidgetwrapper.h"
+#include "moc_qgsuuidwidgetwrapper.cpp"
 
 #include <QUuid>
 
@@ -25,14 +26,16 @@ QgsUuidWidgetWrapper::QgsUuidWidgetWrapper( QgsVectorLayer *layer, int fieldIdx,
 
 QString QgsUuidWidgetWrapper::createUiid( int maxLength )
 {
-  if ( maxLength <= 0 )
+  QString uuid = QUuid::createUuid().toString();
+
+  if ( maxLength <= 0 || maxLength >= uuid.length() )
   {
-    return QUuid::createUuid().toString();
+    return uuid;
   }
   else
   {
     // trim left "{" and remove -'s... they are wasted characters given that we have a limited length!
-    return QUuid::createUuid().toString().replace( '-', QString() ).mid( 1, maxLength );
+    return uuid.replace( '-', QString() ).mid( 1, maxLength );
   }
 }
 
@@ -68,10 +71,10 @@ bool QgsUuidWidgetWrapper::valid() const
 
 void QgsUuidWidgetWrapper::updateValues( const QVariant &value, const QVariantList & )
 {
-  if ( value.isNull() )
+  if ( QgsVariantUtils::isNull( value ) )
   {
     int maxLength = 0;
-    if ( field().type() == QVariant::String && field().length() > 0 )
+    if ( field().type() == QMetaType::Type::QString && field().length() > 0 )
     {
       maxLength = field().length();
     }

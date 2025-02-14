@@ -24,16 +24,16 @@
 //! Layer Property structure
 struct QgsMssqlLayerProperty
 {
-  // MSSQL layer properties
-  QString     type;
-  QString     schemaName;
-  QString     tableName;
-  QString     geometryColName;
-  QStringList pkCols;
-  QString     srid;
-  bool        isGeography;
-  QString     sql;
-  bool        isView;
+    // MSSQL layer properties
+    QString type;
+    QString schemaName;
+    QString tableName;
+    QString geometryColName;
+    QStringList pkCols;
+    QString srid;
+    bool isGeography;
+    QString sql;
+    bool isView;
 };
 
 
@@ -87,7 +87,7 @@ class QgsMssqlTableModel : public QgsAbstractDbTableModel
 
     QString layerURI( const QModelIndex &index, const QString &connInfo, bool useEstimatedMetadata, bool disableInvalidGeometryHandling );
 
-    static QgsWkbTypes::Type wkbTypeFromMssql( QString dbType );
+    static Qgis::WkbType wkbTypeFromMssql( QString dbType );
 
     void setConnectionName( const QString &connectionName );
 

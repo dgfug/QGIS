@@ -15,6 +15,7 @@
  ***************************************************************************/
 
 #include "qgsannotationlayer.h"
+#include "moc_qgsannotationlayer.cpp"
 #include "qgsannotationlayerrenderer.h"
 #include "qgsannotationitem.h"
 #include "qgsannotationitemregistry.h"
@@ -25,8 +26,8 @@
 #include "qgsfeedback.h"
 #include "qgsannotationitemeditoperation.h"
 #include "qgspainteffect.h"
-#include "qgseffectstack.h"
 #include "qgspainteffectregistry.h"
+#include "qgsthreadingutils.h"
 #include <QUuid>
 #include "RTree.h"
 
@@ -101,7 +102,7 @@ class QgsAnnotationLayerSpatialIndex : public RTree<QString, float, 2, float>
 ///@endcond
 
 QgsAnnotationLayer::QgsAnnotationLayer( const QString &name, const LayerOptions &options )
-  : QgsMapLayer( QgsMapLayerType::AnnotationLayer, name )
+  : QgsMapLayer( Qgis::LayerType::Annotation, name )
   , mTransformContext( options.transformContext )
   , mSpatialIndex( std::make_unique< QgsAnnotationLayerSpatialIndex >() )
 {
@@ -110,7 +111,7 @@ QgsAnnotationLayer::QgsAnnotationLayer( const QString &name, const LayerOptions 
 
   QgsDataProvider::ProviderOptions providerOptions;
   providerOptions.transformContext = options.transformContext;
-  mDataProvider = new QgsAnnotationLayerDataProvider( providerOptions, QgsDataProvider::ReadFlags() );
+  mDataProvider = new QgsAnnotationLayerDataProvider( providerOptions, Qgis::DataProviderReadFlags() );
 
   mPaintEffect.reset( QgsPaintEffectRegistry::defaultStack() );
   mPaintEffect->setEnabled( false );
@@ -125,14 +126,21 @@ QgsAnnotationLayer::~QgsAnnotationLayer()
 
 void QgsAnnotationLayer::reset()
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   setOpacity( 1.0 );
   setCrs( QgsCoordinateReferenceSystem() );
   setTransformContext( QgsCoordinateTransformContext() );
+
+  undoStackStyles()->clear();
+
   clear();
 }
 
 QString QgsAnnotationLayer::addItem( QgsAnnotationItem *item )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   const QString uuid = QUuid::createUuid().toString();
   mItems.insert( uuid, item );
   if ( item->flags() & Qgis::AnnotationItemFlag::ScaleDependentBoundingBox )
@@ -147,6 +155,8 @@ QString QgsAnnotationLayer::addItem( QgsAnnotationItem *item )
 
 void QgsAnnotationLayer::replaceItem( const QString &id, QgsAnnotationItem *item )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   std::unique_ptr< QgsAnnotationItem> prevItem( mItems.take( id ) );
 
   if ( prevItem )
@@ -173,6 +183,8 @@ void QgsAnnotationLayer::replaceItem( const QString &id, QgsAnnotationItem *item
 
 bool QgsAnnotationLayer::removeItem( const QString &id )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   if ( !mItems.contains( id ) )
     return false;
 
@@ -197,6 +209,8 @@ bool QgsAnnotationLayer::removeItem( const QString &id )
 
 void QgsAnnotationLayer::clear()
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   qDeleteAll( mItems );
   mItems.clear();
   mSpatialIndex = std::make_unique< QgsAnnotationLayerSpatialIndex >();
@@ -207,17 +221,22 @@ void QgsAnnotationLayer::clear()
 
 bool QgsAnnotationLayer::isEmpty() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mItems.empty();
 }
 
-QgsAnnotationItem *QgsAnnotationLayer::item( const QString &id )
+QgsAnnotationItem *QgsAnnotationLayer::item( const QString &id ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mItems.value( id );
 }
 
-
 QStringList QgsAnnotationLayer::queryIndex( const QgsRectangle &bounds, QgsFeedback *feedback ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QStringList res;
 
   mSpatialIndex->intersects( bounds, [&res, feedback]( const QString & uuid )->bool
@@ -230,6 +249,8 @@ QStringList QgsAnnotationLayer::queryIndex( const QgsRectangle &bounds, QgsFeedb
 
 QStringList QgsAnnotationLayer::itemsInBounds( const QgsRectangle &bounds, QgsRenderContext &context, QgsFeedback *feedback ) const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QStringList res = queryIndex( bounds, feedback );
   // we also have to search through any non-indexed items
   for ( const QString &uuid : mNonIndexedItems )
@@ -243,6 +264,15 @@ QStringList QgsAnnotationLayer::itemsInBounds( const QgsRectangle &bounds, QgsRe
 
 Qgis::AnnotationItemEditOperationResult QgsAnnotationLayer::applyEdit( QgsAbstractAnnotationItemEditOperation *operation )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  return applyEditV2( operation, QgsAnnotationItemEditContext() );
+}
+
+Qgis::AnnotationItemEditOperationResult QgsAnnotationLayer::applyEditV2( QgsAbstractAnnotationItemEditOperation *operation, const QgsAnnotationItemEditContext &context )
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   Qgis::AnnotationItemEditOperationResult res = Qgis::AnnotationItemEditOperationResult::Invalid;
   if ( QgsAnnotationItem *targetItem = item( operation->itemId() ) )
   {
@@ -252,7 +282,7 @@ Qgis::AnnotationItemEditOperationResult QgsAnnotationLayer::applyEdit( QgsAbstra
     {
       mSpatialIndex->remove( operation->itemId(), targetItem->boundingBox() );
     }
-    res = targetItem->applyEdit( operation );
+    res = targetItem->applyEditV2( operation, context );
 
     switch ( res )
     {
@@ -279,14 +309,18 @@ Qgis::AnnotationItemEditOperationResult QgsAnnotationLayer::applyEdit( QgsAbstra
 
 Qgis::MapLayerProperties QgsAnnotationLayer::properties() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   // annotation layers are always editable
   return Qgis::MapLayerProperty::UsersCannotToggleEditing;
 }
 
 QgsAnnotationLayer *QgsAnnotationLayer::clone() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   const QgsAnnotationLayer::LayerOptions options( mTransformContext );
-  std::unique_ptr< QgsAnnotationLayer > layer = std::make_unique< QgsAnnotationLayer >( name(), options );
+  auto layer = std::make_unique< QgsAnnotationLayer >( name(), options );
   QgsMapLayer::clone( layer.get() );
 
   for ( auto it = mItems.constBegin(); it != mItems.constEnd(); ++it )
@@ -301,16 +335,22 @@ QgsAnnotationLayer *QgsAnnotationLayer::clone() const
   if ( mPaintEffect )
     layer->setPaintEffect( mPaintEffect->clone() );
 
+  layer->mLinkedLayer = mLinkedLayer;
+
   return layer.release();
 }
 
 QgsMapLayerRenderer *QgsAnnotationLayer::createMapRenderer( QgsRenderContext &rendererContext )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return new QgsAnnotationLayerRenderer( this, rendererContext );
 }
 
 QgsRectangle QgsAnnotationLayer::extent() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QgsRectangle rect;
   for ( auto it = mItems.constBegin(); it != mItems.constEnd(); ++it )
   {
@@ -328,6 +368,8 @@ QgsRectangle QgsAnnotationLayer::extent() const
 
 void QgsAnnotationLayer::setTransformContext( const QgsCoordinateTransformContext &context )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   if ( mDataProvider )
     mDataProvider->setTransformContext( context );
 
@@ -337,17 +379,164 @@ void QgsAnnotationLayer::setTransformContext( const QgsCoordinateTransformContex
 
 bool QgsAnnotationLayer::readXml( const QDomNode &layerNode, QgsReadWriteContext &context )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   if ( mReadFlags & QgsMapLayer::FlagDontResolveLayers )
   {
     return false;
   }
+
+  QString errorMsg;
+  readItems( layerNode, errorMsg, context );
+  readSymbology( layerNode, errorMsg, context );
+
+  {
+    const QString layerId = layerNode.toElement().attribute( QStringLiteral( "linkedLayer" ) );
+    const QString layerName = layerNode.toElement().attribute( QStringLiteral( "linkedLayerName" ) );
+    const QString layerSource = layerNode.toElement().attribute( QStringLiteral( "linkedLayerSource" ) );
+    const QString layerProvider = layerNode.toElement().attribute( QStringLiteral( "linkedLayerProvider" ) );
+    mLinkedLayer = QgsMapLayerRef( layerId, layerName, layerSource, layerProvider );
+  }
+
+  triggerRepaint();
+
+  return mValid;
+}
+
+bool QgsAnnotationLayer::writeXml( QDomNode &layer_node, QDomDocument &doc, const QgsReadWriteContext &context ) const
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  // first get the layer element so that we can append the type attribute
+  QDomElement mapLayerNode = layer_node.toElement();
+
+  if ( mapLayerNode.isNull() )
+  {
+    QgsDebugMsgLevel( QStringLiteral( "can't find maplayer node" ), 2 );
+    return false;
+  }
+
+  mapLayerNode.setAttribute( QStringLiteral( "type" ), QgsMapLayerFactory::typeToString( Qgis::LayerType::Annotation ) );
+
+  if ( mLinkedLayer )
+  {
+    mapLayerNode.setAttribute( QStringLiteral( "linkedLayer" ), mLinkedLayer.layerId );
+    mapLayerNode.setAttribute( QStringLiteral( "linkedLayerName" ), mLinkedLayer.name );
+    mapLayerNode.setAttribute( QStringLiteral( "linkedLayerSource" ), mLinkedLayer.source );
+    mapLayerNode.setAttribute( QStringLiteral( "linkedLayerProvider" ), mLinkedLayer.provider );
+  }
+
+  QString errorMsg;
+  writeItems( layer_node, doc, errorMsg, context );
+
+  // renderer specific settings
+  return writeSymbology( layer_node, doc, errorMsg, context );
+}
+
+bool QgsAnnotationLayer::writeSymbology( QDomNode &node, QDomDocument &doc, QString &, const QgsReadWriteContext &context, QgsMapLayer::StyleCategories categories ) const
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  QDomElement layerElement = node.toElement();
+  writeCommonStyle( layerElement, doc, context, categories );
+
+  // add the layer opacity
+  if ( categories.testFlag( Rendering ) )
+  {
+    QDomElement layerOpacityElem  = doc.createElement( QStringLiteral( "layerOpacity" ) );
+    const QDomText layerOpacityText = doc.createTextNode( QString::number( opacity() ) );
+    layerOpacityElem.appendChild( layerOpacityText );
+    node.appendChild( layerOpacityElem );
+  }
+
+  if ( categories.testFlag( Symbology ) )
+  {
+    // add the blend mode field
+    QDomElement blendModeElem  = doc.createElement( QStringLiteral( "blendMode" ) );
+    const QDomText blendModeText = doc.createTextNode( QString::number( static_cast< int >( QgsPainting::getBlendModeEnum( blendMode() ) ) ) );
+    blendModeElem.appendChild( blendModeText );
+    node.appendChild( blendModeElem );
+
+    QDomElement paintEffectElem  = doc.createElement( QStringLiteral( "paintEffect" ) );
+    if ( mPaintEffect && !QgsPaintEffectRegistry::isDefaultStack( mPaintEffect.get() ) )
+      mPaintEffect->saveProperties( doc, paintEffectElem );
+    node.appendChild( paintEffectElem );
+  }
+
+  return true;
+}
+
+bool QgsAnnotationLayer::readSymbology( const QDomNode &node, QString &, QgsReadWriteContext &context, QgsMapLayer::StyleCategories categories )
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  const QDomElement layerElement = node.toElement();
+  readCommonStyle( layerElement, context, categories );
+
+  if ( categories.testFlag( Rendering ) )
+  {
+    const QDomNode layerOpacityNode = node.namedItem( QStringLiteral( "layerOpacity" ) );
+    if ( !layerOpacityNode.isNull() )
+    {
+      const QDomElement e = layerOpacityNode.toElement();
+      setOpacity( e.text().toDouble() );
+    }
+  }
+
+  if ( categories.testFlag( Symbology ) )
+  {
+    // get and set the blend mode if it exists
+    const QDomNode blendModeNode = node.namedItem( QStringLiteral( "blendMode" ) );
+    if ( !blendModeNode.isNull() )
+    {
+      const QDomElement e = blendModeNode.toElement();
+      setBlendMode( QgsPainting::getCompositionMode( static_cast< Qgis::BlendMode >( e.text().toInt() ) ) );
+    }
+
+    //restore layer effect
+    const QDomNode paintEffectNode = node.namedItem( QStringLiteral( "paintEffect" ) );
+    if ( !paintEffectNode.isNull() )
+    {
+      const QDomElement effectElem = paintEffectNode.firstChildElement( QStringLiteral( "effect" ) );
+      if ( !effectElem.isNull() )
+      {
+        setPaintEffect( QgsApplication::paintEffectRegistry()->createEffect( effectElem ) );
+      }
+    }
+  }
+
+  return true;
+}
+
+bool QgsAnnotationLayer::writeItems( QDomNode &node, QDomDocument &doc, QString &, const QgsReadWriteContext &context, QgsMapLayer::StyleCategories ) const
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  QDomElement itemsElement = doc.createElement( QStringLiteral( "items" ) );
+
+  for ( auto it = mItems.constBegin(); it != mItems.constEnd(); ++it )
+  {
+    QDomElement itemElement = doc.createElement( QStringLiteral( "item" ) );
+    itemElement.setAttribute( QStringLiteral( "type" ), ( *it )->type() );
+    itemElement.setAttribute( QStringLiteral( "id" ), it.key() );
+    ( *it )->writeXml( itemElement, doc, context );
+    itemsElement.appendChild( itemElement );
+  }
+  node.appendChild( itemsElement );
+
+  return true;
+}
+
+bool QgsAnnotationLayer::readItems( const QDomNode &node, QString &, QgsReadWriteContext &context, QgsMapLayer::StyleCategories )
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
 
   qDeleteAll( mItems );
   mItems.clear();
   mSpatialIndex = std::make_unique< QgsAnnotationLayerSpatialIndex >();
   mNonIndexedItems.clear();
 
-  const QDomNodeList itemsElements = layerNode.toElement().elementsByTagName( QStringLiteral( "items" ) );
+  const QDomNodeList itemsElements = node.toElement().elementsByTagName( QStringLiteral( "items" ) );
   if ( itemsElements.size() == 0 )
     return false;
 
@@ -369,131 +558,60 @@ bool QgsAnnotationLayer::readXml( const QDomNode &layerNode, QgsReadWriteContext
     }
   }
 
-  QString errorMsg;
-  readSymbology( layerNode, errorMsg, context );
-
-  triggerRepaint();
-
-  return mValid;
-}
-
-bool QgsAnnotationLayer::writeXml( QDomNode &layer_node, QDomDocument &doc, const QgsReadWriteContext &context ) const
-{
-  // first get the layer element so that we can append the type attribute
-  QDomElement mapLayerNode = layer_node.toElement();
-
-  if ( mapLayerNode.isNull() )
-  {
-    QgsDebugMsgLevel( QStringLiteral( "can't find maplayer node" ), 2 );
-    return false;
-  }
-
-  mapLayerNode.setAttribute( QStringLiteral( "type" ), QgsMapLayerFactory::typeToString( QgsMapLayerType::AnnotationLayer ) );
-
-  QDomElement itemsElement = doc.createElement( QStringLiteral( "items" ) );
-  for ( auto it = mItems.constBegin(); it != mItems.constEnd(); ++it )
-  {
-    QDomElement itemElement = doc.createElement( QStringLiteral( "item" ) );
-    itemElement.setAttribute( QStringLiteral( "type" ), ( *it )->type() );
-    itemElement.setAttribute( QStringLiteral( "id" ), it.key() );
-    ( *it )->writeXml( itemElement, doc, context );
-    itemsElement.appendChild( itemElement );
-  }
-  mapLayerNode.appendChild( itemsElement );
-
-  // renderer specific settings
-  QString errorMsg;
-  return writeSymbology( layer_node, doc, errorMsg, context );
-}
-
-bool QgsAnnotationLayer::writeSymbology( QDomNode &node, QDomDocument &doc, QString &, const QgsReadWriteContext &, QgsMapLayer::StyleCategories categories ) const
-{
-  // add the layer opacity
-  if ( categories.testFlag( Rendering ) )
-  {
-    QDomElement layerOpacityElem  = doc.createElement( QStringLiteral( "layerOpacity" ) );
-    const QDomText layerOpacityText = doc.createTextNode( QString::number( opacity() ) );
-    layerOpacityElem.appendChild( layerOpacityText );
-    node.appendChild( layerOpacityElem );
-  }
-
-  if ( categories.testFlag( Symbology ) )
-  {
-    // add the blend mode field
-    QDomElement blendModeElem  = doc.createElement( QStringLiteral( "blendMode" ) );
-    const QDomText blendModeText = doc.createTextNode( QString::number( QgsPainting::getBlendModeEnum( blendMode() ) ) );
-    blendModeElem.appendChild( blendModeText );
-    node.appendChild( blendModeElem );
-
-    QDomElement paintEffectElem  = doc.createElement( QStringLiteral( "paintEffect" ) );
-    if ( mPaintEffect && !QgsPaintEffectRegistry::isDefaultStack( mPaintEffect.get() ) )
-      mPaintEffect->saveProperties( doc, paintEffectElem );
-    node.appendChild( paintEffectElem );
-  }
-
   return true;
 }
 
-bool QgsAnnotationLayer::readSymbology( const QDomNode &node, QString &, QgsReadWriteContext &, QgsMapLayer::StyleCategories categories )
+bool QgsAnnotationLayer::writeStyle( QDomNode &node, QDomDocument &doc, QString &errorMessage, const QgsReadWriteContext &context, QgsMapLayer::StyleCategories categories ) const
 {
-  if ( categories.testFlag( Rendering ) )
-  {
-    const QDomNode layerOpacityNode = node.namedItem( QStringLiteral( "layerOpacity" ) );
-    if ( !layerOpacityNode.isNull() )
-    {
-      const QDomElement e = layerOpacityNode.toElement();
-      setOpacity( e.text().toDouble() );
-    }
-  }
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
 
-  if ( categories.testFlag( Symbology ) )
-  {
-    // get and set the blend mode if it exists
-    const QDomNode blendModeNode = node.namedItem( QStringLiteral( "blendMode" ) );
-    if ( !blendModeNode.isNull() )
-    {
-      const QDomElement e = blendModeNode.toElement();
-      setBlendMode( QgsPainting::getCompositionMode( static_cast< QgsPainting::BlendMode >( e.text().toInt() ) ) );
-    }
+  writeItems( node, doc, errorMessage, context, categories );
 
-    //restore layer effect
-    const QDomNode paintEffectNode = node.namedItem( QStringLiteral( "paintEffect" ) );
-    if ( !paintEffectNode.isNull() )
-    {
-      const QDomElement effectElem = paintEffectNode.firstChildElement( QStringLiteral( "effect" ) );
-      if ( !effectElem.isNull() )
-      {
-        setPaintEffect( QgsApplication::paintEffectRegistry()->createEffect( effectElem ) );
-      }
-    }
-  }
+  return writeSymbology( node, doc, errorMessage, context, categories );
+}
 
-  return true;
+bool QgsAnnotationLayer::readStyle( const QDomNode &node, QString &errorMessage, QgsReadWriteContext &context, QgsMapLayer::StyleCategories categories )
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  readItems( node, errorMessage, context, categories );
+
+  return readSymbology( node, errorMessage, context, categories );
 }
 
 bool QgsAnnotationLayer::isEditable() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   // annotation layers are always editable
   return true;
 }
 
 bool QgsAnnotationLayer::supportsEditing() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return true;
 }
 
 QgsDataProvider *QgsAnnotationLayer::dataProvider()
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mDataProvider;
 }
 
 const QgsDataProvider *QgsAnnotationLayer::dataProvider() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mDataProvider;
 }
 
 QString QgsAnnotationLayer::htmlMetadata() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   QString metadata = QStringLiteral( "<html>\n<body>\n<h1>" ) + tr( "General" ) + QStringLiteral( "</h1>\n<hr>\n" ) + QStringLiteral( "<table class=\"list-view\">\n" );
 
   metadata += QStringLiteral( "<tr><td class=\"highlight\">" ) + tr( "Name" ) + QStringLiteral( "</td><td>" ) + name() + QStringLiteral( "</td></tr>\n" );
@@ -543,14 +661,38 @@ QString QgsAnnotationLayer::htmlMetadata() const
   return metadata;
 }
 
+void QgsAnnotationLayer::resolveReferences( QgsProject *project )
+{
+  mLinkedLayer.resolve( project );
+}
+
 QgsPaintEffect *QgsAnnotationLayer::paintEffect() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return mPaintEffect.get();
 }
 
 void QgsAnnotationLayer::setPaintEffect( QgsPaintEffect *effect )
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   mPaintEffect.reset( effect );
+}
+
+QgsMapLayer *QgsAnnotationLayer::linkedVisibilityLayer()
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  return mLinkedLayer.get();
+}
+
+void QgsAnnotationLayer::setLinkedVisibilityLayer( QgsMapLayer *layer )
+{
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
+  mLinkedLayer.setLayer( layer );
+  triggerRepaint();
 }
 
 
@@ -560,32 +702,42 @@ void QgsAnnotationLayer::setPaintEffect( QgsPaintEffect *effect )
 ///@cond PRIVATE
 QgsAnnotationLayerDataProvider::QgsAnnotationLayerDataProvider(
   const ProviderOptions &options,
-  QgsDataProvider::ReadFlags flags )
+  Qgis::DataProviderReadFlags flags )
   : QgsDataProvider( QString(), options, flags )
 {}
 
 QgsCoordinateReferenceSystem QgsAnnotationLayerDataProvider::crs() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QgsCoordinateReferenceSystem();
 }
 
 QString QgsAnnotationLayerDataProvider::name() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QStringLiteral( "annotation" );
 }
 
 QString QgsAnnotationLayerDataProvider::description() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QString();
 }
 
 QgsRectangle QgsAnnotationLayerDataProvider::extent() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return QgsRectangle();
 }
 
 bool QgsAnnotationLayerDataProvider::isValid() const
 {
+  QGIS_PROTECT_QOBJECT_THREAD_ACCESS
+
   return true;
 }
 ///@endcond

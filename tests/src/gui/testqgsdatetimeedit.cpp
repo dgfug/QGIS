@@ -21,14 +21,14 @@
 #include <qgsdatetimeeditwrapper.h>
 #include <qgsdatetimefieldformatter.h>
 
-class TestQgsDateTimeEdit: public QObject
+class TestQgsDateTimeEdit : public QObject
 {
     Q_OBJECT
   private slots:
-    void initTestCase(); // will be called before the first testfunction is executed.
+    void initTestCase();    // will be called before the first testfunction is executed.
     void cleanupTestCase(); // will be called after the last testfunction was executed.
-    void init(); // will be called before each testfunction is executed.
-    void cleanup(); // will be called after every testfunction.
+    void init();            // will be called before each testfunction is executed.
+    void cleanup();         // will be called after every testfunction.
 
     void nullValues();
     void focus();
@@ -41,8 +41,8 @@ class TestQgsDateTimeEdit: public QObject
     std::unique_ptr<QgsDateTimeEditWrapper> widget4; // For field 3
     std::unique_ptr<QgsDateTimeEditWrapper> widget5; // For field 4
     std::unique_ptr<QgsDateTimeEditWrapper> widget6; // For field 5
+    std::unique_ptr<QgsDateTimeEditWrapper> widget7; // For field 6
     std::unique_ptr<QgsVectorLayer> vl;
-
 };
 
 void TestQgsDateTimeEdit::initTestCase()
@@ -55,19 +55,17 @@ void TestQgsDateTimeEdit::cleanupTestCase()
 
 void TestQgsDateTimeEdit::init()
 {
-
-  vl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Point?crs=epsg:4326" ),
-                                         QStringLiteral( "myvl" ),
-                                         QLatin1String( "memory" ) );
+  vl = std::make_unique<QgsVectorLayer>( QStringLiteral( "Point?crs=epsg:4326" ), QStringLiteral( "myvl" ), QLatin1String( "memory" ) );
 
   // add fields
   QList<QgsField> fields;
-  fields.append( QgsField( "date1", QVariant::Date ) );
-  fields.append( QgsField( "date2", QVariant::Date ) );
-  fields.append( QgsField( "date3", QVariant::Date ) );
-  fields.append( QgsField( "time", QVariant::Time ) );
-  fields.append( QgsField( "datetime1", QVariant::DateTime ) );
-  fields.append( QgsField( "datetime2", QVariant::DateTime ) );
+  fields.append( QgsField( "date1", QMetaType::Type::QDate ) );
+  fields.append( QgsField( "date2", QMetaType::Type::QDate ) );
+  fields.append( QgsField( "date3", QMetaType::Type::QDate ) );
+  fields.append( QgsField( "time", QMetaType::Type::QTime ) );
+  fields.append( QgsField( "datetime1", QMetaType::Type::QDateTime ) );
+  fields.append( QgsField( "datetime2", QMetaType::Type::QDateTime ) );
+  fields.append( QgsField( "text", QMetaType::Type::QString ) );
   vl->dataProvider()->addAttributes( fields );
   vl->updateFields();
   QVERIFY( vl.get() );
@@ -79,12 +77,14 @@ void TestQgsDateTimeEdit::init()
   widget4 = std::make_unique<QgsDateTimeEditWrapper>( vl.get(), 3, nullptr, nullptr );
   widget5 = std::make_unique<QgsDateTimeEditWrapper>( vl.get(), 4, nullptr, nullptr );
   widget6 = std::make_unique<QgsDateTimeEditWrapper>( vl.get(), 5, nullptr, nullptr );
+  widget7 = std::make_unique<QgsDateTimeEditWrapper>( vl.get(), 6, nullptr, nullptr );
   QVERIFY( widget1.get() );
   QVERIFY( widget2.get() );
   QVERIFY( widget3.get() );
   QVERIFY( widget4.get() );
   QVERIFY( widget5.get() );
   QVERIFY( widget6.get() );
+  QVERIFY( widget7.get() );
 }
 
 void TestQgsDateTimeEdit::cleanup()
@@ -183,19 +183,19 @@ void TestQgsDateTimeEdit::focus()
   QgsDateTimeEdit *dateedit1 = qobject_cast<QgsDateTimeEdit *>( widget1->createWidget( &w ) );
   QVERIFY( dateedit1 );
   widget1->initWidget( dateedit1 );
-  widget1->setValue( QVariant::Date );
+  widget1->setValue( QgsVariantUtils::createNullVariant( QMetaType::Type::QDate ) );
 
   widget2->setConfig( cfg );
   QgsDateTimeEdit *dateedit2 = qobject_cast<QgsDateTimeEdit *>( widget2->createWidget( &w ) );
   QVERIFY( dateedit2 );
   widget2->initWidget( dateedit2 );
-  widget2->setValue( QVariant::Date );
+  widget2->setValue( QgsVariantUtils::createNullVariant( QMetaType::Type::QDate ) );
 
   widget3->setConfig( cfg );
   QgsDateTimeEdit *dateedit3 = qobject_cast<QgsDateTimeEdit *>( widget3->createWidget( &w ) );
   QVERIFY( dateedit3 );
   widget3->initWidget( dateedit3 );
-  widget3->setValue( QVariant::Date );
+  widget3->setValue( QgsVariantUtils::createNullVariant( QMetaType::Type::QDate ) );
 
   QVERIFY( widget1->value().isNull() );
   QVERIFY( widget2->value().isNull() );
@@ -319,6 +319,17 @@ void TestQgsDateTimeEdit::testDateTime()
   widget6->setValue( QDate( 1, 1, 1 ) );
   const QDate value6 { widget6->value().toDate() };
   QCOMPARE( value6, QDate( 1, 1, 1 ) );
+
+  // Test for issue GH #46542
+  widget7->setConfig( cfg );
+  QgsDateTimeEdit *dateedit7 = qobject_cast<QgsDateTimeEdit *>( widget7->createWidget( &w ) );
+  QVERIFY( dateedit7 );
+  widget7->initWidget( dateedit7 );
+  QgsFeature f { vl->fields() };
+  f.setAttribute( QStringLiteral( "text" ), QgsExpression { QStringLiteral( "now()" ) }.evaluate() );
+  widget7->setFeature( f );
+  const QDate value7 { widget7->value().toDate() };
+  QCOMPARE( value7, QDate::currentDate() );
 }
 
 QGSTEST_MAIN( TestQgsDateTimeEdit )

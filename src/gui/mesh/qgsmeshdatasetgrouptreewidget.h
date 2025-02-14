@@ -25,7 +25,11 @@ SIP_NO_FILE
 
 class QgsMeshLayer;
 
-class GUI_EXPORT QgsMeshDatasetGroupTreeWidget: public QWidget, private Ui::QgsMeshDatasetGroupTreeWidgetBase
+/**
+ * \ingroup gui
+ * \class QgsMeshDatasetGroupTreeWidget
+ */
+class GUI_EXPORT QgsMeshDatasetGroupTreeWidget : public QWidget, private Ui::QgsMeshDatasetGroupTreeWidgetBase
 {
     Q_OBJECT
   public:
@@ -40,10 +44,12 @@ class GUI_EXPORT QgsMeshDatasetGroupTreeWidget: public QWidget, private Ui::QgsM
     void apply();
 
   signals:
-    void datasetGroupAdded();
+    //! Emitted when dataset groups changed (addition or removal)
+    void datasetGroupsChanged();
 
   private slots:
     void addDataset();
+    void removeDataset();
 
   private:
     QgsMeshLayer *mMeshLayer;

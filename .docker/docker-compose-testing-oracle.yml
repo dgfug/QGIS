@@ -1,4 +1,3 @@
-version: '3'
 services:
 
   oracle:
@@ -15,7 +14,7 @@ services:
     tty: true
     image: qgis3-build-deps-binary-image
     volumes:
-      - ${GH_WORKSPACE}:/root/QGIS
+      - ${QGIS_WORKSPACE}:/root/QGIS
     links:
       - oracle
     env_file:

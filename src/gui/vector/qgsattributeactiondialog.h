@@ -28,14 +28,20 @@ back to QgsVectorLayer.
 
 #include "ui_qgsattributeactiondialogbase.h"
 #include "qgsattributetableconfig.h"
-#include "qgsaction.h"
-#include <QMap>
 #include "qgis_gui.h"
+#include "qgis.h"
+
+#include <QMap>
 
 class QgsActionManager;
 class QgsVectorLayer;
+class QgsAction;
 
-class GUI_EXPORT QgsAttributeActionDialog: public QWidget, private Ui::QgsAttributeActionDialogBase
+/**
+ * \ingroup gui
+ * \class QgsAttributeActionDialog
+ */
+class GUI_EXPORT QgsAttributeActionDialog : public QWidget, private Ui::QgsAttributeActionDialogBase
 {
     Q_OBJECT
   private:
@@ -55,12 +61,11 @@ class GUI_EXPORT QgsAttributeActionDialog: public QWidget, private Ui::QgsAttrib
     enum Role
     {
       ActionType = Qt::UserRole,
-      ActionId  = Qt::UserRole + 1
+      ActionId = Qt::UserRole + 1
     };
 
   public:
-    QgsAttributeActionDialog( const QgsActionManager &actions,
-                              QWidget *parent = nullptr );
+    QgsAttributeActionDialog( const QgsActionManager &actions, QWidget *parent = nullptr );
 
     void init( const QgsActionManager &action, const QgsAttributeTableConfig &attributeTableConfig );
 
@@ -75,17 +80,18 @@ class GUI_EXPORT QgsAttributeActionDialog: public QWidget, private Ui::QgsAttrib
     void moveDown();
     void remove();
     void insert();
+    void duplicate();
     void addDefaultActions();
     void itemDoubleClicked( QTableWidgetItem *item );
     void updateButtons();
 
   private:
     void insertRow( int row, const QgsAction &action );
-    void insertRow( int row, QgsAction::ActionType type, const QString &name, const QString &actionText, const QString &iconPath, bool capture, const QString &shortTitle, const QSet<QString> &actionScopes, const QString &notificationMessage, bool isEnabledOnlyWhenEditable = false );
+    void insertRow( int row, Qgis::AttributeActionType type, const QString &name, const QString &actionText, const QString &iconPath, bool capture, const QString &shortTitle, const QSet<QString> &actionScopes, const QString &notificationMessage, bool isEnabledOnlyWhenEditable = false );
     void swapRows( int row1, int row2 );
     QgsAction rowToAction( int row ) const;
 
-    QString textForType( QgsAction::ActionType type );
+    QString textForType( Qgis::AttributeActionType type );
 
     void rowSelected( int row );
 

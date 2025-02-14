@@ -24,7 +24,7 @@ macro (PLUGIN_INSTALL plugin subdir )
     add_dependencies(zzz-${plugin}-stageinstall zzz-${plugin}-depend)
 
     add_custom_command(TARGET zzz-${plugin}-stageinstall
-      COMMAND ${CMAKE_COMMAND} -P ${_cmake}
+      POST_BUILD COMMAND ${CMAKE_COMMAND} -P ${_cmake}
     )
 
     add_custom_target(clean-staged-${plugin}
@@ -53,9 +53,7 @@ if (WITH_GUI)
 	add_subdirectory(db_manager)
 endif()
 add_subdirectory(processing)
-add_subdirectory(sagaprovider)
 add_subdirectory(grassprovider)
-add_subdirectory(otbprovider)
 add_subdirectory(MetaSearch)
 
 PY_COMPILE(staged-plugins "${PYTHON_OUTPUT_DIRECTORY}/plugins")

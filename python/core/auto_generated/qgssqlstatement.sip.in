@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/qgssqlstatement.h                                           *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -13,8 +13,6 @@ class QgsSQLStatement
 {
 %Docstring(signature="appended")
 Class for parsing SQL statements.
-
-.. versionadded:: 2.16
 %End
 
 %TypeHeaderCode
@@ -28,9 +26,6 @@ Creates a new statement based on the provided string.
 %End
 
     QgsSQLStatement( const QgsSQLStatement &other );
-%Docstring
-Create a copy of this statement.
-%End
 
     virtual ~QgsSQLStatement();
 
@@ -77,6 +72,8 @@ formatting or comments. In general it is preferable to use
 Returns a quoted column reference (in double quotes)
 
 .. seealso:: :py:func:`quotedString`
+
+.. seealso:: :py:func:`quotedIdentifierIfNeeded`
 %End
 
     static QString quotedIdentifierIfNeeded( const QString &name );
@@ -85,6 +82,8 @@ Returns a quoted column reference (in double quotes) if needed, or
 otherwise the original string.
 
 .. seealso:: :py:func:`quotedString`
+
+.. seealso:: :py:func:`quotedIdentifier`
 %End
 
     static QString stripQuotedIdentifier( QString text );
@@ -106,6 +105,8 @@ Remove double quotes from an Microsoft style identifier.
 Returns a quoted version of a string (in single quotes)
 
 .. seealso:: :py:func:`quotedIdentifier`
+
+.. seealso:: :py:func:`quotedIdentifierIfNeeded`
 %End
 
     enum UnaryOperator
@@ -242,13 +243,9 @@ Support the visitor pattern.
 
 For any implementation this should look like
 
-C++:
+.. code-block:: python
 
-v.visit( *this );
-
-Python:
-
-v.visit( self)
+       v.visit(self)
 
 :param v: A visitor that visits this node.
 %End
@@ -264,10 +261,8 @@ A list of nodes.
 #include "qgssqlstatement.h"
 %End
       public:
+
         NodeList();
-%Docstring
-Constructor
-%End
         virtual ~NodeList();
 
         void append( QgsSQLStatement::Node *node /Transfer/ );
@@ -711,9 +706,23 @@ Constructor with table name
 Constructor with table name and alias
 %End
 
+        NodeTableDef( const QString &schema, const QString &name, const QString &alias );
+%Docstring
+Constructor with schema, table name and alias
+
+.. versionadded:: 3.28
+%End
+
         QString name() const;
 %Docstring
 Table name
+%End
+
+        QString schema() const;
+%Docstring
+Returns the schema name.
+
+.. versionadded:: 3.28
 %End
 
         QString alias() const;
@@ -978,10 +987,8 @@ A visitor that recursively explores all children
 #include "qgssqlstatement.h"
 %End
       public:
+
         RecursiveVisitor();
-%Docstring
-Constructor
-%End
 
         virtual void visit( const QgsSQLStatement::NodeUnaryOperator &n );
         virtual void visit( const QgsSQLStatement::NodeBinaryOperator &n );
@@ -1045,5 +1052,5 @@ Constructor for QgsSQLStatementFragment of the specified ``fragment``.
  *                                                                      *
  * src/core/qgssqlstatement.h                                           *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -14,14 +14,21 @@
  ***************************************************************************/
 
 #include "qgsextentwidget.h"
+#include "moc_qgsextentwidget.cpp"
 
-#include "qgslogger.h"
+#include "qgsapplication.h"
 #include "qgscoordinatetransform.h"
 #include "qgsmapcanvas.h"
+#include "qgsmaplayerproxymodel.h"
 #include "qgsmaplayermodel.h"
 #include "qgsexception.h"
 #include "qgsproject.h"
 #include "qgsdoublevalidator.h"
+#include "qgslayoutmanager.h"
+#include "qgslayoutitemmap.h"
+#include "qgsprintlayout.h"
+#include "qgsbookmarkmodel.h"
+#include "qgsreferencedgeometry.h"
 
 #include <QMenu>
 #include <QAction>
@@ -45,19 +52,38 @@ QgsExtentWidget::QgsExtentWidget( QWidget *parent, WidgetStyle style )
   mLayerMenu = new QMenu( tr( "Calculate from Layer" ), this );
   mButtonCalcFromLayer->setMenu( mLayerMenu );
   connect( mLayerMenu, &QMenu::aboutToShow, this, &QgsExtentWidget::layerMenuAboutToShow );
-  mMapLayerModel = new QgsMapLayerModel( this );
+  mMapLayerModel = new QgsMapLayerProxyModel( this );
+  mMapLayerModel->setFilters( Qgis::LayerFilter::SpatialLayer );
+
+  mLayoutMenu = new QMenu( tr( "Calculate from Layout Map" ), this );
+  mButtonCalcFromLayout->setMenu( mLayoutMenu );
+  connect( mLayoutMenu, &QMenu::aboutToShow, this, &QgsExtentWidget::layoutMenuAboutToShow );
+
+  mBookmarkMenu = new QMenu( tr( "Calculate from Bookmark" ), this );
+  mButtonCalcFromBookmark->setMenu( mBookmarkMenu );
+  connect( mBookmarkMenu, &QMenu::aboutToShow, this, &QgsExtentWidget::bookmarkMenuAboutToShow );
 
   mMenu = new QMenu( this );
-  mUseCanvasExtentAction = new QAction( tr( "Use Map Canvas Extent" ), this );
+  mUseCanvasExtentAction = new QAction( tr( "Use Current Map Canvas Extent" ), this );
+  mUseCanvasExtentAction->setIcon( QgsApplication::getThemeIcon( QStringLiteral( "/mActionMapIdentification.svg" ) ) );
+  mUseCanvasExtentAction->setVisible( false );
   connect( mUseCanvasExtentAction, &QAction::triggered, this, &QgsExtentWidget::setOutputExtentFromCurrent );
 
-  mUseCurrentExtentAction = new QAction( tr( "Use Current Layer Extent" ), this );
+  mUseCurrentExtentAction = new QAction( tr( "Use Current Layer/Default Extent" ), this );
+  mUseCurrentExtentAction->setVisible( false );
   connect( mUseCurrentExtentAction, &QAction::triggered, this, &QgsExtentWidget::setOutputExtentFromCurrent );
 
-  mDrawOnCanvasAction = new QAction( tr( "Draw on Canvas" ), this );
+  mDrawOnCanvasAction = new QAction( tr( "Draw on Map Canvas" ), this );
+  mDrawOnCanvasAction->setVisible( false );
   connect( mDrawOnCanvasAction, &QAction::triggered, this, &QgsExtentWidget::setOutputExtentFromDrawOnCanvas );
 
   mMenu->addMenu( mLayerMenu );
+  mMenu->addMenu( mLayoutMenu );
+  mMenu->addMenu( mBookmarkMenu );
+  mMenu->addSeparator();
+  mMenu->addAction( mUseCanvasExtentAction );
+  mMenu->addAction( mDrawOnCanvasAction );
+  mMenu->addAction( mUseCurrentExtentAction );
 
   mCondensedToolButton->setMenu( mMenu );
   mCondensedToolButton->setPopupMode( QToolButton::InstantPopup );
@@ -115,7 +141,7 @@ void QgsExtentWidget::setCurrentExtent( const QgsRectangle &currentExtent, const
   mCurrentCrs = currentCrs;
 
   mCurrentExtentButton->setVisible( true );
-  mMenu->addAction( mUseCurrentExtentAction );
+  mUseCurrentExtentAction->setVisible( true );
 }
 
 void QgsExtentWidget::setOutputCrs( const QgsCoordinateReferenceSystem &outputCrs )
@@ -149,7 +175,8 @@ void QgsExtentWidget::setOutputCrs( const QgsCoordinateReferenceSystem &outputCr
       case UserExtent:
         try
         {
-          const QgsCoordinateTransform ct( mOutputCrs, outputCrs, QgsProject::instance() );
+          QgsCoordinateTransform ct( mOutputCrs, outputCrs, QgsProject::instance() );
+          ct.setBallparkTransformsAreAppropriate( true );
           const QgsRectangle extent = ct.transformBoundingBox( outputExtent() );
           mOutputCrs = outputCrs;
           setOutputExtentFromUser( extent, outputCrs );
@@ -185,7 +212,8 @@ void QgsExtentWidget::setOutputExtent( const QgsRectangle &r, const QgsCoordinat
     {
       try
       {
-        const QgsCoordinateTransform ct( srcCrs, mOutputCrs, QgsProject::instance() );
+        QgsCoordinateTransform ct( srcCrs, mOutputCrs, QgsProject::instance() );
+        ct.setBallparkTransformsAreAppropriate( true );
         extent = ct.transformBoundingBox( r );
       }
       catch ( QgsCsException & )
@@ -199,18 +227,58 @@ void QgsExtentWidget::setOutputExtent( const QgsRectangle &r, const QgsCoordinat
   int decimals = 4;
   switch ( mOutputCrs.mapUnits() )
   {
-    case QgsUnitTypes::DistanceDegrees:
-    case QgsUnitTypes::DistanceUnknownUnit:
+    case Qgis::DistanceUnit::Degrees:
+    case Qgis::DistanceUnit::Unknown:
       decimals = 9;
       break;
-    case QgsUnitTypes::DistanceMeters:
-    case QgsUnitTypes::DistanceKilometers:
-    case QgsUnitTypes::DistanceFeet:
-    case QgsUnitTypes::DistanceNauticalMiles:
-    case QgsUnitTypes::DistanceYards:
-    case QgsUnitTypes::DistanceMiles:
-    case QgsUnitTypes::DistanceCentimeters:
-    case QgsUnitTypes::DistanceMillimeters:
+    case Qgis::DistanceUnit::Meters:
+    case Qgis::DistanceUnit::Kilometers:
+    case Qgis::DistanceUnit::Feet:
+    case Qgis::DistanceUnit::NauticalMiles:
+    case Qgis::DistanceUnit::Yards:
+    case Qgis::DistanceUnit::Miles:
+    case Qgis::DistanceUnit::Centimeters:
+    case Qgis::DistanceUnit::Millimeters:
+    case Qgis::DistanceUnit::Inches:
+    case Qgis::DistanceUnit::ChainsInternational:
+    case Qgis::DistanceUnit::ChainsBritishBenoit1895A:
+    case Qgis::DistanceUnit::ChainsBritishBenoit1895B:
+    case Qgis::DistanceUnit::ChainsBritishSears1922Truncated:
+    case Qgis::DistanceUnit::ChainsBritishSears1922:
+    case Qgis::DistanceUnit::ChainsClarkes:
+    case Qgis::DistanceUnit::ChainsUSSurvey:
+    case Qgis::DistanceUnit::FeetBritish1865:
+    case Qgis::DistanceUnit::FeetBritish1936:
+    case Qgis::DistanceUnit::FeetBritishBenoit1895A:
+    case Qgis::DistanceUnit::FeetBritishBenoit1895B:
+    case Qgis::DistanceUnit::FeetBritishSears1922Truncated:
+    case Qgis::DistanceUnit::FeetBritishSears1922:
+    case Qgis::DistanceUnit::FeetClarkes:
+    case Qgis::DistanceUnit::FeetGoldCoast:
+    case Qgis::DistanceUnit::FeetIndian:
+    case Qgis::DistanceUnit::FeetIndian1937:
+    case Qgis::DistanceUnit::FeetIndian1962:
+    case Qgis::DistanceUnit::FeetIndian1975:
+    case Qgis::DistanceUnit::FeetUSSurvey:
+    case Qgis::DistanceUnit::LinksInternational:
+    case Qgis::DistanceUnit::LinksBritishBenoit1895A:
+    case Qgis::DistanceUnit::LinksBritishBenoit1895B:
+    case Qgis::DistanceUnit::LinksBritishSears1922Truncated:
+    case Qgis::DistanceUnit::LinksBritishSears1922:
+    case Qgis::DistanceUnit::LinksClarkes:
+    case Qgis::DistanceUnit::LinksUSSurvey:
+    case Qgis::DistanceUnit::YardsBritishBenoit1895A:
+    case Qgis::DistanceUnit::YardsBritishBenoit1895B:
+    case Qgis::DistanceUnit::YardsBritishSears1922Truncated:
+    case Qgis::DistanceUnit::YardsBritishSears1922:
+    case Qgis::DistanceUnit::YardsClarkes:
+    case Qgis::DistanceUnit::YardsIndian:
+    case Qgis::DistanceUnit::YardsIndian1937:
+    case Qgis::DistanceUnit::YardsIndian1962:
+    case Qgis::DistanceUnit::YardsIndian1975:
+    case Qgis::DistanceUnit::MilesUSSurvey:
+    case Qgis::DistanceUnit::Fathoms:
+    case Qgis::DistanceUnit::MetersGermanLegal:
       decimals = 4;
       break;
   }
@@ -219,11 +287,8 @@ void QgsExtentWidget::setOutputExtent( const QgsRectangle &r, const QgsCoordinat
   mYMinLineEdit->setText( QLocale().toString( extent.yMinimum(), 'f', decimals ) );
   mYMaxLineEdit->setText( QLocale().toString( extent.yMaximum(), 'f', decimals ) );
 
-  QString condensed = QStringLiteral( "%1,%2,%3,%4" ).arg( QString::number( extent.xMinimum(), 'f', decimals ),
-                      QString::number( extent.xMaximum(), 'f', decimals ),
-                      QString::number( extent.yMinimum(), 'f', decimals ),
-                      QString::number( extent.yMaximum(), 'f', decimals ) );
-  condensed += QStringLiteral( " [%1]" ).arg( mOutputCrs.userFriendlyIdentifier( QgsCoordinateReferenceSystem::ShortString ) );
+  QString condensed = QStringLiteral( "%1,%2,%3,%4" ).arg( QString::number( extent.xMinimum(), 'f', decimals ), QString::number( extent.xMaximum(), 'f', decimals ), QString::number( extent.yMinimum(), 'f', decimals ), QString::number( extent.yMaximum(), 'f', decimals ) );
+  condensed += QStringLiteral( " [%1]" ).arg( mOutputCrs.userFriendlyIdentifier( Qgis::CrsIdentifierType::ShortString ) );
   mCondensedLineEdit->setText( condensed );
 
   mExtentState = state;
@@ -253,10 +318,10 @@ void QgsExtentWidget::setOutputExtentFromCondensedLineEdit()
     if ( match.hasMatch() )
     {
       // Localization
-      whileBlocking( mXMinLineEdit )->setText( QLocale().toString( match.captured( 1 ).toDouble() ) );
-      whileBlocking( mXMaxLineEdit )->setText( QLocale().toString( match.captured( 2 ).toDouble() ) );
-      whileBlocking( mYMinLineEdit )->setText( QLocale().toString( match.captured( 3 ).toDouble() ) );
-      whileBlocking( mYMaxLineEdit )->setText( QLocale().toString( match.captured( 4 ).toDouble() ) );
+      whileBlocking( mXMinLineEdit )->setText( QLocale().toString( match.captured( 1 ).toDouble(), 'f', 10 ) );
+      whileBlocking( mXMaxLineEdit )->setText( QLocale().toString( match.captured( 2 ).toDouble(), 'f', 10 ) );
+      whileBlocking( mYMinLineEdit )->setText( QLocale().toString( match.captured( 3 ).toDouble(), 'f', 10 ) );
+      whileBlocking( mYMaxLineEdit )->setText( QLocale().toString( match.captured( 4 ).toDouble(), 'f', 10 ) );
       if ( !match.captured( 5 ).isEmpty() )
       {
         mOutputCrs = QgsCoordinateReferenceSystem( match.captured( 5 ) );
@@ -321,18 +386,83 @@ void QgsExtentWidget::layerMenuAboutToShow()
     const QString text = mMapLayerModel->data( index, Qt::DisplayRole ).toString();
     QAction *act = new QAction( icon, text, mLayerMenu );
     act->setToolTip( mMapLayerModel->data( index, Qt::ToolTipRole ).toString() );
-    const QString layerId = mMapLayerModel->data( index, QgsMapLayerModel::LayerIdRole ).toString();
+    const QString layerId = mMapLayerModel->data( index, static_cast<int>( QgsMapLayerModel::CustomRole::LayerId ) ).toString();
     if ( mExtentState == ProjectLayerExtent && mExtentLayer && mExtentLayer->id() == layerId )
     {
       act->setCheckable( true );
       act->setChecked( true );
     }
-    connect( act, &QAction::triggered, this, [this, layerId]
-    {
+    connect( act, &QAction::triggered, this, [this, layerId] {
       setExtentToLayerExtent( layerId );
     } );
     mLayerMenu->addAction( act );
     mLayerMenuActions << act;
+  }
+}
+
+void QgsExtentWidget::layoutMenuAboutToShow()
+{
+  mLayoutMenu->clear();
+
+  if ( QgsLayoutManager *manager = QgsProject::instance()->layoutManager() )
+  {
+    const QList<QgsPrintLayout *> layouts = manager->printLayouts();
+    for ( const QgsPrintLayout *layout : layouts )
+    {
+      QList<QgsLayoutItemMap *> maps;
+      layout->layoutItems( maps );
+      if ( maps.empty() )
+        continue;
+
+      QMenu *layoutMenu = new QMenu( layout->name(), mMenu );
+      for ( const QgsLayoutItemMap *map : std::as_const( maps ) )
+      {
+        QgsRectangle extent = map->extent();
+        QgsCoordinateReferenceSystem crs = map->crs();
+        QAction *mapExtentAction = new QAction( tr( "%1" ).arg( map->displayName() ), mLayoutMenu );
+        connect( mapExtentAction, &QAction::triggered, this, [this, extent, crs] { setOutputExtentFromUser( extent, crs ); } );
+        layoutMenu->addAction( mapExtentAction );
+      }
+      mLayoutMenu->addMenu( layoutMenu );
+    }
+  }
+}
+
+void QgsExtentWidget::bookmarkMenuAboutToShow()
+{
+  mBookmarkMenu->clear();
+
+  if ( !mBookmarkModel )
+    mBookmarkModel = new QgsBookmarkManagerProxyModel( QgsApplication::bookmarkManager(), QgsProject::instance()->bookmarkManager(), this );
+
+  QMap<QString, QMenu *> groupMenus;
+  for ( int i = 0; i < mBookmarkModel->rowCount(); ++i )
+  {
+    const QString group = mBookmarkModel->data( mBookmarkModel->index( i, 0 ), static_cast<int>( QgsBookmarkManagerModel::CustomRole::Group ) ).toString();
+    QMenu *destMenu = mBookmarkMenu;
+    if ( !group.isEmpty() )
+    {
+      destMenu = groupMenus.value( group );
+      if ( !destMenu )
+      {
+        destMenu = new QMenu( group, mBookmarkMenu );
+        groupMenus[group] = destMenu;
+      }
+    }
+    QAction *action = new QAction( mBookmarkModel->data( mBookmarkModel->index( i, 0 ), static_cast<int>( QgsBookmarkManagerModel::CustomRole::Name ) ).toString(), mBookmarkMenu );
+    const QgsReferencedRectangle extent = mBookmarkModel->data( mBookmarkModel->index( i, 0 ), static_cast<int>( QgsBookmarkManagerModel::CustomRole::Extent ) ).value<QgsReferencedRectangle>();
+    connect( action, &QAction::triggered, this, [this, extent] { setOutputExtentFromUser( extent, extent.crs() ); } );
+    destMenu->addAction( action );
+  }
+
+  QStringList groupKeys = groupMenus.keys();
+  groupKeys.sort( Qt::CaseInsensitive );
+  for ( int i = 0; i < groupKeys.count(); ++i )
+  {
+    if ( mBookmarkMenu->actions().value( i ) )
+      mBookmarkMenu->insertMenu( mBookmarkMenu->actions().at( i ), groupMenus.value( groupKeys.at( i ) ) );
+    else
+      mBookmarkMenu->addMenu( groupMenus.value( groupKeys.at( i ) ) );
   }
 }
 
@@ -430,8 +560,21 @@ void QgsExtentWidget::mapToolDeactivated()
 
 QgsRectangle QgsExtentWidget::outputExtent() const
 {
-  return QgsRectangle( QgsDoubleValidator::toDouble( mXMinLineEdit->text() ), QgsDoubleValidator::toDouble( mYMinLineEdit->text() ),
-                       QgsDoubleValidator::toDouble( mXMaxLineEdit->text() ), QgsDoubleValidator::toDouble( mYMaxLineEdit->text() ) );
+  bool ok;
+  const double xmin = QgsDoubleValidator::toDouble( mXMinLineEdit->text(), &ok );
+  if ( !ok )
+    return QgsRectangle();
+  const double ymin = QgsDoubleValidator::toDouble( mYMinLineEdit->text(), &ok );
+  if ( !ok )
+    return QgsRectangle();
+  const double xmax = QgsDoubleValidator::toDouble( mXMaxLineEdit->text(), &ok );
+  if ( !ok )
+    return QgsRectangle();
+  const double ymax = QgsDoubleValidator::toDouble( mYMaxLineEdit->text(), &ok );
+  if ( !ok )
+    return QgsRectangle();
+
+  return QgsRectangle( xmin, ymin, xmax, ymax );
 }
 
 void QgsExtentWidget::setMapCanvas( QgsMapCanvas *canvas, bool drawOnCanvasOption )
@@ -442,16 +585,25 @@ void QgsExtentWidget::setMapCanvas( QgsMapCanvas *canvas, bool drawOnCanvasOptio
     mButtonDrawOnCanvas->setVisible( drawOnCanvasOption );
     mCurrentExtentButton->setVisible( true );
 
-    mMenu->addAction( mUseCanvasExtentAction );
-    if ( drawOnCanvasOption )
-      mMenu->addAction( mDrawOnCanvasAction );
+    mUseCanvasExtentAction->setVisible( true );
+    mDrawOnCanvasAction->setVisible( drawOnCanvasOption && !mBlockDrawOnCanvas );
+
+    mCondensedToolButton->setToolTip( tr( "Set to current map canvas extent" ) );
+    mCondensedToolButton->setIcon( QgsApplication::getThemeIcon( QStringLiteral( "/mActionMapIdentification.svg" ) ) );
+    connect( mCondensedToolButton, &QAbstractButton::clicked, this, &QgsExtentWidget::setOutputExtentFromCurrent );
+    mCondensedToolButton->setPopupMode( QToolButton::MenuButtonPopup );
   }
   else
   {
     mButtonDrawOnCanvas->setVisible( false );
     mCurrentExtentButton->setVisible( false );
-    mMenu->removeAction( mUseCanvasExtentAction );
-    mMenu->removeAction( mDrawOnCanvasAction );
+    mUseCanvasExtentAction->setVisible( false );
+    mUseCanvasExtentAction->setVisible( false );
+
+    mCondensedToolButton->setToolTip( QString() );
+    mCondensedToolButton->setIcon( QIcon() );
+    disconnect( mCondensedToolButton, &QAbstractButton::clicked, this, &QgsExtentWidget::setOutputExtentFromCurrent );
+    mCondensedToolButton->setPopupMode( QToolButton::InstantPopup );
   }
 }
 
@@ -514,4 +666,21 @@ void QgsExtentWidget::dropEvent( QDropEvent *event )
   }
   mCondensedLineEdit->setHighlighted( false );
   update();
+}
+
+void QgsExtentWidget::showEvent( QShowEvent * )
+{
+  if ( mFirstShow )
+  {
+    // we don't support select on canvas if the dialog is modal
+    if ( QWidget *parentWindow = window() )
+    {
+      if ( parentWindow->isModal() )
+      {
+        mBlockDrawOnCanvas = true;
+        mDrawOnCanvasAction->setVisible( false );
+      }
+    }
+    mFirstShow = false;
+  }
 }

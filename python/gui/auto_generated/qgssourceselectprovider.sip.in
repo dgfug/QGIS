@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/qgssourceselectprovider.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -13,23 +13,31 @@ class QgsSourceSelectProvider
 {
 %Docstring(signature="appended")
 This is the interface for those who want to add entries to the :py:class:`QgsDataSourceManagerDialog`
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
 #include "qgssourceselectprovider.h"
 %End
   public:
+    static const QMetaObject staticMetaObject;
 
+  public:
     enum Ordering
     {
       OrderLocalProvider,
       OrderDatabaseProvider,
       OrderRemoteProvider,
-      OrderGeoCmsProvider,
+      OrderSearchProvider,
       OrderOtherProvider,
     };
+
+    enum class Capability
+    {
+      NoCapabilities,
+      ConfigureFromUri
+    };
+    typedef QFlags<QgsSourceSelectProvider::Capability> Capabilities;
+
 
     virtual ~QgsSourceSelectProvider();
 
@@ -64,7 +72,7 @@ The default implementation returns an empty string.
 Creates a new instance of an QIcon for the menu item entry
 %End
 
-    virtual int ordering( ) const;
+    virtual int ordering() const;
 %Docstring
 Ordering: the source select provider registry will be able to sort
 the source selects (ascending) using this integer value
@@ -75,7 +83,17 @@ the source selects (ascending) using this integer value
 Create a new instance of :py:class:`QgsAbstractDataSourceWidget` (or ``None``).
 Caller takes responsibility of deleting created.
 %End
+
+    virtual Capabilities capabilities();
+%Docstring
+Returns the source select provider capabilities.
+The default implementation returns no capabilities.
+
+.. versionadded:: 3.38
+%End
 };
+
+QFlags<QgsSourceSelectProvider::Capability> operator|(QgsSourceSelectProvider::Capability f1, QFlags<QgsSourceSelectProvider::Capability> f2);
 
 
 /************************************************************************
@@ -83,5 +101,5 @@ Caller takes responsibility of deleting created.
  *                                                                      *
  * src/gui/qgssourceselectprovider.h                                    *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/processing/qgsprocessingalgorithm.h                         *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -18,8 +18,6 @@ class QgsProcessingAlgorithm
 {
 %Docstring(signature="appended")
 Abstract base class for processing algorithms.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -34,27 +32,6 @@ Abstract base class for processing algorithms.
       sipType = sipType_QgsProcessingAlgorithm;
 %End
   public:
-
-    enum Flag
-    {
-      FlagHideFromToolbox,
-      FlagHideFromModeler,
-      FlagSupportsBatch,
-      FlagCanCancel,
-      FlagRequiresMatchingCrs,
-      FlagNoThreading,
-      FlagDisplayNameIsLiteral,
-      FlagSupportsInPlaceEdits,
-      FlagKnownIssues,
-      FlagCustomException,
-      FlagPruneModelBranchesBasedOnAlgorithmResults,
-      FlagSkipGenericModelLogging,
-      FlagNotAvailableInStandaloneTool,
-      FlagRequiresProject,
-      FlagDeprecated,
-    };
-    typedef QFlags<QgsProcessingAlgorithm::Flag> Flags;
-
 
     QgsProcessingAlgorithm();
 %Docstring
@@ -88,7 +65,7 @@ e.g. if there is an issue with the subclass' :py:func:`~QgsProcessingAlgorithm.c
 .. seealso:: :py:func:`initAlgorithm`
 %End
 
-    virtual QString name() const = 0;
+    virtual QString name() const = 0 /HoldGIL/;
 %Docstring
 Returns the algorithm name, used for identifying the algorithm. This string
 should be fixed for the algorithm, and must not be localised. The name should
@@ -102,7 +79,7 @@ only and no spaces or other formatting characters.
 .. seealso:: :py:func:`tags`
 %End
 
-    QString id() const;
+    QString id() const /HoldGIL/;
 %Docstring
 Returns the unique ID for the algorithm, which is a combination of the algorithm
 provider's ID and the algorithms unique name (e.g. "qgis:mergelayers" ).
@@ -112,7 +89,7 @@ provider's ID and the algorithms unique name (e.g. "qgis:mergelayers" ).
 .. seealso:: :py:func:`provider`
 %End
 
-    virtual QString displayName() const = 0;
+    virtual QString displayName() const = 0 /HoldGIL/;
 %Docstring
 Returns the translated algorithm name, which should be used for any user-visible display
 of the algorithm name.
@@ -125,7 +102,7 @@ The name should use sentence case (e.g. "Raster layer statistics", not "Raster L
 .. seealso:: :py:func:`shortDescription`
 %End
 
-    virtual QString shortDescription() const;
+    virtual QString shortDescription() const /HoldGIL/;
 %Docstring
 Returns an optional translated short description of the algorithm. This should be
 at most a single sentence, e.g. "Converts 2D features to 3D by sampling a DEM raster."
@@ -133,13 +110,13 @@ at most a single sentence, e.g. "Converts 2D features to 3D by sampling a DEM ra
 .. versionadded:: 3.2
 %End
 
-    virtual QStringList tags() const;
+    virtual QStringList tags() const /HoldGIL/;
 %Docstring
 Returns a list of tags which relate to the algorithm, and are used to assist users in searching
 for suitable algorithms. These tags should be localised.
 %End
 
-    virtual QString shortHelpString() const;
+    virtual QString shortHelpString() const /HoldGIL/;
 %Docstring
 Returns a localised short helper string for the algorithm. This string should provide a basic description
 about what the algorithm does and the parameters and outputs associated with it.
@@ -149,7 +126,7 @@ about what the algorithm does and the parameters and outputs associated with it.
 .. seealso:: :py:func:`helpUrl`
 %End
 
- virtual QString helpString() const /Deprecated/;
+ virtual QString helpString() const /HoldGIL,Deprecated="Since 3.40. Unused, will be removed in QGIS 4.0."/;
 %Docstring
 Returns a localised help string for the algorithm. Algorithm subclasses should implement either
 :py:func:`~QgsProcessingAlgorithm.helpString` or :py:func:`~QgsProcessingAlgorithm.helpUrl`.
@@ -158,11 +135,12 @@ Returns a localised help string for the algorithm. Algorithm subclasses should i
 
 .. seealso:: :py:func:`shortHelpString`
 
-.. deprecated::
-   Unused, will be removed in QGIS 4.0
+.. deprecated:: 3.40
+
+   Unused, will be removed in QGIS 4.0.
 %End
 
-    virtual QString helpUrl() const;
+    virtual QString helpUrl() const /HoldGIL/;
 %Docstring
 Returns a url pointing to the algorithm's help page.
 
@@ -171,21 +149,30 @@ Returns a url pointing to the algorithm's help page.
 .. seealso:: :py:func:`shortHelpString`
 %End
 
-    virtual QIcon icon() const;
+    virtual Qgis::ProcessingAlgorithmDocumentationFlags documentationFlags() const /HoldGIL/;
+%Docstring
+Returns the flags describing algorithm behavior for documentation purposes.
+
+The default is to return no flags.
+
+.. versionadded:: 3.40
+%End
+
+    virtual QIcon icon() const /HoldGIL/;
 %Docstring
 Returns an icon for the algorithm.
 
 .. seealso:: :py:func:`svgIconPath`
 %End
 
-    virtual QString svgIconPath() const;
+    virtual QString svgIconPath() const /HoldGIL/;
 %Docstring
 Returns a path to an SVG version of the algorithm's icon.
 
 .. seealso:: :py:func:`icon`
 %End
 
-    virtual QString group() const;
+    virtual QString group() const /HoldGIL/;
 %Docstring
 Returns the name of the group this algorithm belongs to. This string
 should be localised.
@@ -195,7 +182,7 @@ should be localised.
 .. seealso:: :py:func:`tags`
 %End
 
-    virtual QString groupId() const;
+    virtual QString groupId() const /HoldGIL/;
 %Docstring
 Returns the unique ID of the group this algorithm belongs to. This string
 should be fixed for the algorithm, and must not be localised. The group id
@@ -205,7 +192,7 @@ alphanumeric characters only and no spaces or other formatting characters.
 .. seealso:: :py:func:`group`
 %End
 
-    virtual Flags flags() const;
+    virtual Qgis::ProcessingAlgorithmFlags flags() const /HoldGIL/;
 %Docstring
 Returns the flags indicating how and when the algorithm operates and should be exposed to users.
 Default flags are FlagSupportsBatch and FlagCanCancel.
@@ -239,12 +226,12 @@ This method is automatically called after users enter parameters, e.g. via the a
 dialog. This method should NOT be called manually by algorithms.
 %End
 
-    QgsProcessingProvider *provider() const;
+    QgsProcessingProvider *provider() const /HoldGIL/;
 %Docstring
 Returns the provider to which this algorithm belongs.
 %End
 
-    QgsProcessingParameterDefinitions parameterDefinitions() const;
+    QgsProcessingParameterDefinitions parameterDefinitions() const /HoldGIL/;
 %Docstring
 Returns an ordered list of parameter definitions utilized by the algorithm.
 
@@ -255,7 +242,7 @@ Returns an ordered list of parameter definitions utilized by the algorithm.
 .. seealso:: :py:func:`destinationParameterDefinitions`
 %End
 
-    const QgsProcessingParameterDefinition *parameterDefinition( const QString &name ) const;
+    const QgsProcessingParameterDefinition *parameterDefinition( const QString &name ) const /HoldGIL/;
 %Docstring
 Returns a matching parameter by ``name``. Matching is done in a case-insensitive
 manner, but exact case matches will be preferred.
@@ -263,13 +250,13 @@ manner, but exact case matches will be preferred.
 .. seealso:: :py:func:`parameterDefinitions`
 %End
 
-    int countVisibleParameters() const;
+    int countVisibleParameters() const /HoldGIL/;
 %Docstring
 Returns the number of visible (non-hidden) parameters defined by this
 algorithm.
 %End
 
-    QgsProcessingParameterDefinitions destinationParameterDefinitions() const;
+    QgsProcessingParameterDefinitions destinationParameterDefinitions() const /HoldGIL/;
 %Docstring
 Returns a list of destination parameters definitions utilized by the algorithm.
 
@@ -278,7 +265,7 @@ Returns a list of destination parameters definitions utilized by the algorithm.
 .. seealso:: :py:func:`parameterDefinitions`
 %End
 
-    QgsProcessingOutputDefinitions outputDefinitions() const;
+    QgsProcessingOutputDefinitions outputDefinitions() const /HoldGIL/;
 %Docstring
 Returns an ordered list of output definitions utilized by the algorithm.
 
@@ -287,7 +274,7 @@ Returns an ordered list of output definitions utilized by the algorithm.
 .. seealso:: :py:func:`outputDefinition`
 %End
 
-    const QgsProcessingOutputDefinition *outputDefinition( const QString &name ) const;
+    const QgsProcessingOutputDefinition *outputDefinition( const QString &name ) const /HoldGIL/;
 %Docstring
 Returns a matching output by ``name``. Matching is done in a case-insensitive
 manner.
@@ -295,26 +282,21 @@ manner.
 .. seealso:: :py:func:`outputDefinitions`
 %End
 
-    bool hasHtmlOutputs() const;
+    bool hasHtmlOutputs() const /HoldGIL/;
 %Docstring
 Returns ``True`` if this algorithm generates HTML outputs.
 %End
 
-    enum PropertyAvailability
-    {
-      NotAvailable,
-      Available,
-    };
 
     struct VectorProperties
     {
       QgsFields fields;
 
-      QgsWkbTypes::Type wkbType;
+      Qgis::WkbType wkbType;
 
       QgsCoordinateReferenceSystem crs;
 
-      QgsProcessingAlgorithm::PropertyAvailability availability;
+      Qgis::ProcessingPropertyAvailability availability;
     };
 
     virtual QgsProcessingAlgorithm::VectorProperties sinkProperties( const QString &sink,
@@ -397,7 +379,7 @@ to allow the algorithm to perform any required cleanup tasks and return its fina
    of the algorithm should be created with :py:func:`~QgsProcessingAlgorithm.clone` and :py:func:`~QgsProcessingAlgorithm.prepare`/:py:func:`~QgsProcessingAlgorithm.runPrepared` called on the copy.
 %End
 
-    QVariantMap postProcess( QgsProcessingContext &context, QgsProcessingFeedback *feedback );
+    QVariantMap postProcess( QgsProcessingContext &context, QgsProcessingFeedback *feedback, bool runResult = true );
 %Docstring
 Should be called in the main thread following the completion of :py:func:`~QgsProcessingAlgorithm.runPrepared`. This method
 allows the algorithm to perform any required cleanup tasks. The returned variant map
@@ -408,6 +390,10 @@ includes the results evaluated by the algorithm.
    This method modifies the algorithm instance, so it is not safe to call
    on algorithms directly retrieved from :py:class:`QgsProcessingRegistry` and :py:class:`QgsProcessingProvider`. Instead, a copy
    of the algorithm should be created with :py:func:`~QgsProcessingAlgorithm.clone` and :py:func:`~QgsProcessingAlgorithm.prepare`/:py:func:`~QgsProcessingAlgorithm.runPrepared` called on the copy.
+
+Since QGIS 3.38, :py:func:`~QgsProcessingAlgorithm.postProcess` will always be called even for unsuccessful run executions, to allow
+the algorithm to gracefully clean up. The ``runResult`` argument is used to indicate whether the run
+was successful. The algorithm's :py:func:`~QgsProcessingAlgorithm.postProcessAlgorithm` method will only be called when ``runResult`` is ``True``.
 %End
 
     virtual QWidget *createCustomParametersWidget( QWidget *parent = 0 ) const /Factory/;
@@ -445,9 +431,42 @@ Algorithms which cannot be run from a Python command should return an empty
 string.
 %End
 
-    void setProvider( QgsProcessingProvider *provider );
+    virtual QString asQgisProcessCommand( const QVariantMap &parameters, QgsProcessingContext &context, bool &ok /Out/ ) const;
+%Docstring
+Returns a command string which will execute the algorithm using the specified ``parameters``
+via the command line qgis_process tool.
+
+Note that some combinations of parameter types and values cannot be represented as a qgis_process string.
+
+:param parameters: algorithm parameters
+:param context: processing context
+
+:return: - equivalent qgis_process command
+         - ok: ``True`` if the command was successfully generated
+
+.. versionadded:: 3.24
+%End
+
+    virtual QVariantMap asMap( const QVariantMap &parameters, QgsProcessingContext &context ) const;
+%Docstring
+Returns a JSON serializable variant map containing the specified ``parameters`` and ``context`` settings.
+
+.. versionadded:: 3.24
+%End
+
+    void setProvider( QgsProcessingProvider *provider ) /HoldGIL/;
 %Docstring
 Associates this algorithm with its provider. No transfer of ownership is involved.
+%End
+
+    virtual bool supportInPlaceEdit( const QgsMapLayer *layer ) const;
+%Docstring
+Checks whether this algorithm supports in-place editing on the given ``layer``
+Default implementation returns ``False``.
+
+:return: ``True`` if the algorithm supports in-place editing
+
+.. versionadded:: 3.4
 %End
 
   protected:
@@ -480,7 +499,7 @@ create these outputs based on the specified ``configuration``.
 .. seealso:: :py:func:`addOutput`
 %End
 
-    bool addParameter( QgsProcessingParameterDefinition *parameterDefinition /Transfer/, bool createOutput = true );
+    bool addParameter( QgsProcessingParameterDefinition *parameterDefinition /Transfer/, bool createOutput = true ) /HoldGIL/;
 %Docstring
 Adds a parameter ``definition`` to the algorithm. Ownership of the definition is transferred to the algorithm.
 Returns ``True`` if parameter could be successfully added, or ``False`` if the parameter could not be added (e.g.
@@ -500,13 +519,14 @@ occur.
 .. seealso:: :py:func:`addOutput`
 %End
 
-    void removeParameter( const QString &name );
+
+    void removeParameter( const QString &name ) /HoldGIL/;
 %Docstring
 Removes the parameter with matching ``name`` from the algorithm, and deletes any existing
 definition.
 %End
 
-    bool addOutput( QgsProcessingOutputDefinition *outputDefinition /Transfer/ );
+    bool addOutput( QgsProcessingOutputDefinition *outputDefinition /Transfer/ ) /HoldGIL/;
 %Docstring
 Adds an output ``definition`` to the algorithm. Ownership of the definition is transferred to the algorithm.
 Returns ``True`` if the output could be successfully added, or ``False`` if the output could not be added (e.g.
@@ -521,6 +541,7 @@ See the notes in :py:func:`~QgsProcessingAlgorithm.addParameter` for a descripti
 
 .. seealso:: :py:func:`initAlgorithm`
 %End
+
 
     virtual bool prepareAlgorithm( const QVariantMap &parameters, QgsProcessingContext &context, QgsProcessingFeedback *feedback ) throw( QgsProcessingException ) /VirtualErrorHandler=processing_exception_handler/;
 %Docstring
@@ -682,7 +703,7 @@ Evaluates the parameter with matching ``name`` to a static boolean value.
 %End
 
     QgsFeatureSink *parameterAsSink( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context, QString &destinationIdentifier /Out/,
-                                     const QgsFields &fields, QgsWkbTypes::Type geometryType = QgsWkbTypes::NoGeometry, const QgsCoordinateReferenceSystem &crs = QgsCoordinateReferenceSystem(), QgsFeatureSink::SinkFlags sinkFlags = QgsFeatureSink::SinkFlags(), const QVariantMap &createOptions = QVariantMap(), const QStringList &datasourceOptions = QStringList(), const QStringList &layerOptions = QStringList() ) const throw( QgsProcessingException ) /Factory/;
+                                     const QgsFields &fields, Qgis::WkbType geometryType = Qgis::WkbType::NoGeometry, const QgsCoordinateReferenceSystem &crs = QgsCoordinateReferenceSystem(), QgsFeatureSink::SinkFlags sinkFlags = QgsFeatureSink::SinkFlags(), const QVariantMap &createOptions = QVariantMap(), const QStringList &datasourceOptions = QStringList(), const QStringList &layerOptions = QStringList() ) const throw( QgsProcessingException ) /Factory/;
 %Docstring
 Evaluates the parameter with matching ``name`` to a feature sink.
 
@@ -715,7 +736,7 @@ This function creates a new object and the caller takes responsibility for delet
 %End
 
     QString parameterAsCompatibleSourceLayerPath( const QVariantMap &parameters, const QString &name,
-        QgsProcessingContext &context, const QStringList &compatibleFormats, const QString &preferredFormat = QString( "shp" ), QgsProcessingFeedback *feedback = 0 );
+        QgsProcessingContext &context, const QStringList &compatibleFormats, const QString &preferredFormat = QString( "shp" ), QgsProcessingFeedback *feedback = 0 ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a source vector layer file path of compatible format.
 
@@ -733,7 +754,7 @@ to use :py:func:`~QgsProcessingAlgorithm.parameterAsCompatibleSourceLayerPathAnd
 %End
 
     QString parameterAsCompatibleSourceLayerPathAndLayerName( const QVariantMap &parameters, const QString &name,
-        QgsProcessingContext &context, const QStringList &compatibleFormats, const QString &preferredFormat = QString( "shp" ), QgsProcessingFeedback *feedback = 0, QString *layerName /Out/ = 0 );
+        QgsProcessingContext &context, const QStringList &compatibleFormats, const QString &preferredFormat = QString( "shp" ), QgsProcessingFeedback *feedback = 0, QString *layerName /Out/ = 0 ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a source vector layer file path and layer name of compatible format.
 
@@ -758,8 +779,7 @@ a conversion in this case and will return the target layer name in the ``layerNa
 :param feedback: feedback object
 
 :return: - path to source layer, or nearly converted compatible layer
-         - layerName: will be set to the target layer name for multi-layer sources (e.g. Geopackage)
-
+         - layerName: the target layer name for multi-layer sources (e.g. Geopackage)
 
 .. seealso:: :py:func:`parameterAsCompatibleSourceLayerPath`
 
@@ -831,7 +851,7 @@ reprojected so that it is in the specified ``crs``. In this case the extent of t
 %End
 
     QgsGeometry parameterAsExtentGeometry( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context,
-                                           const QgsCoordinateReferenceSystem &crs = QgsCoordinateReferenceSystem() );
+                                           const QgsCoordinateReferenceSystem &crs = QgsCoordinateReferenceSystem() ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a rectangular extent, and returns a geometry covering this extent.
 
@@ -843,7 +863,7 @@ just the extent of the reprojected rectangle).
 .. seealso:: :py:func:`parameterAsExtent`
 %End
 
-    QgsCoordinateReferenceSystem parameterAsExtentCrs( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
+    QgsCoordinateReferenceSystem parameterAsExtentCrs( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
 %Docstring
 Returns the coordinate reference system associated with an extent parameter value.
 
@@ -861,7 +881,7 @@ reprojected so that it is in the specified ``crs``.
 .. seealso:: :py:func:`parameterAsPointCrs`
 %End
 
-    QgsCoordinateReferenceSystem parameterAsPointCrs( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
+    QgsCoordinateReferenceSystem parameterAsPointCrs( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
 %Docstring
 Returns the coordinate reference system associated with an point parameter value.
 
@@ -879,7 +899,7 @@ reprojected so that it is in the specified ``crs``.
 .. seealso:: :py:func:`parameterAsGeometryCrs`
 %End
 
-    QgsCoordinateReferenceSystem parameterAsGeometryCrs( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
+    QgsCoordinateReferenceSystem parameterAsGeometryCrs( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
 %Docstring
 Returns the coordinate reference system associated with a geometry parameter value.
 
@@ -897,9 +917,10 @@ Evaluates the parameter with matching ``name`` to a matrix/table of values.
 Tables are collapsed to a 1 dimensional list.
 %End
 
-    QList< QgsMapLayer *> parameterAsLayerList( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
+    QList< QgsMapLayer *> parameterAsLayerList( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context, QgsProcessing::LayerOptionsFlags flags = QgsProcessing::LayerOptionsFlags() ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a list of map layers.
+The ``flags`` are used to set options for loading layers (e.g. skip index generation).
 %End
 
     QStringList parameterAsFileList( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
@@ -914,9 +935,20 @@ Evaluates the parameter with matching ``name`` to a list of files (for :py:class
 Evaluates the parameter with matching ``name`` to a range of values.
 %End
 
-    QStringList parameterAsFields( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
+ QStringList parameterAsFields( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const /Deprecated="Since 3.40. Use parameterAsStrings() instead."/;
 %Docstring
 Evaluates the parameter with matching ``name`` to a list of fields.
+
+.. deprecated:: 3.40
+
+   Use :py:func:`~QgsProcessingAlgorithm.parameterAsStrings` instead.
+%End
+
+    QStringList parameterAsStrings( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
+%Docstring
+Evaluates the parameter with matching ``name`` to a list of strings (e.g. field names or point cloud attributes).
+
+.. versionadded:: 3.32
 %End
 
     QgsPrintLayout *parameterAsLayout( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
@@ -943,44 +975,45 @@ Evaluates the parameter with matching ``name`` to a print layout item, taken fro
 .. versionadded:: 3.8
 %End
 
-    QColor parameterAsColor( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
+    QColor parameterAsColor( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a color, or returns an invalid color if the parameter was not set.
 
 .. versionadded:: 3.10
 %End
 
-    QString parameterAsConnectionName( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
+    QString parameterAsConnectionName( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a connection name string.
 
 .. versionadded:: 3.14
 %End
 
-    QString parameterAsSchema( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
+    QString parameterAsSchema( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a database schema name string.
 
 .. versionadded:: 3.14
 %End
 
-    QString parameterAsDatabaseTableName( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
+    QString parameterAsDatabaseTableName( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a database table name string.
 
 .. versionadded:: 3.14
 %End
 
-    QDateTime parameterAsDateTime( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context );
+    QDateTime parameterAsDateTime( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a DateTime, or returns an invalid date time if the parameter was not set.
 
 .. versionadded:: 3.14
 %End
 
-    QgsPointCloudLayer *parameterAsPointCloudLayer( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context ) const;
+    QgsPointCloudLayer *parameterAsPointCloudLayer( const QVariantMap &parameters, const QString &name, QgsProcessingContext &context, QgsProcessing::LayerOptionsFlags flags = QgsProcessing::LayerOptionsFlags() ) const;
 %Docstring
 Evaluates the parameter with matching ``name`` to a point cloud layer.
+The ``flags`` are used to set options for loading layer (e.g. skip index generation).
 
 Layers will either be taken from ``context``'s active project, or loaded from external
 sources and stored temporarily in the ``context``. In either case, callers do not
@@ -1018,6 +1051,8 @@ should correspond to the invalid source parameter name.
 
 .. seealso:: :py:func:`invalidSinkError`
 
+.. seealso:: :py:func:`invalidPointCloudError`
+
 .. versionadded:: 3.2
 %End
 
@@ -1027,11 +1062,13 @@ Returns a user-friendly string to use as an error when a raster layer input coul
 not be loaded.
 
 The ``parameters`` argument should give the algorithms parameter map, and the ``name``
-should correspond to the invalid source parameter name.
+should correspond to the invalid raster parameter name.
 
 .. seealso:: :py:func:`invalidSourceError`
 
 .. seealso:: :py:func:`invalidSinkError`
+
+.. seealso:: :py:func:`invalidPointCloudError`
 
 .. versionadded:: 3.2
 %End
@@ -1042,13 +1079,32 @@ Returns a user-friendly string to use as an error when a sink parameter could
 not be created.
 
 The ``parameters`` argument should give the algorithms parameter map, and the ``name``
-should correspond to the invalid source parameter name.
+should correspond to the invalid sink parameter name.
 
 .. seealso:: :py:func:`invalidSourceError`
 
 .. seealso:: :py:func:`invalidRasterError`
 
+.. seealso:: :py:func:`invalidPointCloudError`
+
 .. versionadded:: 3.2
+%End
+
+    static QString invalidPointCloudError( const QVariantMap &parameters, const QString &name );
+%Docstring
+Returns a user-friendly string to use as an error when a point cloud layer input could
+not be loaded.
+
+The ``parameters`` argument should give the algorithms parameter map, and the ``name``
+should correspond to the invalid point cloud parameter name.
+
+.. seealso:: :py:func:`invalidSourceError`
+
+.. seealso:: :py:func:`invalidSinkError`
+
+.. seealso:: :py:func:`invalidRasterError`
+
+.. versionadded:: 3.32
 %End
 
     static QString writeFeatureError( QgsFeatureSink *sink, const QVariantMap &parameters, const QString &name );
@@ -1064,29 +1120,16 @@ should correspond to the sink parameter name.
 .. versionadded:: 3.22
 %End
 
-    virtual bool supportInPlaceEdit( const QgsMapLayer *layer ) const;
-%Docstring
-Checks whether this algorithm supports in-place editing on the given ``layer``
-Default implementation returns ``False``.
-
-:return: ``True`` if the algorithm supports in-place editing
-
-.. versionadded:: 3.4
-%End
-
   private:
     QgsProcessingAlgorithm( const QgsProcessingAlgorithm &other );
 };
-QFlags<QgsProcessingAlgorithm::Flag> operator|(QgsProcessingAlgorithm::Flag f1, QFlags<QgsProcessingAlgorithm::Flag> f2);
-
-
 
 
 
 class QgsProcessingFeatureBasedAlgorithm : QgsProcessingAlgorithm
 {
 %Docstring(signature="appended")
-An abstract QgsProcessingAlgorithm base class for processing algorithms which operate "feature-by-feature".
+An abstract :py:class:`QgsProcessingAlgorithm` base class for processing algorithms which operate "feature-by-feature".
 
 Feature based algorithms are algorithms which operate on individual features in isolation. These
 are algorithms where one feature is output for each input feature, and the output feature result
@@ -1102,8 +1145,6 @@ shortcutting much of the common algorithm code for handling iterating over sourc
 features to output sinks. It also allows the algorithm execution to be optimised in future
 (for instance allowing automatic multi-thread processing of the algorithm, or use of the
 algorithm in "chains", avoiding the need for temporary outputs in multi-step models).
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -1112,11 +1153,8 @@ algorithm in "chains", avoiding the need for temporary outputs in multi-step mod
   public:
 
     QgsProcessingFeatureBasedAlgorithm();
-%Docstring
-Constructor for QgsProcessingFeatureBasedAlgorithm.
-%End
 
-    virtual QgsProcessingAlgorithm::Flags flags() const;
+    virtual Qgis::ProcessingAlgorithmFlags flags() const /HoldGIL/;
 
 
     virtual QgsFeatureList processFeature( const QgsFeature &feature, QgsProcessingContext &context, QgsProcessingFeedback *feedback ) throw( QgsProcessingException ) = 0 /VirtualErrorHandler=processing_exception_handler/;
@@ -1144,12 +1182,19 @@ can break valid model execution - so use with extreme caution, and consider usin
 ``feedback`` to instead report non-fatal processing failures for features instead.
 %End
 
-  protected:
+    virtual bool supportInPlaceEdit( const QgsMapLayer *layer ) const;
 
-    virtual void initAlgorithm( const QVariantMap &configuration = QVariantMap() );
+%Docstring
+Checks whether this algorithm supports in-place editing on the given ``layer``
+Default implementation for feature based algorithms run some basic compatibility
+checks based on the geometry type of the layer.
 
+:return: ``True`` if the algorithm supports in-place editing
 
-    virtual QString inputParameterName() const;
+.. versionadded:: 3.4
+%End
+
+    virtual QString inputParameterName() const /HoldGIL/;
 %Docstring
 Returns the name of the parameter corresponding to the input layer.
 
@@ -1158,7 +1203,7 @@ By default this is the standard "INPUT" parameter name.
 .. versionadded:: 3.12
 %End
 
-    virtual QString inputParameterDescription() const;
+    virtual QString inputParameterDescription() const /HoldGIL/;
 %Docstring
 Returns the translated description of the parameter corresponding to the input layer.
 
@@ -1167,39 +1212,44 @@ By default this is a translated "Input layer" string.
 .. versionadded:: 3.12
 %End
 
-    virtual QString outputName() const = 0;
+  protected:
+
+    virtual void initAlgorithm( const QVariantMap &configuration = QVariantMap() );
+
+
+    virtual QString outputName() const = 0 /HoldGIL/;
 %Docstring
 Returns the translated, user visible name for any layers created by this algorithm.
 This name will be used as the default name when loading the resultant layer into a
 QGIS project.
 %End
 
-    virtual QList<int> inputLayerTypes() const;
+    virtual QList<int> inputLayerTypes() const /HoldGIL/;
 %Docstring
 Returns the valid input layer types for the source layer for this algorithm.
 By default vector layers with any geometry types (excluding non-spatial, geometryless layers)
 are accepted.
 %End
 
-    virtual QgsProcessing::SourceType outputLayerType() const;
+    virtual Qgis::ProcessingSourceType outputLayerType() const /HoldGIL/;
 %Docstring
 Returns the layer type for layers generated by this algorithm, if
 this is possible to determine in advance.
 %End
 
-    virtual QgsProcessingFeatureSource::Flag sourceFlags() const;
+    virtual Qgis::ProcessingFeatureSourceFlags sourceFlags() const /HoldGIL/;
 %Docstring
 Returns the processing feature source flags to be used in the algorithm.
 %End
 
-    virtual QgsFeatureSink::SinkFlags sinkFlags() const;
+    virtual QgsFeatureSink::SinkFlags sinkFlags() const /HoldGIL/;
 %Docstring
 Returns the feature sink flags to be used for the output.
 
 .. versionadded:: 3.4.1
 %End
 
-    virtual QgsWkbTypes::Type outputWkbType( QgsWkbTypes::Type inputWkbType ) const;
+    virtual Qgis::WkbType outputWkbType( Qgis::WkbType inputWkbType ) const /HoldGIL/;
 %Docstring
 Maps the input WKB geometry type (``inputWkbType``) to the corresponding
 output WKB type generated by the algorithm. The default behavior is that the algorithm maintains
@@ -1208,7 +1258,7 @@ This is called once by the base class when creating the output sink for the algo
 not called once per feature processed).
 %End
 
-    virtual QgsFields outputFields( const QgsFields &inputFields ) const;
+    virtual QgsFields outputFields( const QgsFields &inputFields ) const /HoldGIL/;
 %Docstring
 Maps the input source fields (``inputFields``) to corresponding
 output fields generated by the algorithm. The default behavior is that the algorithm maintains
@@ -1220,7 +1270,7 @@ This is called once by the base class when creating the output sink for the algo
 not called once per feature processed).
 %End
 
-    virtual QgsCoordinateReferenceSystem outputCrs( const QgsCoordinateReferenceSystem &inputCrs ) const;
+    virtual QgsCoordinateReferenceSystem outputCrs( const QgsCoordinateReferenceSystem &inputCrs ) const /HoldGIL/;
 %Docstring
 Maps the input source coordinate reference system (``inputCrs``) to a corresponding
 output CRS generated by the algorithm. The default behavior is that the algorithm maintains
@@ -1237,7 +1287,7 @@ to declare the input source or output sink, as these are automatically created b
 QgsProcessingFeatureBasedAlgorithm.
 %End
 
-    QgsCoordinateReferenceSystem sourceCrs() const;
+    QgsCoordinateReferenceSystem sourceCrs() const /HoldGIL/;
 %Docstring
 Returns the source's coordinate reference system. This will only return a valid CRS when
 called from a subclasses' :py:func:`~QgsProcessingFeatureBasedAlgorithm.processFeature` implementation.
@@ -1251,18 +1301,6 @@ called from a subclasses' :py:func:`~QgsProcessingFeatureBasedAlgorithm.processF
 %Docstring
 Returns the feature request used for fetching features to process from the
 source layer. The default implementation requests all attributes and geometry.
-%End
-
-    virtual bool supportInPlaceEdit( const QgsMapLayer *layer ) const;
-
-%Docstring
-Checks whether this algorithm supports in-place editing on the given ``layer``
-Default implementation for feature based algorithms run some basic compatibility
-checks based on the geometry type of the layer.
-
-:return: ``True`` if the algorithm supports in-place editing
-
-.. versionadded:: 3.4
 %End
 
     void prepareSource( const QVariantMap &parameters, QgsProcessingContext &context );
@@ -1280,12 +1318,10 @@ Read the source from ``parameters`` and ``context`` and set it
 };
 
 
-
-
 /************************************************************************
  * This file has been generated automatically from                      *
  *                                                                      *
  * src/core/processing/qgsprocessingalgorithm.h                         *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

@@ -16,8 +16,9 @@
  ***************************************************************************/
 
 #include "qgsauxiliarystorage.h"
+#include "moc_qgsauxiliarystorage.cpp"
 #include "qgslogger.h"
-#include "qgsspatialiteutils.h"
+#include "qgssqliteutils.h"
 #include "qgsproject.h"
 #include "qgsvectorlayerlabeling.h"
 #include "qgsdiagramrenderer.h"
@@ -30,34 +31,42 @@
 #define AS_JOINFIELD QStringLiteral( "ASPK" )
 #define AS_EXTENSION QStringLiteral( "qgd" )
 #define AS_JOINPREFIX QStringLiteral( "auxiliary_storage_" )
-typedef QVector<QgsPalLayerSettings::Property> PalPropertyList;
+
+typedef QVector<int> PalPropertyList;
+typedef QVector<int> SymbolPropertyList;
+
 Q_GLOBAL_STATIC_WITH_ARGS( PalPropertyList, palHiddenProperties, (
 {
-  QgsPalLayerSettings::PositionX,
-  QgsPalLayerSettings::PositionY,
-  QgsPalLayerSettings::Show,
-  QgsPalLayerSettings::LabelRotation,
-  QgsPalLayerSettings::Family,
-  QgsPalLayerSettings::FontStyle,
-  QgsPalLayerSettings::Size,
-  QgsPalLayerSettings::Bold,
-  QgsPalLayerSettings::Italic,
-  QgsPalLayerSettings::Underline,
-  QgsPalLayerSettings::Color,
-  QgsPalLayerSettings::Strikeout,
-  QgsPalLayerSettings::MultiLineAlignment,
-  QgsPalLayerSettings::BufferSize,
-  QgsPalLayerSettings::BufferDraw,
-  QgsPalLayerSettings::BufferColor,
-  QgsPalLayerSettings::LabelDistance,
-  QgsPalLayerSettings::Hali,
-  QgsPalLayerSettings::Vali,
-  QgsPalLayerSettings::ScaleVisibility,
-  QgsPalLayerSettings::MinScale,
-  QgsPalLayerSettings::MaxScale,
-  QgsPalLayerSettings::AlwaysShow,
-  QgsPalLayerSettings::CalloutDraw,
-  QgsPalLayerSettings::LabelAllParts
+  static_cast< int >( QgsPalLayerSettings::Property::PositionX ),
+  static_cast< int >( QgsPalLayerSettings::Property::PositionY ),
+  static_cast< int >( QgsPalLayerSettings::Property::Show ),
+  static_cast< int >( QgsPalLayerSettings::Property::LabelRotation ),
+  static_cast< int >( QgsPalLayerSettings::Property::Family ),
+  static_cast< int >( QgsPalLayerSettings::Property::FontStyle ),
+  static_cast< int >( QgsPalLayerSettings::Property::Size ),
+  static_cast< int >( QgsPalLayerSettings::Property::Bold ),
+  static_cast< int >( QgsPalLayerSettings::Property::Italic ),
+  static_cast< int >( QgsPalLayerSettings::Property::Underline ),
+  static_cast< int >( QgsPalLayerSettings::Property::Color ),
+  static_cast< int >( QgsPalLayerSettings::Property::Strikeout ),
+  static_cast< int >( QgsPalLayerSettings::Property::MultiLineAlignment ),
+  static_cast< int >( QgsPalLayerSettings::Property::BufferSize ),
+  static_cast< int >( QgsPalLayerSettings::Property::BufferDraw ),
+  static_cast< int >( QgsPalLayerSettings::Property::BufferColor ),
+  static_cast< int >( QgsPalLayerSettings::Property::LabelDistance ),
+  static_cast< int >( QgsPalLayerSettings::Property::Hali ),
+  static_cast< int >( QgsPalLayerSettings::Property::Vali ),
+  static_cast< int >( QgsPalLayerSettings::Property::ScaleVisibility ),
+  static_cast< int >( QgsPalLayerSettings::Property::MinScale ),
+  static_cast< int >( QgsPalLayerSettings::Property::MaxScale ),
+  static_cast< int >( QgsPalLayerSettings::Property::AlwaysShow ),
+  static_cast< int >( QgsPalLayerSettings::Property::CalloutDraw ),
+  static_cast< int >( QgsPalLayerSettings::Property::LabelAllParts )
+} ) )
+Q_GLOBAL_STATIC_WITH_ARGS( SymbolPropertyList, symbolHiddenProperties, (
+{
+  static_cast< int >( QgsSymbolLayer::Property::Angle ),
+  static_cast< int >( QgsSymbolLayer::Property::Offset )
 } ) )
 
 //
@@ -228,7 +237,7 @@ int QgsAuxiliaryLayer::createProperty( QgsPalLayerSettings::Property property, Q
   if ( layer && layer->labeling() && layer->auxiliaryLayer() )
   {
     // property definition are identical whatever the provider id
-    const QgsPropertyDefinition def = layer->labeling()->settings().propertyDefinitions()[property];
+    const QgsPropertyDefinition def = QgsPalLayerSettings::propertyDefinitions()[static_cast< int >( property )];
     const QString fieldName = nameFromProperty( def, true );
 
     layer->auxiliaryLayer()->addAuxiliaryField( def );
@@ -244,7 +253,10 @@ int QgsAuxiliaryLayer::createProperty( QgsPalLayerSettings::Property property, Q
 
         // is there an existing property?
         const QgsProperty existingProperty = c.property( property );
-        if ( existingProperty.propertyType() == QgsProperty::InvalidProperty || overwriteExisting )
+        if ( existingProperty.propertyType() == Qgis::PropertyType::Invalid
+             || ( existingProperty.propertyType() == Qgis::PropertyType::Field && existingProperty.field().isEmpty() )
+             || ( existingProperty.propertyType() == Qgis::PropertyType::Expression && existingProperty.expressionString().isEmpty() )
+             || overwriteExisting )
         {
           const QgsProperty prop = QgsProperty::fromField( fieldName );
           c.setProperty( property, prop );
@@ -274,7 +286,7 @@ int QgsAuxiliaryLayer::createProperty( QgsDiagramLayerSettings::Property propert
 
   if ( layer && layer->diagramLayerSettings() && layer->auxiliaryLayer() )
   {
-    const QgsPropertyDefinition def = layer->diagramLayerSettings()->propertyDefinitions()[property];
+    const QgsPropertyDefinition def = QgsDiagramLayerSettings::propertyDefinitions()[static_cast<int>( property )];
 
     if ( layer->auxiliaryLayer()->addAuxiliaryField( def ) )
     {
@@ -285,7 +297,7 @@ int QgsAuxiliaryLayer::createProperty( QgsDiagramLayerSettings::Property propert
       QgsPropertyCollection c = settings.dataDefinedProperties();
       // is there an existing property?
       const QgsProperty existingProperty = c.property( property );
-      if ( existingProperty.propertyType() == QgsProperty::InvalidProperty || overwriteExisting )
+      if ( existingProperty.propertyType() == Qgis::PropertyType::Invalid || overwriteExisting )
       {
         const QgsProperty prop = QgsProperty::fromField( fieldName );
         c.setProperty( property, prop );
@@ -314,7 +326,7 @@ int QgsAuxiliaryLayer::createProperty( QgsCallout::Property property, QgsVectorL
   if ( layer && layer->labeling() && layer->labeling()->settings().callout() && layer->auxiliaryLayer() )
   {
     // property definition are identical whatever the provider id
-    const QgsPropertyDefinition def = layer->labeling()->settings().callout()->propertyDefinitions()[property];
+    const QgsPropertyDefinition def = QgsCallout::propertyDefinitions()[static_cast< int >( property )];
     const QString fieldName = nameFromProperty( def, true );
 
     layer->auxiliaryLayer()->addAuxiliaryField( def );
@@ -330,7 +342,7 @@ int QgsAuxiliaryLayer::createProperty( QgsCallout::Property property, QgsVectorL
           QgsPropertyCollection c = settings->callout()->dataDefinedProperties();
           // is there an existing property?
           const QgsProperty existingProperty = c.property( property );
-          if ( existingProperty.propertyType() == QgsProperty::InvalidProperty || overwriteExisting )
+          if ( existingProperty.propertyType() == Qgis::PropertyType::Invalid || overwriteExisting )
           {
             const QgsProperty prop = QgsProperty::fromField( fieldName );
             c.setProperty( property, prop );
@@ -362,9 +374,22 @@ bool QgsAuxiliaryLayer::isHiddenProperty( int index ) const
   if ( def.origin().compare( QLatin1String( "labeling" ) ) == 0 )
   {
     const PalPropertyList &palProps = *palHiddenProperties();
-    for ( const QgsPalLayerSettings::Property &p : palProps )
+    for ( const int p : palProps )
     {
       const QString propName = QgsPalLayerSettings::propertyDefinitions()[ p ].name();
+      if ( propName.compare( def.name() ) == 0 )
+      {
+        hidden = true;
+        break;
+      }
+    }
+  }
+  else if ( def.origin().compare( QLatin1String( "symbol" ) ) == 0 )
+  {
+    const SymbolPropertyList &symbolProps = *symbolHiddenProperties();
+    for ( int p : symbolProps )
+    {
+      const QString propName = QgsSymbolLayer::propertyDefinitions()[ p ].name();
       if ( propName.compare( def.name() ) == 0 )
       {
         hidden = true;
@@ -456,24 +481,24 @@ QgsField QgsAuxiliaryLayer::createAuxiliaryField( const QgsPropertyDefinition &d
 
   if ( !def.name().isEmpty() || !def.comment().isEmpty() )
   {
-    QVariant::Type type = QVariant::Invalid;
+    QMetaType::Type type = QMetaType::Type::UnknownType;
     QString typeName;
     int len( 0 ), precision( 0 );
     switch ( def.dataType() )
     {
       case QgsPropertyDefinition::DataTypeString:
-        type = QVariant::String;
+        type = QMetaType::Type::QString;
         len = 50;
         typeName = QStringLiteral( "String" );
         break;
       case QgsPropertyDefinition::DataTypeNumeric:
-        type = QVariant::Double;
+        type = QMetaType::Type::Double;
         len = 0;
         precision = 0;
         typeName = QStringLiteral( "Real" );
         break;
       case QgsPropertyDefinition::DataTypeBoolean:
-        type = QVariant::Int; // sqlite does not have a bool type
+        type = QMetaType::Type::Int; // sqlite does not have a bool type
         typeName = QStringLiteral( "Integer" );
         break;
     }
@@ -547,15 +572,15 @@ QgsPropertyDefinition QgsAuxiliaryLayer::propertyDefinitionFromField( const QgsF
     def.setName( propertyName );
     switch ( f.type() )
     {
-      case QVariant::Double:
+      case QMetaType::Type::Double:
         def.setDataType( QgsPropertyDefinition::DataTypeNumeric );
         break;
 
-      case QVariant::Bool:
+      case QMetaType::Type::Bool:
         def.setDataType( QgsPropertyDefinition::DataTypeBoolean );
         break;
 
-      case QVariant::String:
+      case QMetaType::Type::QString:
       default:
         def.setDataType( QgsPropertyDefinition::DataTypeString );
         break;
@@ -653,7 +678,7 @@ QgsAuxiliaryLayer *QgsAuxiliaryStorage::createAuxiliaryLayer( const QgsField &fi
   if ( mValid && layer )
   {
     const QString table( layer->id() );
-    spatialite_database_unique_ptr database;
+    sqlite3_database_unique_ptr database;
     database = openDB( currentFileName() );
 
     if ( !tableExists( table, database.get() ) )
@@ -678,7 +703,7 @@ bool QgsAuxiliaryStorage::deleteTable( const QgsDataSourceUri &ogrUri )
 
   if ( !uri.database().isEmpty() && !uri.table().isEmpty() )
   {
-    spatialite_database_unique_ptr database;
+    sqlite3_database_unique_ptr database;
     database = openDB( uri.database() );
 
     if ( database )
@@ -701,7 +726,7 @@ bool QgsAuxiliaryStorage::duplicateTable( const QgsDataSourceUri &ogrUri, const 
 
   if ( !uri.table().isEmpty() && !uri.database().isEmpty() )
   {
-    spatialite_database_unique_ptr database;
+    sqlite3_database_unique_ptr database;
     database = openDB( uri.database() );
 
     if ( database )
@@ -778,7 +803,7 @@ QString QgsAuxiliaryStorage::debugMsg( const QString &sql, sqlite3 *handler )
   const QString err = QString::fromUtf8( sqlite3_errmsg( handler ) );
   const QString msg = QObject::tr( "Unable to execute" );
   const QString errMsg = QObject::tr( "%1 '%2': %3" ).arg( msg, sql, err );
-  QgsDebugMsg( errMsg );
+  QgsDebugError( errMsg );
   return errMsg;
 }
 
@@ -795,9 +820,9 @@ bool QgsAuxiliaryStorage::createTable( const QString &type, const QString &table
   return true;
 }
 
-spatialite_database_unique_ptr QgsAuxiliaryStorage::createDB( const QString &filename )
+sqlite3_database_unique_ptr QgsAuxiliaryStorage::createDB( const QString &filename )
 {
-  spatialite_database_unique_ptr database;
+  sqlite3_database_unique_ptr database;
 
   int rc;
   rc = database.open_v2( filename, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr );
@@ -812,9 +837,9 @@ spatialite_database_unique_ptr QgsAuxiliaryStorage::createDB( const QString &fil
   return database;
 }
 
-spatialite_database_unique_ptr QgsAuxiliaryStorage::openDB( const QString &filename )
+sqlite3_database_unique_ptr QgsAuxiliaryStorage::openDB( const QString &filename )
 {
-  spatialite_database_unique_ptr database;
+  sqlite3_database_unique_ptr database;
   const int rc = database.open_v2( filename, SQLITE_OPEN_READWRITE, nullptr );
 
   if ( rc )
@@ -845,9 +870,9 @@ bool QgsAuxiliaryStorage::tableExists( const QString &table, sqlite3 *handler )
   return false;
 }
 
-spatialite_database_unique_ptr QgsAuxiliaryStorage::open( const QString &filename )
+sqlite3_database_unique_ptr QgsAuxiliaryStorage::open( const QString &filename )
 {
-  spatialite_database_unique_ptr database;
+  sqlite3_database_unique_ptr database;
 
   if ( filename.isEmpty() )
   {
@@ -871,7 +896,7 @@ spatialite_database_unique_ptr QgsAuxiliaryStorage::open( const QString &filenam
   return database;
 }
 
-spatialite_database_unique_ptr QgsAuxiliaryStorage::open( const QgsProject &project )
+sqlite3_database_unique_ptr QgsAuxiliaryStorage::open( const QgsProject &project )
 {
   return open( filenameForProject( project ) );
 }

@@ -19,6 +19,7 @@
 #include "qgsfilterlineedit.h"
 #include "qgslogger.h"
 #include "qgsapplication.h"
+#include "moc_qgsfeaturelistcombobox.cpp"
 
 #include <QCompleter>
 #include <QLineEdit>
@@ -29,6 +30,8 @@ QgsFeatureListComboBox::QgsFeatureListComboBox( QWidget *parent )
   , mModel( new QgsFeatureFilterModel( this ) )
   , mCompleter( new QCompleter( mModel ) )
 {
+  setMinimumContentsLength( 1 );
+  setSizeAdjustPolicy( QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon );
   mCompleter->setCaseSensitivity( Qt::CaseInsensitive );
   mCompleter->setFilterMode( Qt::MatchContains );
   setEditable( true );
@@ -43,14 +46,14 @@ QgsFeatureListComboBox::QgsFeatureListComboBox( QWidget *parent )
   connect( mModel, &QgsFeatureFilterModel::extraIdentifierValueChanged, this, &QgsFeatureListComboBox::identifierValueChanged );
   connect( mModel, &QgsFeatureFilterModel::extraIdentifierValueIndexChanged, this, &QgsFeatureListComboBox::setCurrentIndex );
   connect( mModel, &QgsFeatureFilterModel::identifierFieldsChanged, this, &QgsFeatureListComboBox::identifierFieldChanged );
-  connect( mCompleter, static_cast<void( QCompleter::* )( const QModelIndex & )>( &QCompleter::highlighted ), this, &QgsFeatureListComboBox::onItemSelected );
-  connect( mCompleter, static_cast<void( QCompleter::* )( const QModelIndex & )>( &QCompleter::activated ), this, &QgsFeatureListComboBox::onActivated );
+  connect( mCompleter, static_cast<void ( QCompleter::* )( const QModelIndex & )>( &QCompleter::highlighted ), this, &QgsFeatureListComboBox::onItemSelected );
+  connect( mCompleter, static_cast<void ( QCompleter::* )( const QModelIndex & )>( &QCompleter::activated ), this, &QgsFeatureListComboBox::onActivated );
   connect( mModel, &QgsFeatureFilterModel::beginUpdate, this, &QgsFeatureListComboBox::storeLineEditState );
   connect( mModel, &QgsFeatureFilterModel::endUpdate, this, &QgsFeatureListComboBox::restoreLineEditState );
   connect( mModel, &QgsFeatureFilterModel::endUpdate, this, &QgsFeatureListComboBox::modelUpdated );
   connect( mModel, &QgsFeatureFilterModel::dataChanged, this, &QgsFeatureListComboBox::onDataChanged );
 
-  connect( this, static_cast<void( QgsFeatureListComboBox::* )( int )>( &QgsFeatureListComboBox::currentIndexChanged ), this, &QgsFeatureListComboBox::onCurrentIndexChanged );
+  connect( this, static_cast<void ( QgsFeatureListComboBox::* )( int )>( &QgsFeatureListComboBox::currentIndexChanged ), this, &QgsFeatureListComboBox::onCurrentIndexChanged );
 
   mLineEdit = new QgsFilterLineEdit( nullptr, QgsApplication::nullRepresentation() );
   mLineEdit->setSelectOnFocus( true );
@@ -60,8 +63,11 @@ QgsFeatureListComboBox::QgsFeatureListComboBox( QWidget *parent )
   setModel( mModel );
 
   connect( mLineEdit, &QgsFilterLineEdit::textEdited, this, &QgsFeatureListComboBox::onCurrentTextChanged );
+  connect( mLineEdit, &QgsFilterLineEdit::cleared, this, &QgsFeatureListComboBox::onFilterLineEditCleared );
 
   connect( mModel, &QgsFeatureFilterModel::currentFeatureChanged, this, &QgsFeatureListComboBox::currentFeatureChanged );
+  // To avoid wrongly signaling a foreign key change, handle model feature found state following feature gathering separately
+  connect( mModel, &QgsFeatureFilterModel::extraValueDoesNotExistChanged, this, &QgsFeatureListComboBox::currentFeatureFoundChanged );
 
   setToolTip( tr( "Just start typing what you are looking for." ) );
 }
@@ -104,6 +110,13 @@ void QgsFeatureListComboBox::onCurrentTextChanged( const QString &text )
   mModel->setFilterValue( text );
 }
 
+void QgsFeatureListComboBox::onFilterLineEditCleared()
+{
+  // Reset the combobox when the search is cleared
+  const QString clearedValue = allowNull() ? mLineEdit->nullValue() : mLineEdit->defaultValue();
+  mModel->setFilterValue( clearedValue );
+}
+
 void QgsFeatureListComboBox::onFilterUpdateCompleted()
 {
   if ( mPopupRequested )
@@ -127,8 +140,8 @@ void QgsFeatureListComboBox::onCurrentIndexChanged( int i )
   if ( !mLineEdit->hasStateStored() )
     mIsCurrentlyEdited = false;
   const QModelIndex modelIndex = mModel->index( i, 0, QModelIndex() );
-  mModel->setExtraIdentifierValues( mModel->data( modelIndex, QgsFeatureFilterModel::IdentifierValuesRole ).toList() );
-  mLineEdit->setText( mModel->data( modelIndex, QgsFeatureFilterModel::ValueRole ).toString() );
+  mModel->setExtraIdentifierValues( mModel->data( modelIndex, static_cast<int>( QgsFeatureFilterModel::CustomRole::IdentifierValues ) ).toList() );
+  mLineEdit->setText( mModel->data( modelIndex, static_cast<int>( QgsFeatureFilterModel::CustomRole::Value ) ).toString() );
   mLineEdit->setFont( mModel->data( modelIndex, Qt::FontRole ).value<QFont>() );
   QPalette palette = mLineEdit->palette();
   palette.setBrush( mLineEdit->foregroundRole(), mModel->data( modelIndex, Qt::ForegroundRole ).value<QBrush>() );
@@ -137,15 +150,15 @@ void QgsFeatureListComboBox::onCurrentIndexChanged( int i )
 
 void QgsFeatureListComboBox::onActivated( QModelIndex modelIndex )
 {
-  setIdentifierValues( mModel->data( modelIndex, QgsFeatureFilterModel::IdentifierValuesRole ).toList() );
-  mLineEdit->setText( mModel->data( modelIndex, QgsFeatureFilterModel::ValueRole ).toString() );
+  setIdentifierValues( mModel->data( modelIndex, static_cast<int>( QgsFeatureFilterModel::CustomRole::IdentifierValues ) ).toList() );
+  mLineEdit->setText( mModel->data( modelIndex, static_cast<int>( QgsFeatureFilterModel::CustomRole::Value ) ).toString() );
 }
 
 void QgsFeatureListComboBox::storeLineEditState()
 {
   if ( mIsCurrentlyEdited )
   {
-    mLineEdit->storeState( );
+    mLineEdit->storeState();
   }
 }
 
@@ -153,7 +166,7 @@ void QgsFeatureListComboBox::restoreLineEditState()
 {
   if ( mIsCurrentlyEdited )
   {
-    mLineEdit->restoreState( );
+    mLineEdit->restoreState();
   }
 }
 
@@ -163,7 +176,7 @@ int QgsFeatureListComboBox::nullIndex() const
 
   if ( allowNull() )
   {
-    index = findText( QgsApplication::nullRepresentation( ) );
+    index = findText( QgsApplication::nullRepresentation() );
   }
 
   return index;
@@ -178,7 +191,7 @@ void QgsFeatureListComboBox::onDataChanged( const QModelIndex &topLeft, const QM
     if ( currentIndex >= topLeft.row() && currentIndex <= bottomRight.row() )
     {
       const QModelIndex modelIndex = mModel->index( currentIndex, 0, QModelIndex() );
-      mLineEdit->setText( mModel->data( modelIndex, QgsFeatureFilterModel::ValueRole ).toString() );
+      mLineEdit->setText( mModel->data( modelIndex, static_cast<int>( QgsFeatureFilterModel::CustomRole::Value ) ).toString() );
     }
   }
 }
@@ -209,21 +222,21 @@ void QgsFeatureListComboBox::setIdentifierFields( const QStringList &identifierF
 
 QModelIndex QgsFeatureListComboBox::currentModelIndex() const
 {
-  return mModel->index( mModel->extraIdentifierValueIndex(), 0, QModelIndex() );
+  return mModel->index( currentIndex(), 0, QModelIndex() );
 }
 
 void QgsFeatureListComboBox::focusOutEvent( QFocusEvent *event )
 {
   Q_UNUSED( event )
   QComboBox::focusOutEvent( event );
-  mLineEdit->setText( mModel->data( currentModelIndex(), QgsFeatureFilterModel::ValueRole ).toString() );
+  mLineEdit->setText( mModel->data( currentModelIndex(), static_cast<int>( QgsFeatureFilterModel::CustomRole::Value ) ).toString() );
 }
 
 void QgsFeatureListComboBox::keyPressEvent( QKeyEvent *event )
 {
   if ( event->key() == Qt::Key_Escape )
   {
-    mLineEdit->setText( mModel->data( currentModelIndex(), QgsFeatureFilterModel::ValueRole ).toString() );
+    mLineEdit->setText( mModel->data( currentModelIndex(), static_cast<int>( QgsFeatureFilterModel::CustomRole::Value ) ).toString() );
   }
   QComboBox::keyReleaseEvent( event );
 }
@@ -237,6 +250,16 @@ void QgsFeatureListComboBox::setAllowNull( bool allowNull )
 {
   mModel->setAllowNull( allowNull );
   mLineEdit->setClearMode( allowNull ? QgsFilterLineEdit::ClearToNull : QgsFilterLineEdit::ClearToDefault );
+}
+
+int QgsFeatureListComboBox::fetchLimit() const
+{
+  return mModel->fetchLimit();
+}
+
+void QgsFeatureListComboBox::setFetchLimit( int fetchLimit )
+{
+  mModel->setFetchLimit( fetchLimit );
 }
 
 QVariant QgsFeatureListComboBox::identifierValue() const
@@ -268,9 +291,11 @@ void QgsFeatureListComboBox::setIdentifierValuesToNull()
 
 QgsFeatureRequest QgsFeatureListComboBox::currentFeatureRequest() const
 {
+  QgsFeatureRequest request;
+  request.setRequestMayBeNested( true );
   if ( mModel->extraIdentifierValues().isEmpty() )
   {
-    return QgsFeatureRequest().setFilterFids( QgsFeatureIds() ); // NULL: Return a request that's guaranteed to not return anything
+    request.setFilterFids( QgsFeatureIds() ); // NULL: Return a request that's guaranteed to not return anything
   }
   else
   {
@@ -289,8 +314,9 @@ QgsFeatureRequest QgsFeatureListComboBox::currentFeatureRequest() const
       }
     }
     const QString expression = filtersAttrs.join( QLatin1String( " AND " ) );
-    return QgsFeatureRequest().setFilterExpression( expression );
+    return request.setFilterExpression( expression );
   }
+  return request;
 }
 
 QString QgsFeatureListComboBox::filterExpression() const

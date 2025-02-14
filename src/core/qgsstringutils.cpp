@@ -75,11 +75,7 @@ QString QgsStringUtils::capitalize( const QString &string, Qgis::Capitalization 
       }
 
       const bool allSameCase = string.toLower() == string || string.toUpper() == string;
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-      const QStringList parts = ( allSameCase ? string.toLower() : string ).split( splitWords, QString::SkipEmptyParts );
-#else
       const QStringList parts = ( allSameCase ? string.toLower() : string ).split( splitWords, Qt::SkipEmptyParts );
-#endif
       QString result;
       bool firstWord = true;
       int i = 0;
@@ -193,13 +189,12 @@ int QgsStringUtils::levenshteinDistance( const QString &string1, const QString &
   }
 
   //levenshtein algorithm begins here
-  QVector< int > col;
-  col.fill( 0, length2 + 1 );
-  QVector< int > prevCol;
+  std::vector< int > col( length2 + 1, 0 );
+  std::vector< int > prevCol;
   prevCol.reserve( length2 + 1 );
   for ( int i = 0; i < length2 + 1; ++i )
   {
-    prevCol << i;
+    prevCol.emplace_back( i );
   }
   const QChar *s2start = s2Char;
   for ( int i = 0; i < length1; ++i )
@@ -525,9 +520,9 @@ QString QgsStringUtils::insertLinks( const QString &string, bool *foundLinks )
 
   // http://alanstorm.com/url_regex_explained
   // note - there's more robust implementations available
-  static thread_local QRegularExpression urlRegEx( "(\\b(([\\w-]+://?|www[.])[^\\s()<>]+(?:\\([\\w\\d]+\\)|([^!\"#$%&'()*+,\\-./:;<=>?@[\\\\\\]^_`{|}~\\s]|/))))" );
-  static thread_local QRegularExpression protoRegEx( "^(?:f|ht)tps?://|file://" );
-  static thread_local QRegularExpression emailRegEx( "([\\w._%+-]+@[\\w.-]+\\.[A-Za-z]+)" );
+  const thread_local QRegularExpression urlRegEx( QStringLiteral( "((?:(?:http|https|ftp|file)://[^\\s]+[^\\s,.]+)|(?:\\b(([\\w-]+://?|www[.])[^\\s()<>]+(?:\\([\\w\\d]+\\)|([^!\"#$%&'()*+,\\-./:;<=>?@[\\\\\\]^_`{|}~\\s]|/)))))" ) );
+  const thread_local QRegularExpression protoRegEx( QStringLiteral( "^(?:f|ht)tps?://|file://" ) );
+  const thread_local QRegularExpression emailRegEx( QStringLiteral( "([\\w._%+-]+@[\\w.-]+\\.[A-Za-z]+)" ) );
 
   int offset = 0;
   bool found = false;
@@ -567,7 +562,7 @@ QString QgsStringUtils::insertLinks( const QString &string, bool *foundLinks )
 
 bool QgsStringUtils::isUrl( const QString &string )
 {
-  const thread_local QRegularExpression rxUrl( "^(http|https|ftp|file)://\\S+$" );
+  const thread_local QRegularExpression rxUrl( QStringLiteral( "^(http|https|ftp|file)://\\S+$" ) );
   return rxUrl.match( string ).hasMatch();
 }
 
@@ -578,8 +573,10 @@ QString QgsStringUtils::htmlToMarkdown( const QString &html )
   converted.replace( QLatin1String( "<br>" ), QLatin1String( "\n" ) );
   converted.replace( QLatin1String( "<b>" ), QLatin1String( "**" ) );
   converted.replace( QLatin1String( "</b>" ), QLatin1String( "**" ) );
+  converted.replace( QLatin1String( "<pre>" ), QLatin1String( "\n```\n" ) );
+  converted.replace( QLatin1String( "</pre>" ), QLatin1String( "```\n" ) );
 
-  static thread_local QRegularExpression hrefRegEx( "<a\\s+href\\s*=\\s*([^<>]*)\\s*>([^<>]*)</a>" );
+  const thread_local QRegularExpression hrefRegEx( QStringLiteral( "<a\\s+href\\s*=\\s*([^<>]*)\\s*>([^<>]*)</a>" ) );
 
   int offset = 0;
   QRegularExpressionMatch match = hrefRegEx.match( converted );
@@ -658,21 +655,13 @@ QString QgsStringUtils::wordWrap( const QString &string, const int length, const
       }
       if ( strHit > -1 )
       {
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 2)
-        newstr.append( line.midRef( strCurrent, strHit - strCurrent ) );
-#else
         newstr.append( QStringView {line} .mid( strCurrent, strHit - strCurrent ) );
-#endif
         newstr.append( '\n' );
         strCurrent = strHit + delimiterLength;
       }
       else
       {
-#if QT_VERSION < QT_VERSION_CHECK(5, 15, 2)
-        newstr.append( line.midRef( strCurrent ) );
-#else
         newstr.append( QStringView {line} .mid( strCurrent ) );
-#endif
         strCurrent = strLength;
       }
     }
@@ -746,12 +735,31 @@ QString QgsStringUtils::truncateMiddleOfString( const QString &string, int maxLe
 
   // note we actually truncate an extra character, as we'll be replacing it with the ... character
   const int truncateFrom = string.length() / 2 - ( charactersToTruncate + 1 ) / 2;
+  if ( truncateFrom <= 0 )
+    return QChar( 0x2026 );
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
   return string.leftRef( truncateFrom ) + QString( QChar( 0x2026 ) ) + string.midRef( truncateFrom + charactersToTruncate + 1 );
 #else
   return QStringView( string ).first( truncateFrom ) + QString( QChar( 0x2026 ) ) + QStringView( string ).sliced( truncateFrom + charactersToTruncate + 1 );
 #endif
+}
+
+bool QgsStringUtils::containsByWord( const QString &candidate, const QString &words, Qt::CaseSensitivity sensitivity )
+{
+  if ( candidate.trimmed().isEmpty() )
+    return false;
+
+  const thread_local QRegularExpression rxWhitespace( QStringLiteral( "\\s+" ) );
+  const QStringList parts = words.split( rxWhitespace, Qt::SkipEmptyParts );
+  if ( parts.empty() )
+    return false;
+  for ( const QString &word : parts )
+  {
+    if ( !candidate.contains( word, sensitivity ) )
+      return false;
+  }
+  return true;
 }
 
 QgsStringReplacement::QgsStringReplacement( const QString &match, const QString &replacement, bool caseSensitive, bool wholeWordOnly )
@@ -762,7 +770,7 @@ QgsStringReplacement::QgsStringReplacement( const QString &match, const QString 
 {
   if ( mWholeWordOnly )
   {
-    mRx.setPattern( QString( "\\b%1\\b" ).arg( mMatch ) );
+    mRx.setPattern( QStringLiteral( "\\b%1\\b" ).arg( mMatch ) );
     mRx.setPatternOptions( mCaseSensitive ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption );
   }
 }
@@ -785,8 +793,8 @@ QgsStringMap QgsStringReplacement::properties() const
   QgsStringMap map;
   map.insert( QStringLiteral( "match" ), mMatch );
   map.insert( QStringLiteral( "replace" ), mReplacement );
-  map.insert( QStringLiteral( "caseSensitive" ), mCaseSensitive ? "1" : "0" );
-  map.insert( QStringLiteral( "wholeWord" ), mWholeWordOnly ? "1" : "0" );
+  map.insert( QStringLiteral( "caseSensitive" ), mCaseSensitive ? QStringLiteral( "1" ) : QStringLiteral( "0" ) );
+  map.insert( QStringLiteral( "wholeWord" ), mWholeWordOnly ? QStringLiteral( "1" ) : QStringLiteral( "0" ) );
   return map;
 }
 
@@ -801,8 +809,7 @@ QgsStringReplacement QgsStringReplacement::fromProperties( const QgsStringMap &p
 QString QgsStringReplacementCollection::process( const QString &input ) const
 {
   QString result = input;
-  const auto constMReplacements = mReplacements;
-  for ( const QgsStringReplacement &r : constMReplacements )
+  for ( const QgsStringReplacement &r : mReplacements )
   {
     result = r.process( result );
   }
@@ -811,8 +818,7 @@ QString QgsStringReplacementCollection::process( const QString &input ) const
 
 void QgsStringReplacementCollection::writeXml( QDomElement &elem, QDomDocument &doc ) const
 {
-  const auto constMReplacements = mReplacements;
-  for ( const QgsStringReplacement &r : constMReplacements )
+  for ( const QgsStringReplacement &r : mReplacements )
   {
     QgsStringMap props = r.properties();
     QDomElement propEl = doc.createElement( QStringLiteral( "replacement" ) );

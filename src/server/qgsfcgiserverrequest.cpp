@@ -21,6 +21,7 @@
 #include "qgsfcgiserverrequest.h"
 #include "qgsserverlogger.h"
 #include "qgsmessagelog.h"
+#include "qgsstringutils.h"
 #include <fcgi_stdio.h>
 #include <QDebug>
 
@@ -47,7 +48,7 @@ QgsFcgiServerRequest::QgsFcgiServerRequest()
   QUrl baseUrl;
   if ( uri.endsWith( extraPath ) )
   {
-    baseUrl.setUrl( uri.left( uri.length() -  extraPath.length() ) );
+    baseUrl.setUrl( uri.left( uri.length() - extraPath.length() ) );
   }
   else
   {
@@ -59,7 +60,7 @@ QgsFcgiServerRequest::QgsFcgiServerRequest()
   // OGC parameters are passed with the query string, which is normally part of
   // the REQUEST_URI, we override the query string url in case it is defined
   // independently of REQUEST_URI
-  if ( ! qs.isEmpty() )
+  if ( !qs.isEmpty() )
   {
     url.setQuery( qs );
   }
@@ -106,11 +107,18 @@ QgsFcgiServerRequest::QgsFcgiServerRequest()
   setUrl( url );
   setMethod( method );
 
-  // Get accept header for content-type negotiation
-  const char *accept = getenv( "HTTP_ACCEPT" );
-  if ( accept )
+  // Fill the headers dictionary
+  for ( const auto &headerKey : qgsEnumMap<QgsServerRequest::RequestHeader>() )
   {
-    setHeader( QStringLiteral( "Accept" ), accept );
+    const QString headerName = QgsStringUtils::capitalize(
+                                 QString( headerKey ).replace( QLatin1Char( '_' ), QLatin1Char( ' ' ) ), Qgis::Capitalization::TitleCase
+    )
+                                 .replace( QLatin1Char( ' ' ), QLatin1Char( '-' ) );
+    const char *result = getenv( QStringLiteral( "HTTP_%1" ).arg( headerKey ).toStdString().c_str() );
+    if ( result && strlen( result ) > 0 )
+    {
+      setHeader( headerName, result );
+    }
   }
 
   // Output debug infos
@@ -148,8 +156,8 @@ void QgsFcgiServerRequest::fillUrl( QUrl &url ) const
   if ( url.scheme().isEmpty() )
   {
     QString( getenv( "HTTPS" ) ).compare( QLatin1String( "on" ), Qt::CaseInsensitive ) == 0
-    ? url.setScheme( QStringLiteral( "https" ) )
-    : url.setScheme( QStringLiteral( "http" ) );
+      ? url.setScheme( QStringLiteral( "https" ) )
+      : url.setScheme( QStringLiteral( "http" ) );
   }
 }
 
@@ -166,35 +174,46 @@ void QgsFcgiServerRequest::readData()
   if ( lengthstr )
   {
     bool success = false;
-    int length = QString( lengthstr ).toInt( &success );
-    // Note: REQUEST_BODY is not part of CGI standard, and it is not
-    // normally passed by any CGI web server and it is implemented only
-    // to allow unit tests to inject a request body and simulate a POST
-    // request
-    const char *request_body  = getenv( "REQUEST_BODY" );
-    if ( success && request_body )
+    const int length = QString( lengthstr ).toInt( &success );
+    if ( !success || length < 0 )
     {
-      QString body( request_body );
-      body.truncate( length );
-      mData.append( body.toUtf8() );
-      length = 0;
-    }
-#ifdef QGISDEBUG
-    qDebug() << "fcgi: reading " << lengthstr << " bytes from " << ( request_body ? "REQUEST_BODY" : "stdin" );
-#endif
-    if ( success )
-    {
-      // XXX This not efficient at all  !!
-      for ( int i = 0; i < length; ++i )
-      {
-        mData.append( getchar() );
-      }
+      QgsMessageLog::logMessage( "fcgi: Invalid CONTENT_LENGTH", QStringLiteral( "Server" ), Qgis::MessageLevel::Critical );
+      mHasError = true;
     }
     else
     {
-      QgsMessageLog::logMessage( "fcgi: Failed to parse CONTENT_LENGTH",
-                                 QStringLiteral( "Server" ), Qgis::MessageLevel::Critical );
-      mHasError = true;
+      // Note: REQUEST_BODY is not part of CGI standard, and it is not
+      // normally passed by any CGI web server and it is implemented only
+      // to allow unit tests to inject a request body and simulate a POST
+      // request
+      const char *requestBody = getenv( "REQUEST_BODY" );
+
+#ifdef QGISDEBUG
+      qDebug() << "fcgi: reading " << lengthstr << " bytes from " << ( requestBody ? "REQUEST_BODY" : "stdin" );
+#endif
+
+      if ( requestBody )
+      {
+        const size_t requestBodyLength = strlen( requestBody );
+        const int actualLength = static_cast<int>( std::min<size_t>( length, requestBodyLength ) );
+        if ( static_cast<size_t>( actualLength ) < requestBodyLength )
+        {
+          QgsMessageLog::logMessage( "fcgi: CONTENT_LENGTH is larger than actual length of REQUEST_BODY", QStringLiteral( "Server" ), Qgis::MessageLevel::Critical );
+          mHasError = true;
+        }
+        mData = QByteArray::fromRawData( requestBody, actualLength );
+      }
+      else
+      {
+        mData.resize( length );
+        const int actualLength = static_cast<int>( fread( mData.data(), 1, length, stdin ) );
+        if ( actualLength < length )
+        {
+          mData.resize( actualLength );
+          QgsMessageLog::logMessage( "fcgi: CONTENT_LENGTH is larger than actual length of stdin", QStringLiteral( "Server" ), Qgis::MessageLevel::Critical );
+          mHasError = true;
+        }
+      }
     }
   }
   else
@@ -203,12 +222,11 @@ void QgsFcgiServerRequest::readData()
   }
 }
 
-void QgsFcgiServerRequest::printRequestInfos( const QUrl &url )
+void QgsFcgiServerRequest::printRequestInfos( const QUrl &url ) const
 {
   QgsMessageLog::logMessage( QStringLiteral( "******************** New request ***************" ), QStringLiteral( "Server" ), Qgis::MessageLevel::Info );
 
-  const QStringList envVars
-  {
+  const QStringList envVars {
     QStringLiteral( "SERVER_NAME" ),
     QStringLiteral( "REQUEST_URI" ),
     QStringLiteral( "SCRIPT_NAME" ),
@@ -223,11 +241,8 @@ void QgsFcgiServerRequest::printRequestInfos( const QUrl &url )
     QStringLiteral( "CONTENT_TYPE" ),
     QStringLiteral( "REQUEST_METHOD" ),
     QStringLiteral( "AUTH_TYPE" ),
-    QStringLiteral( "HTTP_ACCEPT" ),
-    QStringLiteral( "HTTP_USER_AGENT" ),
     QStringLiteral( "HTTP_PROXY" ),
     QStringLiteral( "NO_PROXY" ),
-    QStringLiteral( "HTTP_AUTHORIZATION" ),
     QStringLiteral( "QGIS_PROJECT_FILE" ),
     QStringLiteral( "QGIS_SERVER_IGNORE_BAD_LAYERS" ),
     QStringLiteral( "QGIS_SERVER_SERVICE_URL" ),
@@ -235,28 +250,27 @@ void QgsFcgiServerRequest::printRequestInfos( const QUrl &url )
     QStringLiteral( "QGIS_SERVER_WFS_SERVICE_URL" ),
     QStringLiteral( "QGIS_SERVER_WMTS_SERVICE_URL" ),
     QStringLiteral( "QGIS_SERVER_WCS_SERVICE_URL" ),
-    QStringLiteral( "HTTP_X_QGIS_SERVICE_URL" ),
-    QStringLiteral( "HTTP_X_QGIS_WMS_SERVICE_URL" ),
-    QStringLiteral( "HTTP_X_QGIS_WFS_SERVICE_URL" ),
-    QStringLiteral( "HTTP_X_QGIS_WCS_SERVICE_URL" ),
-    QStringLiteral( "HTTP_X_QGIS_WMTS_SERVICE_URL" ),
-    QStringLiteral( "HTTP_FORWARDED" ),
-    QStringLiteral( "HTTP_X_FORWARDED_HOST" ),
-    QStringLiteral( "HTTP_X_FORWARDED_PROTO" ),
-    QStringLiteral( "HTTP_HOST" ),
     QStringLiteral( "SERVER_PROTOCOL" )
   };
 
   QgsMessageLog::logMessage( QStringLiteral( "Request URL: %2" ).arg( url.url() ), QStringLiteral( "Server" ), Qgis::MessageLevel::Info );
+
   QgsMessageLog::logMessage( QStringLiteral( "Environment:" ), QStringLiteral( "Server" ), Qgis::MessageLevel::Info );
   QgsMessageLog::logMessage( QStringLiteral( "------------------------------------------------" ), QStringLiteral( "Server" ), Qgis::MessageLevel::Info );
-
   for ( const auto &envVar : envVars )
   {
     if ( getenv( envVar.toStdString().c_str() ) )
     {
       QgsMessageLog::logMessage( QStringLiteral( "%1: %2" ).arg( envVar ).arg( QString( getenv( envVar.toStdString().c_str() ) ) ), QStringLiteral( "Server" ), Qgis::MessageLevel::Info );
     }
+  }
+
+  qDebug() << "Headers:";
+  qDebug() << "------------------------------------------------";
+  const QMap<QString, QString> &hdrs = headers();
+  for ( auto it = hdrs.constBegin(); it != hdrs.constEnd(); it++ )
+  {
+    qDebug() << it.key() << ": " << it.value();
   }
 }
 
@@ -269,8 +283,7 @@ QString QgsFcgiServerRequest::header( const QString &name ) const
   // https://tools.ietf.org/html/rfc3875#section-4.1.18
   if ( result.isEmpty() )
   {
-    result = qgetenv( QStringLiteral( "HTTP_%1" ).arg(
-                        name.toUpper().replace( QLatin1Char( '-' ), QLatin1Char( '_' ) ) ).toStdString().c_str() );
+    result = qgetenv( QStringLiteral( "HTTP_%1" ).arg( name.toUpper().replace( QLatin1Char( '-' ), QLatin1Char( '_' ) ) ).toStdString().c_str() );
   }
   return result;
 }

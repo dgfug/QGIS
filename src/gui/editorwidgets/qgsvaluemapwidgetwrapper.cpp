@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsvaluemapwidgetwrapper.h"
+#include "moc_qgsvaluemapwidgetwrapper.cpp"
 #include "qgsvaluemapconfigdlg.h"
 #include "qgsvaluemapfieldformatter.h"
 #include "qgsapplication.h"
@@ -37,7 +38,7 @@ QVariant QgsValueMapWidgetWrapper::value() const
   }
 
   if ( v == QgsValueMapFieldFormatter::NULL_VALUE )
-    v = QVariant( field().type() );
+    v = QgsVariantUtils::createNullVariant( field().type() );
 
   return v;
 }
@@ -52,7 +53,10 @@ void QgsValueMapWidgetWrapper::showIndeterminateState()
 
 QWidget *QgsValueMapWidgetWrapper::createWidget( QWidget *parent )
 {
-  return new QComboBox( parent );
+  QComboBox *combo = new QComboBox( parent );
+  combo->setMinimumContentsLength( 1 );
+  combo->setSizeAdjustPolicy( QComboBox::SizeAdjustPolicy::AdjustToMinimumContentsLengthWithIcon );
+  return combo;
 }
 
 void QgsValueMapWidgetWrapper::initWidget( QWidget *editor )
@@ -62,8 +66,8 @@ void QgsValueMapWidgetWrapper::initWidget( QWidget *editor )
   if ( mComboBox )
   {
     QgsValueMapConfigDlg::populateComboBox( mComboBox, config(), false );
-    connect( mComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ),
-             this, static_cast<void ( QgsEditorWidgetWrapper::* )()>( &QgsEditorWidgetWrapper::emitValueChanged ) );
+    mComboBox->view()->setVerticalScrollBarPolicy( Qt::ScrollBarAsNeeded );
+    connect( mComboBox, static_cast<void ( QComboBox::* )( int )>( &QComboBox::currentIndexChanged ), this, static_cast<void ( QgsEditorWidgetWrapper::* )()>( &QgsEditorWidgetWrapper::emitValueChanged ) );
   }
 }
 
@@ -75,7 +79,7 @@ bool QgsValueMapWidgetWrapper::valid() const
 void QgsValueMapWidgetWrapper::updateValues( const QVariant &value, const QVariantList & )
 {
   QString v;
-  if ( value.isNull() )
+  if ( QgsVariantUtils::isNull( value ) )
     v = QgsValueMapFieldFormatter::NULL_VALUE;
   else
     v = value.toString();
@@ -84,7 +88,7 @@ void QgsValueMapWidgetWrapper::updateValues( const QVariant &value, const QVaria
   {
     if ( mComboBox->findData( v ) == -1 )
     {
-      if ( value.isNull( ) )
+      if ( QgsVariantUtils::isNull( value ) )
       {
         mComboBox->addItem( QgsApplication::nullRepresentation().prepend( '(' ).append( ')' ), v );
       }

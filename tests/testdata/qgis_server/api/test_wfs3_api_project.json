@@ -29,8 +29,8 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
           "default": "http://www.opengis.net/def/crs/OGC/1.3/CRS84",
           "enum": [
             "http://www.opengis.net/def/crs/OGC/1.3/CRS84",
-            "http://www.opengis.net/def/crs/EPSG/9.6.2/4326",
-            "http://www.opengis.net/def/crs/EPSG/9.6.2/3857"
+            "http://www.opengis.net/def/crs/EPSG/0/4326",
+            "http://www.opengis.net/def/crs/EPSG/0/3857"
           ],
           "type": "string"
         },
@@ -46,8 +46,8 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
           "default": "http://www.opengis.net/def/crs/OGC/1.3/CRS84",
           "enum": [
             "http://www.opengis.net/def/crs/OGC/1.3/CRS84",
-            "http://www.opengis.net/def/crs/EPSG/9.6.2/4326",
-            "http://www.opengis.net/def/crs/EPSG/9.6.2/3857"
+            "http://www.opengis.net/def/crs/EPSG/0/4326",
+            "http://www.opengis.net/def/crs/EPSG/0/3857"
           ],
           "type": "string"
         },
@@ -1098,7 +1098,7 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
             "style": "form"
           },
           {
-            "description": "Comma separated list of feature property names to be added to the result. Valid values: 'id', 'name', 'utf8nameè'",
+            "description": "Comma separated list of feature property names to be added to the result. Valid values: 'alias_id', 'alias_name', 'utf8nameè'",
             "explode": false,
             "in": "query",
             "name": "properties",
@@ -1694,7 +1694,7 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
                 }
               }
             },
-            "description": "Metadata about the collection 'A test vector layer èé' shared by this API."
+            "description": "Metadata about the collection 'A test wfs vector layer èé' shared by this API."
           },
           "default": {
             "content": {
@@ -1712,7 +1712,7 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
             "description": "An error occurred."
           }
         },
-        "summary": "Describe the 'A test vector layer èé' feature collection",
+        "summary": "Describe the 'A test wfs vector layer èé' feature collection",
         "tags": [
           "Capabilities"
         ]
@@ -1809,7 +1809,7 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
                 }
               }
             },
-            "description": "Metadata about the collection 'A test vector layer èé' shared by this API."
+            "description": "Metadata about the collection 'A test wfs vector layer èé' shared by this API."
           },
           "default": {
             "content": {
@@ -1827,7 +1827,7 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
             "description": "An error occurred."
           }
         },
-        "summary": "Retrieve features of 'A test vector layer èé' feature collection",
+        "summary": "Retrieve features of 'A test wfs vector layer èé' feature collection",
         "tags": [
           "Features"
         ]
@@ -1926,7 +1926,7 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
                 }
               }
             },
-            "description": "Retrieve a 'A test vector layer èé' feature by 'featureId'."
+            "description": "Retrieve a 'A test wfs vector layer èé' feature by 'featureId'."
           },
           "default": {
             "content": {
@@ -1944,7 +1944,7 @@ Content-Type: application/vnd.oai.openapi+json;version=3.0
             "description": "An error occurred."
           }
         },
-        "summary": "Retrieve a single feature from the 'A test vector layer èé' feature collection",
+        "summary": "Retrieve a single feature from the 'A test wfs vector layer èé' feature collection",
         "tags": [
           "Features"
         ]

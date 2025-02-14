@@ -14,6 +14,7 @@ email                : matthias@opengis.ch
  ***************************************************************************/
 
 #include "qgsgeometryvalidationmodel.h"
+#include "moc_qgsgeometryvalidationmodel.cpp"
 
 #include "qgsvectorlayer.h"
 #include "qgssinglegeometrycheck.h"
@@ -61,12 +62,12 @@ int QgsGeometryValidationModel::columnCount( const QModelIndex &parent ) const
 
 QVariant QgsGeometryValidationModel::data( const QModelIndex &index, int role ) const
 {
-  const QList< FeatureErrors > layerErrors = mErrorStorage.value( mCurrentLayer );
+  const QList<FeatureErrors> layerErrors = mErrorStorage.value( mCurrentLayer );
 
   if ( index.row() >= layerErrors.size() )
   {
     // Topology error
-    const QList< std::shared_ptr< QgsGeometryCheckError > > topologyErrors = mTopologyErrorStorage.value( mCurrentLayer );
+    const QList<std::shared_ptr<QgsGeometryCheckError>> topologyErrors = mTopologyErrorStorage.value( mCurrentLayer );
     auto topologyError = topologyErrors.at( index.row() - layerErrors.size() );
 
     switch ( role )
@@ -82,7 +83,7 @@ QVariant QgsGeometryValidationModel::data( const QModelIndex &index, int role ) 
         mExpressionContext.setFeature( feature );
         const QVariant featureTitle = mDisplayExpression.evaluate( &mExpressionContext );
 
-        if ( featureTitle.isNull() )
+        if ( QgsVariantUtils::isNull( featureTitle ) )
         {
           return topologyError->description();
         }
@@ -162,7 +163,7 @@ QVariant QgsGeometryValidationModel::data( const QModelIndex &index, int role ) 
           featureTitle = FID_TO_STRING( featureItem.fid );
 
         if ( featureItem.errors.count() > 1 )
-          return tr( "%1: %n Errors", "", featureItem.errors.count() ).arg( featureTitle );
+          return tr( "%1: %n Error(s)", "", featureItem.errors.count() ).arg( featureTitle );
         else if ( featureItem.errors.count() == 1 )
           return tr( "%1: %2" ).arg( featureTitle, featureItem.errors.at( 0 )->description() );
         else
@@ -272,7 +273,6 @@ void QgsGeometryValidationModel::onSingleGeometryCheckCleared( QgsVectorLayer *l
   {
     endRemoveRows();
   }
-
 }
 
 void QgsGeometryValidationModel::onGeometryCheckCompleted( QgsVectorLayer *layer, QgsFeatureId fid, const QList<std::shared_ptr<QgsSingleGeometryCheckError>> &errors )
@@ -338,7 +338,7 @@ void QgsGeometryValidationModel::onGeometryCheckStarted( QgsVectorLayer *layer, 
   }
 }
 
-void QgsGeometryValidationModel::onTopologyChecksUpdated( QgsVectorLayer *layer, const QList<std::shared_ptr<QgsGeometryCheckError> > &errors )
+void QgsGeometryValidationModel::onTopologyChecksUpdated( QgsVectorLayer *layer, const QList<std::shared_ptr<QgsGeometryCheckError>> &errors )
 {
   if ( errors.empty() )
     return;
@@ -381,8 +381,8 @@ void QgsGeometryValidationModel::onTopologyErrorUpdated( QgsVectorLayer *layer, 
   if ( layer == mCurrentLayer )
   {
     int i = 0;
-    const QList< std::shared_ptr< QgsGeometryCheckError > > errors = mTopologyErrorStorage[layer];
-    for ( const std::shared_ptr< QgsGeometryCheckError > &currentError : errors )
+    const QList<std::shared_ptr<QgsGeometryCheckError>> errors = mTopologyErrorStorage[layer];
+    for ( const std::shared_ptr<QgsGeometryCheckError> &currentError : errors )
     {
       if ( currentError.get() == error )
       {
@@ -396,7 +396,7 @@ void QgsGeometryValidationModel::onTopologyErrorUpdated( QgsVectorLayer *layer, 
 
 int QgsGeometryValidationModel::errorsForFeature( QgsVectorLayer *layer, QgsFeatureId fid )
 {
-  const QList< FeatureErrors > layerErrors = mErrorStorage[layer];
+  const QList<FeatureErrors> layerErrors = mErrorStorage[layer];
   int idx = 0;
 
   for ( const FeatureErrors &feature : layerErrors )

@@ -17,10 +17,16 @@
 #define QGSATTRIBUTEEDITORELEMENT_H
 
 #include "qgis_core.h"
-#include "qgsrelation.h"
-#include "qgsoptionalexpression.h"
-#include "qgspropertycollection.h"
+#include "qgis_sip.h"
+#include "qgis.h"
 #include <QColor>
+#include <QFont>
+
+class QDomNode;
+class QDomElement;
+class QDomDocument;
+class QgsFields;
+class QgsReadWriteContext;
 
 /**
  * \ingroup core
@@ -40,16 +46,16 @@ class CORE_EXPORT QgsAttributeEditorElement SIP_ABSTRACT
     SIP_CONVERT_TO_SUBCLASS_CODE
     switch ( sipCpp->type() )
     {
-      case QgsAttributeEditorElement::AeTypeContainer:
+      case Qgis::AttributeEditorType::Container:
         sipType = sipType_QgsAttributeEditorContainer;
         break;
-      case QgsAttributeEditorElement::AeTypeField:
+      case Qgis::AttributeEditorType::Field:
         sipType = sipType_QgsAttributeEditorField;
         break;
-      case QgsAttributeEditorElement::AeTypeRelation:
+      case Qgis::AttributeEditorType::Relation:
         sipType = sipType_QgsAttributeEditorRelation;
         break;
-      case QgsAttributeEditorElement::AeTypeAction:
+      case Qgis::AttributeEditorType::Action:
         sipType = sipType_QgsAttributeEditorAction;
         break;
       default:
@@ -59,15 +65,43 @@ class CORE_EXPORT QgsAttributeEditorElement SIP_ABSTRACT
     SIP_END
 #endif
   public:
-    enum AttributeEditorType
+
+    /**
+     * The TabStyle struct defines color and font overrides for form fields, tabs and groups labels.
+     * \since QGIS 3.26
+     */
+    struct CORE_EXPORT LabelStyle
     {
-      AeTypeContainer, //!< A container
-      AeTypeField,     //!< A field
-      AeTypeRelation,  //!< A relation
-      AeTypeInvalid,   //!< Invalid
-      AeTypeQmlElement, //!< A QML element
-      AeTypeHtmlElement, //!< A HTML element
-      AeTypeAction //!< A layer action element (since QGIS 3.22)
+
+      //! Label font
+      QColor color;
+
+      //! Label font
+      QFont font;
+
+      //! Override label color
+      bool overrideColor = false;
+
+      //! Override label font
+      bool overrideFont = false;
+
+      /**
+       * Reads configuration from \a node.
+       * \note Not available in Python bindings
+       */
+      void readXml( const QDomNode &node ) SIP_SKIP;
+
+      /**
+       * Creates the XML configuration from \a document.
+       * \note Not available in Python bindings
+       */
+      QDomElement writeXml( QDomDocument &document ) const SIP_SKIP;
+
+      /**
+       * Returns TRUE if the style is equal to \a other.
+       * \note Not available in Python bindings
+       */
+      bool operator==( LabelStyle const  &other ) const SIP_SKIP;
     };
 
     /**
@@ -77,11 +111,10 @@ class CORE_EXPORT QgsAttributeEditorElement SIP_ABSTRACT
      * \param name
      * \param parent
      */
-    QgsAttributeEditorElement( AttributeEditorType type, const QString &name, QgsAttributeEditorElement *parent = nullptr )
+    QgsAttributeEditorElement( Qgis::AttributeEditorType type, const QString &name, QgsAttributeEditorElement *parent = nullptr )
       : mType( type )
       , mName( name )
       , mParent( parent )
-      , mShowLabel( true )
     {}
 
     virtual ~QgsAttributeEditorElement() = default;
@@ -105,12 +138,11 @@ class CORE_EXPORT QgsAttributeEditorElement SIP_ABSTRACT
      *
      * \returns The type
      */
-    AttributeEditorType type() const { return mType; }
+    Qgis::AttributeEditorType type() const { return mType; }
 
     /**
      * Gets the parent of this element.
      *
-     * \since QGIS 3.0
      */
     QgsAttributeEditorElement *parent() const { return mParent; }
 
@@ -126,29 +158,84 @@ class CORE_EXPORT QgsAttributeEditorElement SIP_ABSTRACT
     /**
      * Returns a clone of this element. To be implemented by subclasses.
      *
-     * \since QGIS 3.0
      */
     virtual QgsAttributeEditorElement *clone( QgsAttributeEditorElement *parent ) const = 0 SIP_FACTORY;
 
     /**
      * Controls if this element should be labeled with a title (field, relation or groupname).
      *
-     * \since QGIS 2.18
      */
     bool showLabel() const;
 
     /**
      * Controls if this element should be labeled with a title (field, relation or groupname).
-     * \since QGIS 2.18
      */
     void setShowLabel( bool showLabel );
 
+    /**
+     * Returns the horizontal stretch factor for the element.
+     *
+     * \see setHorizontalStretch()
+     * \see verticalStretch()
+     *
+     * \since QGIS 3.32
+     */
+    int horizontalStretch() const { return mHorizontalStretch; }
+
+    /**
+     * Sets the horizontal \a stretch factor for the element.
+     *
+     * \see horizontalStretch()
+     * \see setVerticalStretch()
+     *
+     * \since QGIS 3.32
+     */
+    void setHorizontalStretch( int stretch ) { mHorizontalStretch = stretch; }
+
+    /**
+     * Returns the vertical stretch factor for the element.
+     *
+     * \see setVerticalStretch()
+     * \see horizontalStretch()
+     *
+     * \since QGIS 3.32
+     */
+    int verticalStretch() const { return mVerticalStretch; }
+
+    /**
+     * Sets the vertical \a stretch factor for the element.
+     *
+     * \see verticalStretch()
+     * \see setHorizontalStretch()
+     *
+     * \since QGIS 3.32
+     */
+    void setVerticalStretch( int stretch ) { mVerticalStretch = stretch; }
+
+    /**
+     * Returns the label style.
+     * \see setLabelStyle()
+     * \since QGIS 3.26
+     */
+    LabelStyle labelStyle() const;
+
+    /**
+     * Sets the \a labelStyle.
+     * \see labelStyle()
+     * \since QGIS 3.26
+     */
+    void setLabelStyle( const LabelStyle &labelStyle );
+
+
   protected:
 #ifndef SIP_RUN
-    AttributeEditorType mType;
+    Qgis::AttributeEditorType mType = Qgis::AttributeEditorType::Invalid;
     QString mName;
     QgsAttributeEditorElement *mParent = nullptr;
-    bool mShowLabel;
+    bool mShowLabel = true;
+    int mHorizontalStretch = 0;
+    int mVerticalStretch = 0;
+    LabelStyle mLabelStyle;
 #endif
 
   private:
@@ -156,7 +243,6 @@ class CORE_EXPORT QgsAttributeEditorElement SIP_ABSTRACT
     /**
      * Should be implemented by subclasses to save type specific configuration.
      *
-     * \since QGIS 2.18
      */
     virtual void saveConfiguration( QDomElement &elem, QDomDocument &doc ) const = 0;
 
@@ -170,7 +256,6 @@ class CORE_EXPORT QgsAttributeEditorElement SIP_ABSTRACT
      * All subclasses need to overwrite this method and return a type specific identifier.
      * Needs to be XML key compatible.
      *
-     * \since QGIS 2.18
      */
     virtual QString typeIdentifier() const = 0;
 

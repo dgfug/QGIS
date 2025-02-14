@@ -3,7 +3,7 @@
  *                                                                      *
  * src/gui/qgsrubberband.h                                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -29,12 +29,17 @@ for tracking the mouse while drawing polylines or polygons.
 %End
 %ConvertToSubClassCode
     if ( dynamic_cast<QgsRubberBand *>( sipCpp ) )
+    {
       sipType = sipType_QgsRubberBand;
+      // We need to tweak the pointer as sip believes it is single inheritance
+      // from QgsMapCanvasItem, but the raw address of QgsRubberBand (sipCpp)
+      // is actually a QObject
+      *sipCppRet = dynamic_cast<QgsRubberBand *>( sipCpp );
+    }
     else
       sipType = nullptr;
 %End
   public:
-
 
     enum IconType
     {
@@ -58,7 +63,7 @@ for tracking the mouse while drawing polylines or polygons.
       ICON_SVG
     };
 
-    QgsRubberBand( QgsMapCanvas *mapCanvas /TransferThis/, QgsWkbTypes::GeometryType geometryType = QgsWkbTypes::LineGeometry );
+    QgsRubberBand( QgsMapCanvas *mapCanvas /TransferThis/, Qgis::GeometryType geometryType = Qgis::GeometryType::Line );
 %Docstring
 Creates a new RubberBand.
 
@@ -66,7 +71,7 @@ Creates a new RubberBand.
                   Its CRS will be used to map points onto screen coordinates.
                   The ownership is transferred to this canvas.
 :param geometryType: Defines how the data should be drawn onto the screen.
-                     :py:class:`QgsWkbTypes`.LineGeometry, :py:class:`QgsWkbTypes`.PolygonGeometry or :py:class:`QgsWkbTypes`.PointGeometry
+                     :py:class:`Qgis`.GeometryType.Line, :py:class:`Qgis`.GeometryType.Polygon or :py:class:`Qgis`.GeometryType.Point
 %End
     ~QgsRubberBand();
 
@@ -83,8 +88,6 @@ Shorthand method to set fill and stroke color with a single call.
 Sets the fill color for the rubberband
 
 :param color: The color used to render this rubberband
-
-.. versionadded:: 2.6
 %End
 
     QColor fillColor() const;
@@ -97,8 +100,6 @@ Returns the current fill color.
 Sets the stroke color for the rubberband
 
 :param color: The color used to render this rubberband
-
-.. versionadded:: 2.6
 %End
 
     QColor strokeColor() const;
@@ -112,8 +113,6 @@ Sets a secondary stroke color for the rubberband which will be drawn under the m
 Set to an invalid color to avoid drawing the secondary stroke.
 
 :param color: The color used to render a secondary stroke color to this rubberband
-
-.. versionadded:: 3.0
 %End
 
     QColor secondaryStrokeColor() const;
@@ -121,7 +120,7 @@ Set to an invalid color to avoid drawing the secondary stroke.
 Returns the current secondary stroke color.
 %End
 
-    void setWidth( int width );
+    void setWidth( double width );
 %Docstring
 Sets the width of the line. Stroke width for polygon.
 
@@ -157,12 +156,12 @@ Calling this function automatically calls setIcon(ICON_SVG)
 Returns the current icon type to highlight point geometries.
 %End
 
-    void setIconSize( int iconSize );
+    void setIconSize( double iconSize );
 %Docstring
 Sets the size of the point icons
 %End
 
-    int iconSize() const;
+    double iconSize() const;
 %Docstring
 Returns the current icon size of the point icons.
 %End
@@ -177,12 +176,12 @@ Sets the style of the line
 Sets the style of the brush
 %End
 
-    void reset( QgsWkbTypes::GeometryType geometryType = QgsWkbTypes::LineGeometry );
+    void reset( Qgis::GeometryType geometryType = Qgis::GeometryType::Line );
 %Docstring
 Clears all the geometries in this rubberband.
 Sets the representation type according to geometryType.
 
-:param geometryType: Defines how the data should be drawn onto the screen. (Use Qgis.Line, Qgis.Polygon or Qgis.Point)
+:param geometryType: Defines how the data should be drawn onto the screen. (Use :py:class:`Qgis`.Line, :py:class:`Qgis`.Polygon or :py:class:`Qgis`.Point)
 %End
 
     void addPoint( const QgsPointXY &p, bool doUpdate = true, int geometryIndex = 0, int ringIndex = 0 );
@@ -205,8 +204,6 @@ first vertex.
 :param doUpdate: set to ``True`` to update the map canvas immediately
 :param geometryIndex: The index of the feature part (in case of multipart geometries)
 :param ringIndex: The index of the polygon ring (in case of polygons with holes)
-
-.. versionadded:: 2.16
 %End
 
     void removePoint( int index = 0, bool doUpdate = true, int geometryIndex = 0, int ringIndex = 0 );
@@ -306,8 +303,6 @@ to the canvas CRS.
 
 If additional geometries are to be added then set ``doUpdate`` to ``False`` to defer costly repaint and bounding rectangle calculations for better performance.
 After adding the final geometry :py:func:`~QgsRubberBand.updatePosition` should be called.
-
-.. versionadded:: 3.0
 %End
 
     void setTranslationOffset( double dx, double dy );
@@ -376,14 +371,12 @@ Ownership of ``symbol`` is transferred to the rubberband.
    Setting a symbol for the rubberband overrides any other appearance setting,
    such as the :py:func:`~QgsRubberBand.strokeColor` or :py:func:`~QgsRubberBand.width`.
 
-
 .. seealso:: :py:func:`setSymbol`
 
 .. versionadded:: 3.20
 %End
 
   protected:
-
     virtual void paint( QPainter *p );
 
 %Docstring
@@ -420,5 +413,5 @@ Recalculates needed rectangle
  *                                                                      *
  * src/gui/qgsrubberband.h                                              *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/

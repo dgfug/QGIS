@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """QGIS Unit tests for postgres transaction groups.
 
 .. note:: This program is free software; you can redistribute it and/or modify
@@ -6,27 +5,27 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
 (at your option) any later version.
 """
-__author__ = 'Nyall Dawson'
-__date__ = '11/06/2018'
-__copyright__ = 'Copyright 2018, The QGIS Project'
 
-import qgis  # NOQA
+__author__ = "Nyall Dawson"
+__date__ = "11/06/2018"
+__copyright__ = "Copyright 2018, The QGIS Project"
 
 import os
 
 from qgis.core import (
-    QgsVectorLayer,
+    Qgis,
+    QgsDataSourceUri,
     QgsProject,
     QgsTransaction,
-    QgsDataSourceUri
+    QgsVectorLayer,
 )
-
-from qgis.testing import start_app, unittest
+import unittest
+from qgis.testing import start_app, QgisTestCase
 
 start_app()
 
 
-class TestQgsPostgresTransaction(unittest.TestCase):
+class TestQgsPostgresTransaction(QgisTestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -34,22 +33,29 @@ class TestQgsPostgresTransaction(unittest.TestCase):
         Setup the involved layers and relations for a n:m relation
         :return:
         """
-        cls.dbconn = 'service=qgis_test'
-        if 'QGIS_PGTEST_DB' in os.environ:
-            cls.dbconn = os.environ['QGIS_PGTEST_DB']
+        super().setUpClass()
+        cls.dbconn = "service=qgis_test"
+        if "QGIS_PGTEST_DB" in os.environ:
+            cls.dbconn = os.environ["QGIS_PGTEST_DB"]
         # Create test layer
-        cls.vl_b = QgsVectorLayer(cls.dbconn + ' sslmode=disable key=\'pk\' table="qgis_test"."books" sql=', 'books',
-                                  'postgres')
-        cls.vl_a = QgsVectorLayer(cls.dbconn + ' sslmode=disable key=\'pk\' table="qgis_test"."authors" sql=',
-                                  'authors', 'postgres')
+        cls.vl_b = QgsVectorLayer(
+            cls.dbconn + ' sslmode=disable key=\'pk\' table="qgis_test"."books" sql=',
+            "books",
+            "postgres",
+        )
+        cls.vl_a = QgsVectorLayer(
+            cls.dbconn + ' sslmode=disable key=\'pk\' table="qgis_test"."authors" sql=',
+            "authors",
+            "postgres",
+        )
 
         QgsProject.instance().addMapLayer(cls.vl_b)
         QgsProject.instance().addMapLayer(cls.vl_a)
 
         cls.relMgr = QgsProject.instance().relationManager()
 
-        assert (cls.vl_a.isValid())
-        assert (cls.vl_b.isValid())
+        assert cls.vl_a.isValid()
+        assert cls.vl_b.isValid()
 
     def startTransaction(self):
         """
@@ -81,7 +87,7 @@ class TestQgsPostgresTransaction(unittest.TestCase):
         conn_string = QgsDataSourceUri(self.vl_b.source()).connectionInfo()
 
         # No transaction group.
-        QgsProject.instance().setAutoTransaction(False)
+        QgsProject.instance().setTransactionMode(Qgis.TransactionMode.Disabled)
         noTg = QgsProject.instance().transactionGroup("postgres", conn_string)
         self.assertIsNone(noTg)
 
@@ -92,7 +98,7 @@ class TestQgsPostgresTransaction(unittest.TestCase):
         self.rollbackTransaction()
 
         # with auto transactions
-        QgsProject.instance().setAutoTransaction(True)
+        QgsProject.instance().setTransactionMode(Qgis.TransactionMode.AutomaticGroups)
         self.startTransaction()
         noTg = QgsProject.instance().transactionGroup("postgres", conn_string)
         self.assertIsNotNone(noTg)
@@ -108,12 +114,19 @@ class TestQgsPostgresTransaction(unittest.TestCase):
         """Not particularly related to PG but it fits here nicely: test GH #39282"""
 
         project = QgsProject()
-        project.setAutoTransaction(True)
+        project.setTransactionMode(Qgis.TransactionMode.AutomaticGroups)
 
-        vl_b = QgsVectorLayer(self.dbconn + ' sslmode=disable key=\'pk\' table="qgis_test"."books" sql=', 'books',
-                              'postgres')
-        vl_a = QgsVectorLayer(self.dbconn + ' sslmode=disable key=\'pk\' table="qgis_test"."authors" sql=',
-                              'authors', 'postgres')
+        vl_b = QgsVectorLayer(
+            self.dbconn + ' sslmode=disable key=\'pk\' table="qgis_test"."books" sql=',
+            "books",
+            "postgres",
+        )
+        vl_a = QgsVectorLayer(
+            self.dbconn
+            + ' sslmode=disable key=\'pk\' table="qgis_test"."authors" sql=',
+            "authors",
+            "postgres",
+        )
 
         project.addMapLayers([vl_a, vl_b])
 
@@ -126,5 +139,5 @@ class TestQgsPostgresTransaction(unittest.TestCase):
         self.assertTrue(vl_b.isEditable())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

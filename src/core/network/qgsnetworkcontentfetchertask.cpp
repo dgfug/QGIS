@@ -17,16 +17,18 @@
  ***************************************************************************/
 
 #include "qgsnetworkcontentfetchertask.h"
+#include "moc_qgsnetworkcontentfetchertask.cpp"
 #include "qgsnetworkcontentfetcher.h"
+#include "qgsnetworkreply.h"
 #include <QEventLoop>
 
-QgsNetworkContentFetcherTask::QgsNetworkContentFetcherTask( const QUrl &url, const QString &authcfg, QgsTask::Flags flags )
-  : QgsNetworkContentFetcherTask( QNetworkRequest( url ), authcfg, flags )
+QgsNetworkContentFetcherTask::QgsNetworkContentFetcherTask( const QUrl &url, const QString &authcfg, QgsTask::Flags flags, const QString &description )
+  : QgsNetworkContentFetcherTask( QNetworkRequest( url ), authcfg, flags, description )
 {
 }
 
-QgsNetworkContentFetcherTask::QgsNetworkContentFetcherTask( const QNetworkRequest &request, const QString &authcfg, QgsTask::Flags flags )
-  : QgsTask( tr( "Fetching %1" ).arg( request.url().toString() ), flags )
+QgsNetworkContentFetcherTask::QgsNetworkContentFetcherTask( const QNetworkRequest &request, const QString &authcfg, QgsTask::Flags flags, const QString &description )
+  : QgsTask( description.isEmpty() ? tr( "Fetching %1" ).arg( request.url().toString() ) : description, flags )
   , mRequest( request )
   , mAuthcfg( authcfg )
 {
@@ -48,7 +50,7 @@ bool QgsNetworkContentFetcherTask::run()
   // different thread because they have been created in different thread.
 
   connect( mFetcher, &QgsNetworkContentFetcher::finished, &loop, &QEventLoop::quit );
-  connect( mFetcher, &QgsNetworkContentFetcher::downloadProgress, &loop, [ = ]( qint64 bytesReceived, qint64 bytesTotal )
+  connect( mFetcher, &QgsNetworkContentFetcher::downloadProgress, &loop, [this]( qint64 bytesReceived, qint64 bytesTotal )
   {
     if ( !isCanceled() && bytesTotal > 0 )
     {
@@ -88,6 +90,11 @@ void QgsNetworkContentFetcherTask::cancel()
 QNetworkReply *QgsNetworkContentFetcherTask::reply()
 {
   return mFetcher ? mFetcher->reply() : nullptr;
+}
+
+QString QgsNetworkContentFetcherTask::contentDispositionFilename() const
+{
+  return mFetcher ? mFetcher->contentDispositionFilename() : QString();
 }
 
 QString QgsNetworkContentFetcherTask::contentAsString() const

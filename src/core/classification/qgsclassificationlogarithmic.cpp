@@ -29,16 +29,16 @@ QgsClassificationLogarithmic::QgsClassificationLogarithmic()
 }
 
 
-QgsClassificationMethod *QgsClassificationLogarithmic::clone() const
+std::unique_ptr<QgsClassificationMethod> QgsClassificationLogarithmic::clone() const
 {
-  QgsClassificationLogarithmic *c = new QgsClassificationLogarithmic();
-  copyBase( c );
+  auto c = std::make_unique< QgsClassificationLogarithmic >();
+  copyBase( c.get() );
   return c;
 }
 
 QString QgsClassificationLogarithmic::name() const
 {
-  return QObject::tr( "Logarithmic scale" );
+  return QObject::tr( "Logarithmic Scale" );
 }
 
 QString QgsClassificationLogarithmic::id() const
@@ -51,8 +51,9 @@ QIcon QgsClassificationLogarithmic::icon() const
   return QgsApplication::getThemeIcon( "classification_methods/mClassificationLogarithmic.svg" );
 }
 
-QList<double> QgsClassificationLogarithmic::calculateBreaks( double &minimum, double &maximum, const QList<double> &values, int nclasses )
+QList<double> QgsClassificationLogarithmic::calculateBreaks( double &minimum, double &maximum, const QList<double> &values, int nclasses, QString &error )
 {
+  Q_UNUSED( error )
   const QgsProcessingContext context;
   const QgsProcessingParameterDefinition *def = parameterDefinition( QStringLiteral( "ZERO_NEG_VALUES_HANDLE" ) );
   const NegativeValueHandling nvh = static_cast< NegativeValueHandling >( QgsProcessingParameters::parameterAsEnum( def, parameterValues(), context ) );
@@ -94,15 +95,27 @@ QList<double> QgsClassificationLogarithmic::calculateBreaks( double &minimum, do
   }
 
   // get the min/max in log10 scale
-  const double logMin = std::floor( std::log10( positiveMinimum ) );
+  const double actualLogMin { std::log10( positiveMinimum ) };
+  double logMin = std::floor( actualLogMin );
   const double logMax = std::ceil( std::log10( maximum ) );
 
   // calculate pretty breaks
-  breaks.append( QgsSymbolLayerUtils::prettyBreaks( logMin, logMax, nclasses ) );
+  QList<double> prettyBreaks { QgsSymbolLayerUtils::prettyBreaks( logMin, logMax, nclasses ) };
+
+  // If case the first class greater than the actual log min increase the minimum log
+  while ( ! prettyBreaks.isEmpty() && prettyBreaks.first() < actualLogMin )
+  {
+    logMin += 1.0;
+    prettyBreaks = QgsSymbolLayerUtils::prettyBreaks( logMin, logMax, nclasses );
+  }
+
+  breaks.append( prettyBreaks );
 
   // create the value
   for ( int i = 0; i < breaks.count(); i++ )
+  {
     breaks[i] = std::pow( 10, breaks.at( i ) );
+  }
 
   return breaks;
 }
@@ -121,7 +134,7 @@ QString QgsClassificationLogarithmic::valueToLabel( double value ) const
     }
     else
     {
-      return QString( QStringLiteral( "10^%1" ) ).arg( std::log10( value ) );
+      return QString( QStringLiteral( "10^%L1" ) ).arg( std::log10( value ) );
     }
   }
 }
@@ -142,7 +155,7 @@ QString QgsClassificationLogarithmic::labelForRange( double lowerValue, double u
       break;
   }
 
-  return labelFormat().arg( lowerLabel ).arg( upperLabel );
+  return labelFormat().arg( lowerLabel, upperLabel );
 }
 
 bool QgsClassificationLogarithmic::valuesRequired() const

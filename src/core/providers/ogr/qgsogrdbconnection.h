@@ -22,6 +22,7 @@
 
 #include <QStringList>
 #include "qgis_sip.h"
+#include "qgssettingsentryimpl.h"
 
 ///@cond PRIVATE
 #define SIP_NO_FILE
@@ -34,12 +35,15 @@ class CORE_EXPORT QgsOgrDbConnection : public QObject
     Q_OBJECT
 
   public:
+    static const QgsSettingsEntryString *settingsOgrConnectionPath;
+    static const QgsSettingsEntryString *settingsOgrConnectionSelected;
+
     //! Constructor
     explicit QgsOgrDbConnection( const QString &connName, const QString &settingsKey );
 
     static const QStringList connectionList( const QString &driverName = QStringLiteral( "GPKG" ) );
     static void deleteConnection( const QString &connName );
-    static QString selectedConnection( const QString &settingsKey );
+    static QString selectedConnection( const QString &driverName );
     static void setSelectedConnection( const QString &connName, const QString &settingsKey );
 
   public:
@@ -53,7 +57,7 @@ class CORE_EXPORT QgsOgrDbConnection : public QObject
     QString path( ) const { return mPath; }
     //! Returns the connection name
     QString name() const { return mConnName; }
-    //! Sets the \a path fo the connection
+    //! Sets the \a path for the connection
     void setPath( const QString &path );
     //! Store the connection data in the settings
     void save();
@@ -61,8 +65,6 @@ class CORE_EXPORT QgsOgrDbConnection : public QObject
     bool allowProjectsInDatabase();
 
   private:
-    static QString fullKey( const QString &settingsKey );
-    static QString connectionsPath( const QString &settingsKey );
     QString mConnName;
     QString mPath;
     QString mSettingsKey;

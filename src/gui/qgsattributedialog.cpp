@@ -16,12 +16,14 @@
  ***************************************************************************/
 
 #include "qgsattributedialog.h"
+#include "moc_qgsattributedialog.cpp"
 
 #include "qgsattributeform.h"
 #include "qgshighlight.h"
-#include "qgsapplication.h"
 #include "qgssettings.h"
 #include "qgsmessagebar.h"
+#include "qgsactionmenu.h"
+#include "qgsmaplayeractioncontext.h"
 
 QgsAttributeDialog::QgsAttributeDialog( QgsVectorLayer *vl, QgsFeature *thepFeature, bool featureOwner, QWidget *parent, bool showDialogButtons, const QgsAttributeEditorContext &context )
   : QDialog( parent )
@@ -77,17 +79,28 @@ void QgsAttributeDialog::accept()
     if ( error.isEmpty() )
       error = tr( "An unknown error was encountered saving attributes" );
 
-    mMessageBar->pushMessage( QString(),
-                              error,
-                              Qgis::MessageLevel::Critical );
+    mMessageBar->pushMessage( QString(), error, Qgis::MessageLevel::Critical );
   }
 }
 
 void QgsAttributeDialog::show()
 {
   QDialog::show();
+
   raise();
   activateWindow();
+}
+
+void QgsAttributeDialog::showEvent( QShowEvent *event )
+{
+  QDialog::showEvent( event );
+  // We cannot call restoreGeometry() in the constructor or init because the dialog is not yet visible
+  // and the geometry restoration will not take the window decorations (frame) into account.
+  if ( mFirstShow )
+  {
+    mFirstShow = false;
+    restoreGeometry();
+  }
 }
 
 void QgsAttributeDialog::reject()
@@ -125,14 +138,13 @@ void QgsAttributeDialog::init( QgsVectorLayer *layer, QgsFeature *feature, const
   connect( layer, &QObject::destroyed, this, &QWidget::close );
 
   mMenu = new QgsActionMenu( layer, mAttributeForm->feature(), QStringLiteral( "Feature" ), this );
-  if ( !mMenu->menuActions().isEmpty() )
+  mMenu->setActionContextGenerator( this );
+  if ( !mMenu->isEmpty() )
   {
-    QMenuBar *menuBar = new QMenuBar( this );
-    menuBar->addMenu( mMenu );
-    layout()->setMenuBar( menuBar );
+    mMenuBar = new QMenuBar( this );
+    mMenuBar->addMenu( mMenu );
+    layout()->setMenuBar( mMenuBar );
   }
-
-  restoreGeometry();
   focusNextChild();
 }
 
@@ -140,6 +152,19 @@ void QgsAttributeDialog::setMode( QgsAttributeEditorContext::Mode mode )
 {
   mAttributeForm->setMode( mode );
   mMenu->setMode( mode );
+
+  if ( !mMenu->isEmpty() && !mMenuBar )
+  {
+    mMenuBar = new QMenuBar( this );
+    mMenuBar->addMenu( mMenu );
+    layout()->setMenuBar( mMenuBar );
+  }
+  else if ( mMenu->isEmpty() && mMenuBar )
+  {
+    layout()->setMenuBar( nullptr );
+    delete mMenuBar;
+    mMenuBar = nullptr;
+  }
 }
 
 bool QgsAttributeDialog::event( QEvent *e )
@@ -155,4 +180,12 @@ bool QgsAttributeDialog::event( QEvent *e )
 void QgsAttributeDialog::setExtraContextScope( QgsExpressionContextScope *extraScope )
 {
   mAttributeForm->setExtraContextScope( extraScope );
+}
+
+QgsMapLayerActionContext QgsAttributeDialog::createActionContext()
+{
+  QgsMapLayerActionContext context;
+  context.setAttributeDialog( this );
+  context.setMessageBar( mMessageBar );
+  return context;
 }

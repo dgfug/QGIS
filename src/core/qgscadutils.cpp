@@ -14,11 +14,15 @@
  *                                                                         *
  ***************************************************************************/
 
+#include <QQueue>
+
 #include "qgscadutils.h"
 
 #include "qgslogger.h"
 #include "qgssnappingutils.h"
 #include "qgsgeometryutils.h"
+#include "qgsgeometrycollection.h"
+#include "qgscurvepolygon.h"
 
 // tolerances for soft constraints (last values, and common angles)
 // for angles, both tolerance in pixels and degrees are used for better performance
@@ -40,8 +44,12 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
   res.valid = true;
   res.softLockCommonAngle = -1;
 
-  // try to snap to anything
-  const QgsPointLocator::Match snapMatch = ctx.snappingUtils->snapToMap( originalMapPoint, nullptr, true );
+  res.softLockLineExtension = Qgis::LineExtensionSide::NoVertex;
+  res.softLockX = std::numeric_limits<double>::quiet_NaN();
+  res.softLockY = std::numeric_limits<double>::quiet_NaN();
+
+  // try to snap to project layer(s) as well as visible construction guides
+  QgsPointLocator::Match snapMatch = ctx.snappingUtils->snapToMap( originalMapPoint, nullptr, true );
   res.snapMatch = snapMatch;
   QgsPointXY point = snapMatch.isValid() ? snapMatch.point() : originalMapPoint;
   QgsPointXY edgePt0, edgePt1;
@@ -55,6 +63,12 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
   {
     res.edgeMatch = QgsPointLocator::Match();
   }
+
+  int numberOfHardLock = 0;
+  if ( ctx.xConstraint.locked ) ++numberOfHardLock;
+  if ( ctx.yConstraint.locked ) ++numberOfHardLock;
+  if ( ctx.angleConstraint.locked ) ++numberOfHardLock;
+  if ( ctx.distanceConstraint.locked ) ++numberOfHardLock;
 
   QgsPointXY previousPt, penultimatePt;
   if ( ctx.cadPoints().count() >= 2 )
@@ -89,6 +103,21 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
       }
     }
   }
+  else if ( numberOfHardLock < 2 && ctx.xyVertexConstraint.locked )
+  {
+    for ( QgsPointLocator::Match snapMatch : ctx.lockedSnapVertices() )
+    {
+      const QgsPointXY vertex = snapMatch.point();
+      if ( vertex.isEmpty() )
+        continue;
+
+      if ( std::abs( point.x() - vertex.x() ) / ctx.mapUnitsPerPixel < SOFT_CONSTRAINT_TOLERANCE_PIXEL )
+      {
+        point.setX( vertex.x() );
+        res.softLockX = vertex.x();
+      }
+    }
+  }
 
   // *****************************
   // ---- Y constraint
@@ -117,10 +146,28 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
       }
     }
   }
+  else if ( numberOfHardLock < 2 && ctx.xyVertexConstraint.locked )
+  {
+    for ( QgsPointLocator::Match snapMatch : ctx.lockedSnapVertices() )
+    {
+      const QgsPointXY vertex = snapMatch.point();
+      if ( vertex.isEmpty() )
+        continue;
+
+      if ( std::abs( point.y() - vertex.y() ) / ctx.mapUnitsPerPixel < SOFT_CONSTRAINT_TOLERANCE_PIXEL )
+      {
+        point.setY( vertex.y() );
+        res.softLockY = vertex.y();
+      }
+    }
+  }
 
   // *****************************
   // ---- Common Angle constraint
-  if ( !ctx.angleConstraint.locked && ctx.cadPoints().count() >= 2 && ctx.commonAngleConstraint.locked && ctx.commonAngleConstraint.value != 0 )
+  if ( numberOfHardLock < 2 && !ctx.angleConstraint.locked && ctx.cadPoints().count() >= 2 && ctx.commonAngleConstraint.locked && ctx.commonAngleConstraint.value != 0
+       // Skip common angle constraint if the snapping to features has priority
+       && ( ! snapMatch.isValid() || ! ctx.snappingToFeaturesOverridesCommonAngle )
+     )
   {
     const double commonAngle = ctx.commonAngleConstraint.value * M_PI / 180;
     // see if soft common angle constraint should be performed
@@ -189,7 +236,7 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
     {
       // do nothing if both X,Y are already locked
     }
-    else if ( ctx.xConstraint.locked )
+    else if ( ctx.xConstraint.locked || !std::isnan( res.softLockX ) )
     {
       if ( qgsDoubleNear( cosa, 0.0 ) )
       {
@@ -205,7 +252,7 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
         point.setY( previousPt.y() + x * sina / cosa );
       }
     }
-    else if ( ctx.yConstraint.locked )
+    else if ( ctx.yConstraint.locked || !std::isnan( res.softLockY ) )
     {
       if ( qgsDoubleNear( sina, 0.0 ) )
       {
@@ -255,23 +302,175 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
   }
 
   // *****************************
+  // ---- Line Extension Constraint
+
+  QgsPointXY lineExtensionPt1;
+  QgsPointXY lineExtensionPt2;
+  if ( numberOfHardLock < 2 && ctx.lineExtensionConstraint.locked && ctx.lockedSnapVertices().length() != 0 )
+  {
+    const QgsPointLocator::Match snap = ctx.lockedSnapVertices().last();
+    const QgsPointXY extensionPoint = snap.point();
+
+    if ( snap.layer() && !extensionPoint.isEmpty() )
+    {
+      auto checkLineExtension = [&]( QgsPoint vertex )
+      {
+        if ( vertex.isEmpty() )
+        {
+          return false;
+        }
+
+        const double distance = QgsGeometryUtils::distToInfiniteLine(
+                                  QgsPoint( point ), QgsPoint( extensionPoint ), vertex );
+
+        if ( distance / ctx.mapUnitsPerPixel < SOFT_CONSTRAINT_TOLERANCE_PIXEL )
+        {
+          if ( ctx.xConstraint.locked || !std::isnan( res.softLockX ) )
+          {
+            QgsPoint intersection;
+            const bool intersect = QgsGeometryUtils::lineIntersection(
+                                     QgsPoint( point ), QgsVector( 0, 1 ),
+                                     QgsPoint( extensionPoint ), QgsPoint( extensionPoint ) - vertex,
+                                     intersection
+                                   );
+            if ( intersect )
+            {
+              point = QgsPointXY( intersection );
+            }
+          }
+          else if ( ctx.yConstraint.locked || !std::isnan( res.softLockY ) )
+          {
+            QgsPoint intersection;
+            const bool intersect = QgsGeometryUtils::lineIntersection(
+                                     QgsPoint( point ), QgsVector( 1, 0 ),
+                                     QgsPoint( extensionPoint ), QgsPoint( extensionPoint ) - vertex,
+                                     intersection
+                                   );
+            if ( intersect )
+            {
+              point = QgsPointXY( intersection );
+            }
+          }
+          else if ( angleLocked )
+          {
+            const double angleValue = angleValueDeg * M_PI / 180;
+            const double cosa = std::cos( angleValue );
+            const double sina = std::sin( angleValue );
+
+            QgsPoint intersection;
+            QgsGeometryUtils::lineIntersection(
+              QgsPoint( previousPt ), QgsVector( cosa, sina ),
+              QgsPoint( extensionPoint ), QgsPoint( extensionPoint ) - vertex,
+              intersection
+            );
+            point = QgsPointXY( intersection );
+          }
+          else
+          {
+            double angleValue = std::atan2( extensionPoint.y() - vertex.y(),
+                                            extensionPoint.x() - vertex.x() );
+
+            const double cosa = std::cos( angleValue );
+            const double sina = std::sin( angleValue );
+            const double v = ( point.x() - extensionPoint.x() ) * cosa + ( point.y() - extensionPoint.y() ) * sina;
+
+            point.setX( extensionPoint.x() + cosa * v );
+            point.setY( extensionPoint.y() + sina * v );
+          }
+
+          return true;
+        }
+        return false;
+      };
+
+      QgsFeatureRequest req;
+      req.setFilterFid( snap.featureId() );
+      req.setNoAttributes();
+      req.setDestinationCrs( ctx.snappingUtils->mapSettings().destinationCrs(), ctx.snappingUtils->mapSettings().transformContext() );
+      QgsFeatureIterator featureIt = snap.layer()->getFeatures( req );
+
+      QgsFeature feature;
+      featureIt.nextFeature( feature );
+
+      const QgsGeometry geometry = feature.geometry();
+      const QgsAbstractGeometry *geom = geometry.constGet();
+
+      QgsVertexId vertexId;
+      geometry.vertexIdFromVertexNr( snap.vertexIndex(), vertexId );
+      if ( vertexId.isValid() )
+      {
+        QgsVertexId previousVertexId;
+        QgsVertexId nextVertexId;
+        geom->adjacentVertices( vertexId, previousVertexId, nextVertexId );
+
+        bool checked = checkLineExtension( geom->vertexAt( previousVertexId ) );
+        if ( checked )
+        {
+          res.softLockLineExtension = Qgis::LineExtensionSide::BeforeVertex;
+          lineExtensionPt1 = snap.point();
+          lineExtensionPt2 = QgsPointXY( geom->vertexAt( previousVertexId ) );
+        }
+
+        checked = checkLineExtension( geom->vertexAt( nextVertexId ) );
+        if ( checked )
+        {
+          res.softLockLineExtension = Qgis::LineExtensionSide::AfterVertex;
+          lineExtensionPt1 = snap.point();
+          lineExtensionPt2 = QgsPointXY( geom->vertexAt( nextVertexId ) );
+        }
+      }
+    }
+  }
+
+  // *****************************
   // ---- Distance constraint
   if ( ctx.distanceConstraint.locked && ctx.cadPoints().count() >= 2 )
   {
-    if ( ctx.xConstraint.locked || ctx.yConstraint.locked )
+    if ( ctx.xConstraint.locked || ctx.yConstraint.locked
+         || !std::isnan( res.softLockX ) || !std::isnan( res.softLockY ) )
     {
       // perform both to detect errors in constraints
-      if ( ctx.xConstraint.locked )
+      if ( ctx.xConstraint.locked || !std::isnan( res.softLockX ) )
       {
-        const QgsPointXY verticalPt0( ctx.xConstraint.value, point.y() );
-        const QgsPointXY verticalPt1( ctx.xConstraint.value, point.y() + 1 );
-        res.valid &= QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, verticalPt0, verticalPt1, point );
+        const QgsPointXY verticalPt0( point.x(), point.y() );
+        const QgsPointXY verticalPt1( point.x(), point.y() + 1 );
+        const bool intersect = QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, verticalPt0, verticalPt1, point );
+
+        if ( ctx.xConstraint.locked )
+        {
+          res.valid &= intersect;
+        }
+        else if ( !intersect )
+        {
+          res.softLockX = std::numeric_limits<double>::quiet_NaN();
+          res.softLockY = std::numeric_limits<double>::quiet_NaN(); // in the case of the 2 soft locks are activated
+          res.valid &= QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, previousPt, point, point );
+        }
       }
-      if ( ctx.yConstraint.locked )
+      if ( ctx.yConstraint.locked || !std::isnan( res.softLockY ) )
       {
-        const QgsPointXY horizontalPt0( point.x(), ctx.yConstraint.value );
-        const QgsPointXY horizontalPt1( point.x() + 1, ctx.yConstraint.value );
-        res.valid &= QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, horizontalPt0, horizontalPt1, point );
+        const QgsPointXY horizontalPt0( point.x(), point.y() );
+        const QgsPointXY horizontalPt1( point.x() + 1, point.y() );
+        const bool intersect = QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, horizontalPt0, horizontalPt1, point );
+
+        if ( ctx.yConstraint.locked )
+        {
+          res.valid &= intersect;
+        }
+        else if ( !intersect )
+        {
+          res.softLockY = std::numeric_limits<double>::quiet_NaN();
+          res.valid &= QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, previousPt, point, point );
+        }
+      }
+    }
+    else if ( res.softLockLineExtension != Qgis::LineExtensionSide::NoVertex )
+    {
+      const bool intersect = QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, lineExtensionPt1, lineExtensionPt2, point );
+      if ( !intersect )
+      {
+        res.softLockLineExtension = Qgis::LineExtensionSide::NoVertex;
+        res.valid &= QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, previousPt, point, point );
       }
     }
     else
@@ -303,8 +502,8 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
   QgsDebugMsgLevel( QStringLiteral( "point:             %1 %2" ).arg( point.x() ).arg( point.y() ), 4 );
   QgsDebugMsgLevel( QStringLiteral( "previous point:    %1 %2" ).arg( previousPt.x() ).arg( previousPt.y() ), 4 );
   QgsDebugMsgLevel( QStringLiteral( "penultimate point: %1 %2" ).arg( penultimatePt.x() ).arg( penultimatePt.y() ), 4 );
-  //QgsDebugMsg( QStringLiteral( "dx: %1 dy: %2" ).arg( point.x() - previousPt.x() ).arg( point.y() - previousPt.y() ) );
-  //QgsDebugMsg( QStringLiteral( "ddx: %1 ddy: %2" ).arg( previousPt.x() - penultimatePt.x() ).arg( previousPt.y() - penultimatePt.y() ) );
+  //QgsDebugMsgLevel( QStringLiteral( "dx: %1 dy: %2" ).arg( point.x() - previousPt.x() ).arg( point.y() - previousPt.y() ), 4 );
+  //QgsDebugMsgLevel( QStringLiteral( "ddx: %1 ddy: %2" ).arg( previousPt.x() - penultimatePt.x() ).arg( previousPt.y() - penultimatePt.y() ), 4 );
 
   res.finalMapPoint = point;
 
@@ -313,9 +512,9 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
 
 void QgsCadUtils::AlignMapPointContext::dump() const
 {
-  QgsDebugMsg( QStringLiteral( "Constraints (locked / relative / value" ) );
-  QgsDebugMsg( QStringLiteral( "Angle:    %1 %2 %3" ).arg( angleConstraint.locked ).arg( angleConstraint.relative ).arg( angleConstraint.value ) );
-  QgsDebugMsg( QStringLiteral( "Distance: %1 %2 %3" ).arg( distanceConstraint.locked ).arg( distanceConstraint.relative ).arg( distanceConstraint.value ) );
-  QgsDebugMsg( QStringLiteral( "X:        %1 %2 %3" ).arg( xConstraint.locked ).arg( xConstraint.relative ).arg( xConstraint.value ) );
-  QgsDebugMsg( QStringLiteral( "Y:        %1 %2 %3" ).arg( yConstraint.locked ).arg( yConstraint.relative ).arg( yConstraint.value ) );
+  QgsDebugMsgLevel( QStringLiteral( "Constraints (locked / relative / value" ), 1 );
+  QgsDebugMsgLevel( QStringLiteral( "Angle:    %1 %2 %3" ).arg( angleConstraint.locked ).arg( angleConstraint.relative ).arg( angleConstraint.value ), 1 );
+  QgsDebugMsgLevel( QStringLiteral( "Distance: %1 %2 %3" ).arg( distanceConstraint.locked ).arg( distanceConstraint.relative ).arg( distanceConstraint.value ), 1 );
+  QgsDebugMsgLevel( QStringLiteral( "X:        %1 %2 %3" ).arg( xConstraint.locked ).arg( xConstraint.relative ).arg( xConstraint.value ), 1 );
+  QgsDebugMsgLevel( QStringLiteral( "Y:        %1 %2 %3" ).arg( yConstraint.locked ).arg( yConstraint.relative ).arg( yConstraint.value ), 1 );
 }

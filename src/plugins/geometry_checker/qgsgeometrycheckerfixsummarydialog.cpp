@@ -16,6 +16,7 @@
 
 #include "qgsgeometrycheckcontext.h"
 #include "qgsgeometrycheckerfixsummarydialog.h"
+#include "moc_qgsgeometrycheckerfixsummarydialog.cpp"
 #include "qgsgeometrychecker.h"
 #include "qgsgeometrycheck.h"
 #include "qgsfeaturepool.h"
@@ -24,18 +25,16 @@
 #include "qgsvectorlayer.h"
 #include "qgsgeometrycheckerror.h"
 
-QgsGeometryCheckerFixSummaryDialog::QgsGeometryCheckerFixSummaryDialog( const Statistics &stats,
-    QgsGeometryChecker *checker,
-    QWidget *parent )
+QgsGeometryCheckerFixSummaryDialog::QgsGeometryCheckerFixSummaryDialog( const Statistics &stats, QgsGeometryChecker *checker, QWidget *parent )
   : QDialog( parent )
   , mChecker( checker )
 {
   ui.setupUi( this );
 
-  ui.groupBoxFixedErrors->setTitle( tr( "%1 errors were fixed" ).arg( stats.fixedErrors.size() ) );
-  ui.groupBoxNewErrors->setTitle( tr( "%1 new errors were found" ).arg( stats.newErrors.count() ) );
-  ui.groupBoxNotFixed->setTitle( tr( "%1 errors were not fixed" ).arg( stats.failedErrors.count() ) );
-  ui.groupBoxObsoleteErrors->setTitle( tr( "%1 errors are obsolete" ).arg( stats.obsoleteErrors.count() ) );
+  ui.groupBoxFixedErrors->setTitle( tr( "%n error(s) were fixed", nullptr, stats.fixedErrors.size() ) );
+  ui.groupBoxNewErrors->setTitle( tr( "%n new error(s) were found", nullptr, stats.newErrors.count() ) );
+  ui.groupBoxNotFixed->setTitle( tr( "%n error(s) were not fixed", nullptr, stats.failedErrors.count() ) );
+  ui.groupBoxObsoleteErrors->setTitle( tr( "%n error(s) are obsolete", nullptr, stats.obsoleteErrors.count() ) );
 
   for ( QgsGeometryCheckError *error : stats.fixedErrors )
   {
@@ -116,7 +115,7 @@ void QgsGeometryCheckerFixSummaryDialog::onTableSelectionChanged( const QItemSel
   QItemSelectionModel *selModel = qobject_cast<QItemSelectionModel *>( QObject::sender() );
   const QAbstractItemModel *model = selModel->model();
 
-  for ( QTableWidget *table : {ui.tableWidgetFixedErrors, ui.tableWidgetNewErrors, ui.tableWidgetNotFixed, ui.tableWidgetObsoleteErrors} )
+  for ( QTableWidget *table : { ui.tableWidgetFixedErrors, ui.tableWidgetNewErrors, ui.tableWidgetNotFixed, ui.tableWidgetObsoleteErrors } )
   {
     if ( table->selectionModel() != selModel )
     {

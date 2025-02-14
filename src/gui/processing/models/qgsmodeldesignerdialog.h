@@ -29,6 +29,8 @@ class QgsModelUndoCommand;
 class QUndoView;
 class QgsModelViewToolPan;
 class QgsModelViewToolSelect;
+class QgsScreenHelper;
+class QgsProcessingAlgorithmDialogBase;
 
 ///@cond NOT_STABLE
 
@@ -41,7 +43,6 @@ class GUI_EXPORT QgsModelerToolboxModel : public QgsProcessingToolboxProxyModel
     explicit QgsModelerToolboxModel( QObject *parent = nullptr );
     Qt::ItemFlags flags( const QModelIndex &index ) const override;
     Qt::DropActions supportedDragActions() const override;
-
 };
 
 #endif
@@ -56,7 +57,6 @@ class GUI_EXPORT QgsModelDesignerDialog : public QMainWindow, public Ui::QgsMode
 {
     Q_OBJECT
   public:
-
     QgsModelDesignerDialog( QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags flags = Qt::WindowFlags() );
     ~QgsModelDesignerDialog() override;
 
@@ -94,20 +94,42 @@ class GUI_EXPORT QgsModelDesignerDialog : public QMainWindow, public Ui::QgsMode
      */
     void setModelScene( QgsModelGraphicsScene *scene SIP_TRANSFER );
 
-  protected:
+    /**
+     * Save action.
+     *
+     * \since QGIS 3.24
+     */
+    enum class SaveAction
+    {
+      SaveAsFile,    //!< Save model as a file
+      SaveInProject, //!< Save model into project
+    };
 
+  public slots:
+
+    /**
+     * Raise, unminimize and activate this window.
+     *
+     * \since QGIS 3.24
+     */
+    void activate();
+
+  protected:
     // cppcheck-suppress pureVirtualCall
     virtual void repaintModel( bool showControls = true ) = 0;
     virtual void addAlgorithm( const QString &algorithmId, const QPointF &pos ) = 0;
+    // cppcheck-suppress pureVirtualCall
     virtual void addInput( const QString &inputId, const QPointF &pos ) = 0;
+    // cppcheck-suppress pureVirtualCall
     virtual void exportAsScriptAlgorithm() = 0;
     // cppcheck-suppress pureVirtualCall
-    virtual void saveModel( bool saveAs = false ) = 0;
+    virtual bool saveModel( bool saveAs = false ) = 0;
+    // cppcheck-suppress pureVirtualCall
+    virtual QgsProcessingAlgorithmDialogBase *createExecutionDialog() = 0 SIP_TRANSFERBACK;
 
     QToolBar *toolbar() { return mToolbar; }
     QAction *actionOpen() { return mActionOpen; }
     QAction *actionSaveInProject() { return mActionSaveInProject; }
-    QAction *actionEditHelp() { return mActionEditHelp; }
     QAction *actionRun() { return mActionRun; }
     QgsMessageBar *messageBar() { return mMessageBar; }
     QGraphicsView *view() { return mView; }
@@ -117,7 +139,7 @@ class GUI_EXPORT QgsModelDesignerDialog : public QMainWindow, public Ui::QgsMode
     /**
      * Checks if the model can current be saved, and returns TRUE if it can.
      */
-    bool validateSave();
+    bool validateSave( SaveAction action );
 
     /**
      * Checks if there are unsaved changes in the model, and if so, prompts the user to save them.
@@ -127,20 +149,25 @@ class GUI_EXPORT QgsModelDesignerDialog : public QMainWindow, public Ui::QgsMode
     bool checkForUnsavedChanges();
 
     /**
-     * Sets the results of child algorithms for the last run of the model through the designer window.
+     * Sets the \a result of the last run of the model through the designer window.
      */
-    void setLastRunChildAlgorithmResults( const QVariantMap &results );
+    void setLastRunResult( const QgsProcessingModelResult &result );
 
     /**
-     * Sets the inputs for child algorithms for the last run of the model through the designer window.
+     * Sets the model \a name.
+     *
+     * Updates both the name text edit and the model name itself.
+     *
+     * \since QGIS 3.24
      */
-    void setLastRunChildAlgorithmInputs( const QVariantMap &inputs );
+    void setModelName( const QString &name );
 
   private slots:
     void zoomIn();
     void zoomOut();
     void zoomActual();
     void zoomFull();
+    void newModel();
     void exportToImage();
     void exportToPdf();
     void exportToSvg();
@@ -151,17 +178,25 @@ class GUI_EXPORT QgsModelDesignerDialog : public QMainWindow, public Ui::QgsMode
     void populateZoomToMenu();
     void validate();
     void reorderInputs();
+    void reorderOutputs();
     void setPanelVisibility( bool hidden );
+    void editHelp();
+    void runSelectedSteps();
+    void runFromChild( const QString &id );
+    void run( const QSet<QString> &childAlgorithmSubset = QSet<QString>() );
+    void showChildAlgorithmOutputs( const QString &childId );
+    void showChildAlgorithmLog( const QString &childId );
 
   private:
-
     enum UndoCommand
     {
       NameChanged = 1,
       GroupChanged
     };
 
-    std::unique_ptr< QgsProcessingModelAlgorithm > mModel;
+    std::unique_ptr<QgsProcessingModelAlgorithm> mModel;
+
+    QgsScreenHelper *mScreenHelper = nullptr;
 
     QgsMessageBar *mMessageBar = nullptr;
     QgsModelerToolboxModel *mAlgorithmsModel = nullptr;
@@ -174,7 +209,7 @@ class GUI_EXPORT QgsModelDesignerDialog : public QMainWindow, public Ui::QgsMode
 
     bool mHasChanged = false;
     QUndoStack *mUndoStack = nullptr;
-    std::unique_ptr< QgsModelUndoCommand > mActiveCommand;
+    std::unique_ptr<QgsModelUndoCommand> mActiveCommand;
 
     QAction *mUndoAction = nullptr;
     QAction *mRedoAction = nullptr;
@@ -193,8 +228,7 @@ class GUI_EXPORT QgsModelDesignerDialog : public QMainWindow, public Ui::QgsMode
 
     int mBlockRepaints = 0;
 
-    QVariantMap mChildResults;
-    QVariantMap mChildInputs;
+    QgsProcessingModelResult mLastResult;
 
     bool isDirty() const;
 
@@ -203,16 +237,17 @@ class GUI_EXPORT QgsModelDesignerDialog : public QMainWindow, public Ui::QgsMode
 
     struct PanelStatus
     {
-      PanelStatus( bool visible = true, bool active = false )
-        : isVisible( visible )
-        , isActive( active )
-      {}
-      bool isVisible;
-      bool isActive;
+        PanelStatus( bool visible = true, bool active = false )
+          : isVisible( visible )
+          , isActive( active )
+        {}
+        bool isVisible;
+        bool isActive;
     };
-    QMap< QString, PanelStatus > mPanelStatus;
-};
+    QMap<QString, PanelStatus> mPanelStatus;
 
+    QgsProcessingContext mLayerStore;
+};
 
 
 class GUI_EXPORT QgsModelChildDependenciesWidget : public QWidget
@@ -220,16 +255,14 @@ class GUI_EXPORT QgsModelChildDependenciesWidget : public QWidget
     Q_OBJECT
 
   public:
-
     QgsModelChildDependenciesWidget( QWidget *parent, QgsProcessingModelAlgorithm *model, const QString &childId );
-    QList< QgsProcessingModelChildDependency > value() const { return mValue; }
-    void setValue( const QList< QgsProcessingModelChildDependency >  &value );
+    QList<QgsProcessingModelChildDependency> value() const { return mValue; }
+    void setValue( const QList<QgsProcessingModelChildDependency> &value );
   private slots:
 
     void showDialog();
 
   private:
-
     void updateSummaryText();
 
     QLineEdit *mLineEdit = nullptr;
@@ -238,7 +271,7 @@ class GUI_EXPORT QgsModelChildDependenciesWidget : public QWidget
     QgsProcessingModelAlgorithm *mModel = nullptr;
     QString mChildId;
 
-    QList< QgsProcessingModelChildDependency >  mValue;
+    QList<QgsProcessingModelChildDependency> mValue;
 
     friend class TestProcessingGui;
 };

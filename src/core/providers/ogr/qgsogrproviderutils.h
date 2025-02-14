@@ -21,16 +21,13 @@ email                : nyall dot dawson at gmail dot com
 #include "qgswkbtypes.h"
 #include "qgsvectordataprovider.h"
 
+#define CPL_SUPRESS_CPLUSPLUS  //#spellok
 #include <gdal.h>
 
 #include <QString>
 #include <QStringList>
 #include <QMap>
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-#include <QMutex>
-#else
 #include <QRecursiveMutex>
-#endif
 
 class QgsOgrLayer;
 class QgsCoordinateReferenceSystem;
@@ -48,7 +45,7 @@ struct QgsOgrLayerReleaser
   /**
    * Releases a QgsOgrLayer \a layer.
    */
-  void operator()( QgsOgrLayer *layer );
+  void operator()( QgsOgrLayer *layer ) const;
 };
 
 /**
@@ -90,20 +87,14 @@ class CORE_EXPORT QgsOgrProviderUtils
     class DatasetWithLayers
     {
       public:
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-        QMutex mutex;
-#else
         QRecursiveMutex mutex;
-#endif
+
         GDALDatasetH    hDS = nullptr;
         QMap<QString, QgsOgrLayer *>  setLayers;
         int            refCount = 0;
         bool           canBeShared = true;
 
         DatasetWithLayers()
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-          : mutex( QMutex::Recursive )
-#endif
         {}
     };
 
@@ -133,6 +124,10 @@ class CORE_EXPORT QgsOgrProviderUtils
     static QStringList fileExtensions();
     static QStringList directoryExtensions();
     static QStringList wildcards();
+    static QStringList tableNamesFromSelectSQL( const QString &sql );
+
+    //! Whether the file is a local file.
+    static bool IsLocalFile( const QString &path );
 
     /**
      * Creates an empty data source
@@ -145,7 +140,7 @@ class CORE_EXPORT QgsOgrProviderUtils
     static bool createEmptyDataSource( const QString &uri,
                                        const QString &format,
                                        const QString &encoding,
-                                       QgsWkbTypes::Type vectortype,
+                                       Qgis::WkbType vectortype,
                                        const QList< QPair<QString, QString> > &attributes,
                                        const QgsCoordinateReferenceSystem &srs,
                                        QString &errorMessage );
@@ -160,6 +155,9 @@ class CORE_EXPORT QgsOgrProviderUtils
                                    const QgsAttributeList &fetchAttributes,
                                    bool firstAttrIsFid,
                                    const QString &subsetString );
+
+    //! Remove comments from subset string (typically a full SELECT) and trim
+    static QString cleanSubsetString( const QString &subsetString );
 
     /**
      * Sets a subset string for an OGR \a layer.
@@ -216,7 +214,7 @@ class CORE_EXPORT QgsOgrProviderUtils
     static void release( QgsOgrLayer *&layer );
 
     //! Release a QgsOgrDataset*
-    static void releaseDataset( QgsOgrDataset *&ds );
+    static void releaseDataset( QgsOgrDataset *ds );
 
     //! Make sure that the existing pool of opened datasets on dsName is not accessible for new getLayer() attempts
     static void invalidateCachedDatasets( const QString &dsName );
@@ -228,16 +226,19 @@ class CORE_EXPORT QgsOgrProviderUtils
     static void invalidateCachedLastModifiedDate( const QString &dsName );
 
     //! Converts a QGIS WKB type to the corresponding OGR wkb type
-    static OGRwkbGeometryType ogrTypeFromQgisType( QgsWkbTypes::Type type );
+    static OGRwkbGeometryType ogrTypeFromQgisType( Qgis::WkbType type );
 
     //! Converts a OGR WKB type to the corresponding QGIS wkb type
-    static QgsWkbTypes::Type qgisTypeFromOgrType( OGRwkbGeometryType type );
+    static Qgis::WkbType qgisTypeFromOgrType( OGRwkbGeometryType type );
 
     //! Conerts a string to an OGR WKB geometry type
     static OGRwkbGeometryType ogrWkbGeometryTypeFromName( const QString &typeName );
 
     //! Gets single flatten geometry type
     static OGRwkbGeometryType ogrWkbSingleFlatten( OGRwkbGeometryType type );
+
+    //! Gets single flatten and linear geometry type
+    static OGRwkbGeometryType ogrWkbSingleFlattenAndLinear( OGRwkbGeometryType type );
 
     static QString ogrWkbGeometryTypeName( OGRwkbGeometryType type );
 
@@ -250,7 +251,8 @@ class CORE_EXPORT QgsOgrProviderUtils
                                QString &layerName,
                                QString &subsetString,
                                OGRwkbGeometryType &ogrGeometryTypeFilter,
-                               QStringList &openOptions );
+                               QStringList &openOptions,
+                               QVariantMap &credentialOptions );
 
     //! Whether a driver can share the same dataset handle among different layers
     static bool canDriverShareSameDatasetAmongLayers( const QString &driverName );
@@ -277,6 +279,29 @@ class CORE_EXPORT QgsOgrProviderUtils
      * \param ogrDriverName the OGR/GDAL driver name (e.g. "GPKG")
      */
     static bool saveConnection( const QString &path, const QString &ogrDriverName );
+
+    /**
+     * Prevent immediate dataset closing when it could be closed.
+     * This is useful when opening a dataset with many layers.
+     * Must be paired with decrementDeferDatasetClosingCounter.
+     * It is recommended to use the QgsOgrProviderUtils::DeferDatasetClosing
+     * class instead to guarantee that correct pairing.
+     */
+    static void incrementDeferDatasetClosingCounter();
+
+    //! End the action started by incrementDeferDatasetClosingCounter()
+    static void decrementDeferDatasetClosingCounter();
+
+    //! Helper class for  QgsOgrProviderUtils::incrementDeferDatasetClosingCounter();
+    class DeferDatasetClosing
+    {
+      public:
+        //! Constructor: increment counter
+        DeferDatasetClosing() { QgsOgrProviderUtils::incrementDeferDatasetClosingCounter(); }
+
+        //! Destructor: decrement counter
+        ~DeferDatasetClosing() { QgsOgrProviderUtils::decrementDeferDatasetClosingCounter(); }
+    };
 };
 
 
@@ -289,7 +314,7 @@ class QgsOgrDataset
     friend class QgsOgrProviderUtils;
     friend class QgsOgrTransaction;
     QgsOgrProviderUtils::DatasetIdentification mIdent;
-    QgsOgrProviderUtils::DatasetWithLayers *mDs;
+    QgsOgrProviderUtils::DatasetWithLayers *mDs = nullptr;
 
     QgsOgrDataset() = default;
     ~QgsOgrDataset() = default;
@@ -298,11 +323,7 @@ class QgsOgrDataset
 
     static QgsOgrDatasetSharedPtr create( const QgsOgrProviderUtils::DatasetIdentification &ident,
                                           QgsOgrProviderUtils::DatasetWithLayers *ds );
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    QMutex &mutex() { return mDs->mutex; }
-#else
     QRecursiveMutex &mutex() { return mDs->mutex; }
-#endif
 
     bool executeSQLNoReturn( const QString &sql );
 
@@ -327,11 +348,8 @@ class QgsOgrFeatureDefn
     ~QgsOgrFeatureDefn() = default;
 
     OGRFeatureDefnH get();
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    QMutex &mutex();
-#else
+
     QRecursiveMutex &mutex();
-#endif
 
   public:
 
@@ -390,11 +408,7 @@ class QgsOgrLayer
       QgsOgrProviderUtils::DatasetWithLayers *ds,
       OGRLayerH hLayer );
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
-    QMutex &mutex() { return ds->mutex; }
-#else
     QRecursiveMutex &mutex() { return ds->mutex; }
-#endif
 
   public:
 
@@ -415,6 +429,9 @@ class QgsOgrLayer
 
     //! Returns layer name
     QByteArray name();
+
+    //! Return OGRERR_NONE if lmyer is not sqlite OR if layer is sqlite but with spatialite, else returns OGRERR_UNSUPPORTED_OPERATION
+    OGRErr isSpatialiteEnabled();
 
     //! Wrapper of OGR_L_GetLayerCount
     int GetLayerCount();
@@ -443,14 +460,28 @@ class QgsOgrLayer
     //! Return an approximate feature count
     GIntBig GetApproxFeatureCount();
 
-    //! Wrapper of OGR_L_GetLayerCount
+    //! Return an total feature count based on meta data from package container
+    GIntBig GetTotalFeatureCountFromMetaData() const;
+
+    //! Wrapper of OGR_L_GetExtent
     OGRErr GetExtent( OGREnvelope *psExtent, bool bForce );
+
+    //! Wrapper of OGR_L_GetExtent3D
+    OGRErr GetExtent3D( OGREnvelope3D *psExtent, bool bForce );
+
+    //! Combines 3D envelopes for all feature to find the extent. Slow process...
+    OGRErr computeExtent3DSlowly( OGREnvelope3D *extent );
 
     //! Wrapper of OGR_L_GetLayerCount
     OGRErr CreateFeature( OGRFeatureH hFeature );
 
     //! Wrapper of OGR_L_GetLayerCount
     OGRErr SetFeature( OGRFeatureH hFeature );
+
+#if GDAL_VERSION_NUM >= GDAL_COMPUTE_VERSION(3,7,0)
+    //! Wrapper of OGR_L_UpdateFeature
+    OGRErr UpdateFeature( OGRFeatureH hFeature, int nUpdatedFieldsCount, const int *panUpdatedFieldsIdx, int nUpdatedGeomFieldsCount, const int *panUpdatedGeomFieldsIdx, bool bUpdateStyleString );
+#endif
 
     //! Wrapper of OGR_L_GetLayerCount
     OGRErr DeleteFeature( GIntBig fid );
@@ -485,20 +516,11 @@ class QgsOgrLayer
     //! Wrapper of OGR_L_GetLayerCount
     void SetSpatialFilter( OGRGeometryH );
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
     //! Returns native GDALDatasetH object with the mutex to lock when using it
-    GDALDatasetH getDatasetHandleAndMutex( QMutex *&mutex );
+    GDALDatasetH getDatasetHandleAndMutex( QRecursiveMutex *&mutex ) const;
 
     //! Returns native OGRLayerH object with the mutex to lock when using it
-    OGRLayerH getHandleAndMutex( QMutex *&mutex );
-#else
-    //! Returns native GDALDatasetH object with the mutex to lock when using it
-    GDALDatasetH getDatasetHandleAndMutex( QRecursiveMutex *&mutex );
-
-    //! Returns native OGRLayerH object with the mutex to lock when using it
-    OGRLayerH getHandleAndMutex( QRecursiveMutex *&mutex );
-#endif
-
+    OGRLayerH getHandleAndMutex( QRecursiveMutex *&mutex ) const;
 
     //! Wrapper of GDALDatasetReleaseResultSet( GDALDatasetExecuteSQL( ... ) )
     void ExecuteSQLNoReturn( const QByteArray &sql );

@@ -3,7 +3,7 @@
  *                                                                      *
  * src/core/textrenderer/qgstextshadowsettings.h                        *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
 
 
@@ -18,8 +18,6 @@ Container for settings relating to a text shadow.
 .. note::
 
    :py:class:`QgsTextShadowSettings` objects are implicitly shared.
-
-.. versionadded:: 3.0
 %End
 
 %TypeHeaderCode
@@ -36,13 +34,7 @@ Container for settings relating to a text shadow.
     };
 
     QgsTextShadowSettings();
-
     QgsTextShadowSettings( const QgsTextShadowSettings &other );
-%Docstring
-Copy constructor.
-
-:param other: source QgsTextShadowSettings
-%End
 
 
     ~QgsTextShadowSettings();
@@ -128,7 +120,7 @@ are specified via :py:func:`~QgsTextShadowSettings.setOffsetUnit`.
 .. seealso:: :py:func:`setOffsetUnit`
 %End
 
-    QgsUnitTypes::RenderUnit offsetUnit() const;
+    Qgis::RenderUnit offsetUnit() const;
 %Docstring
 Returns the units used for the shadow's offset.
 
@@ -137,7 +129,7 @@ Returns the units used for the shadow's offset.
 .. seealso:: :py:func:`offsetDistance`
 %End
 
-    void setOffsetUnit( QgsUnitTypes::RenderUnit units );
+    void setOffsetUnit( Qgis::RenderUnit units );
 %Docstring
 Sets the units used for the shadow's offset.
 
@@ -204,7 +196,7 @@ Sets the blur radius for the shadow. Radius units are specified via :py:func:`~Q
 .. seealso:: :py:func:`setBlurRadiusUnit`
 %End
 
-    QgsUnitTypes::RenderUnit blurRadiusUnit() const;
+    Qgis::RenderUnit blurRadiusUnit() const;
 %Docstring
 Returns the units used for the shadow's blur radius.
 
@@ -213,7 +205,7 @@ Returns the units used for the shadow's blur radius.
 .. seealso:: :py:func:`blurRadius`
 %End
 
-    void setBlurRadiusUnit( QgsUnitTypes::RenderUnit units );
+    void setBlurRadiusUnit( Qgis::RenderUnit units );
 %Docstring
 Sets the units used for the shadow's blur radius.
 
@@ -371,5 +363,5 @@ Returns all field names referenced by the configuration (e.g. from data defined 
  *                                                                      *
  * src/core/textrenderer/qgstextshadowsettings.h                        *
  *                                                                      *
- * Do not edit manually ! Edit header and run scripts/sipify.pl again   *
+ * Do not edit manually ! Edit header and run scripts/sipify.py again   *
  ************************************************************************/
